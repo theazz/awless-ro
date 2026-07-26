@@ -18,10 +18,10 @@ echo "Setting region $REGION"
 $BIN config set aws.region $REGION
 
 # Running mastodonte test
-$BIN  run -e smoke_tests/test-all-drivers.aws void.ova-file=$GOPATH/src/github.com/wallix/awless/smoke_tests/test.ova \
-cloudformation.policy-file=$GOPATH/src/github.com/wallix/awless/smoke_tests/test-cloudformation.policy \
-cloudformation.templatefile=$GOPATH/src/github.com/wallix/awless/smoke_tests/test-cloudformation-sample.template \
-lambda.zipfile=$GOPATH/src/github.com/wallix/awless/smoke_tests/test-lambda-function.zip \
+$BIN  run -e smoke_tests/test-all-drivers.aws void.ova-file=$GOPATH/src/github.com/theazz/awless-ro/smoke_tests/test.ova \
+cloudformation.policy-file=$GOPATH/src/github.com/theazz/awless-ro/smoke_tests/test-cloudformation.policy \
+cloudformation.templatefile=$GOPATH/src/github.com/theazz/awless-ro/smoke_tests/test-cloudformation-sample.template \
+lambda.zipfile=$GOPATH/src/github.com/theazz/awless-ro/smoke_tests/test-lambda-function.zip \
 random.string=$(env LC_CTYPE=C tr -dc "a-zA-Z0-9" < /dev/urandom | head -c 10) \
 principal.account=$($BIN whoami --account-only) principal.user=$($BIN whoami --name-only)
 

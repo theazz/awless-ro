@@ -42,13 +42,13 @@ import (
 	"github.com/aws/aws-sdk-go/service/route53"
 	"github.com/aws/aws-sdk-go/service/s3"
 	"github.com/aws/aws-sdk-go/service/sns"
-	"github.com/wallix/awless/aws/fetch"
-	"github.com/wallix/awless/cloud"
-	p "github.com/wallix/awless/cloud/properties"
-	"github.com/wallix/awless/cloud/rdf"
-	"github.com/wallix/awless/fetch"
-	"github.com/wallix/awless/graph"
-	"github.com/wallix/awless/graph/resourcetest"
+	"github.com/theazz/awless-ro/aws/fetch"
+	"github.com/theazz/awless-ro/cloud"
+	p "github.com/theazz/awless-ro/cloud/properties"
+	"github.com/theazz/awless-ro/cloud/rdf"
+	"github.com/theazz/awless-ro/fetch"
+	"github.com/theazz/awless-ro/graph"
+	"github.com/theazz/awless-ro/graph/resourcetest"
 )
 
 func TestBuildAccessRdfGraph(t *testing.T) {

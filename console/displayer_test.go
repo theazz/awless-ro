@@ -22,9 +22,9 @@ import (
 	"time"
 
 	"github.com/fatih/color"
-	p "github.com/wallix/awless/cloud/properties"
-	"github.com/wallix/awless/graph"
-	"github.com/wallix/awless/graph/resourcetest"
+	p "github.com/theazz/awless-ro/cloud/properties"
+	"github.com/theazz/awless-ro/graph"
+	"github.com/theazz/awless-ro/graph/resourcetest"
 )
 
 func init() {

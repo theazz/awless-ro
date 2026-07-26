@@ -3,8 +3,8 @@ package graph_test
 import (
 	"testing"
 
-	"github.com/wallix/awless/graph"
-	"github.com/wallix/awless/graph/resourcetest"
+	"github.com/theazz/awless-ro/graph"
+	"github.com/theazz/awless-ro/graph/resourcetest"
 )
 
 func TestResolvers(t *testing.T) {

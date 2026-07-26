@@ -8,7 +8,7 @@ import (
 
 	"github.com/aws/aws-sdk-go/aws/credentials"
 	"github.com/aws/aws-sdk-go/aws/credentials/stscreds"
-	"github.com/wallix/awless/logger"
+	"github.com/theazz/awless-ro/logger"
 )
 
 func TestFileCacheProvider(t *testing.T) {

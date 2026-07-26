@@ -38,17 +38,17 @@ import (
 	"github.com/chzyer/readline"
 	"github.com/spf13/cobra"
 	"github.com/wallix/awless-scheduler/client"
-	"github.com/wallix/awless/aws/doc"
-	"github.com/wallix/awless/aws/services"
-	"github.com/wallix/awless/aws/spec"
-	"github.com/wallix/awless/cloud"
-	"github.com/wallix/awless/cloud/match"
-	"github.com/wallix/awless/cloud/properties"
-	"github.com/wallix/awless/config"
-	"github.com/wallix/awless/logger"
-	"github.com/wallix/awless/sync"
-	"github.com/wallix/awless/template"
-	"github.com/wallix/awless/template/params"
+	"github.com/theazz/awless-ro/aws/doc"
+	"github.com/theazz/awless-ro/aws/services"
+	"github.com/theazz/awless-ro/aws/spec"
+	"github.com/theazz/awless-ro/cloud"
+	"github.com/theazz/awless-ro/cloud/match"
+	"github.com/theazz/awless-ro/cloud/properties"
+	"github.com/theazz/awless-ro/config"
+	"github.com/theazz/awless-ro/logger"
+	"github.com/theazz/awless-ro/sync"
+	"github.com/theazz/awless-ro/template"
+	"github.com/theazz/awless-ro/template/params"
 )
 
 var (
@@ -62,7 +62,7 @@ var (
 
 func init() {
 	RootCmd.AddCommand(runCmd)
-	runCmd.Flags().BoolVar(&listRemoteTemplatesFlag, "list", false, "List templates available at https://github.com/wallix/awless-templates")
+	runCmd.Flags().BoolVar(&listRemoteTemplatesFlag, "list", false, "List templates available at https://github.com/theazz/awless-ro-templates")
 	runCmd.Flags().StringVar(&scheduleRunInFlag, "run-in", "", "Postpone the execution of this template")
 	runCmd.Flags().StringVar(&scheduleRevertInFlag, "revert-in", "", "Schedule the revertion of this template")
 	runCmd.Flags().StringVarP(&runLogMessage, "message", "m", "", "Add a message for this template execution to be persisted in your logs")

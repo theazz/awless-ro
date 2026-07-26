@@ -20,9 +20,9 @@ import (
 	"errors"
 	"fmt"
 
-	"github.com/wallix/awless/template"
+	"github.com/theazz/awless-ro/template"
 
-	"github.com/boltdb/bolt"
+	bolt "go.etcd.io/bbolt"
 )
 
 const TEMPLATES_BUCKET = "templates"

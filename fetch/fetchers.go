@@ -5,7 +5,7 @@ import (
 	"fmt"
 	"sync"
 
-	"github.com/wallix/awless/graph"
+	"github.com/theazz/awless-ro/graph"
 )
 
 type Fetcher interface {

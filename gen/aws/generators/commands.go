@@ -27,7 +27,7 @@ import (
 
 	"sort"
 
-	"github.com/wallix/awless/gen/aws"
+	"github.com/theazz/awless-ro/gen/aws"
 )
 
 func loadCommandStructs() map[string]cmdData {
@@ -367,7 +367,7 @@ package awsspec
 import (
 	"github.com/aws/aws-sdk-go/aws/session"
 	"github.com/aws/aws-sdk-go/awstesting/mock"
-	"github.com/wallix/awless/logger"
+	"github.com/theazz/awless-ro/logger"
 )
 
 type Factory interface {
@@ -424,7 +424,7 @@ limitations under the License.
 package awsspec
 
 import (
-	"github.com/wallix/awless/template"
+	"github.com/theazz/awless-ro/template"
 )
 
 

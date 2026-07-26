@@ -17,8 +17,8 @@ limitations under the License.
 package sync
 
 import (
-	"github.com/wallix/awless/graph"
-	"github.com/wallix/awless/sync/repo"
+	"github.com/theazz/awless-ro/graph"
+	"github.com/theazz/awless-ro/sync/repo"
 )
 
 // Diff represents the deleted/inserted RDF triples of a revision

@@ -57,7 +57,7 @@ import (
 	"github.com/aws/aws-sdk-go/service/sns/snsiface"
 	"github.com/aws/aws-sdk-go/service/sqs"
 	"github.com/aws/aws-sdk-go/service/sqs/sqsiface"
-	"github.com/wallix/awless/cloud"
+	"github.com/theazz/awless-ro/cloud"
 )
 
 // DO NOT EDIT - This file was automatically generated with go generate

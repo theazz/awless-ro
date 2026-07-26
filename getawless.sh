@@ -20,7 +20,7 @@ elif [[ "$OSTYPE" == "win32" ]] || [[ "$OSTYPE" == "cygwin" ]] || [[ "$OSTYPE" =
 	OS="windows"
 	EXT="zip"
 else
-	echo "No awless binary available for OS '$OSTYPE'. You may want to use go to install awless with 'go get -u github.com/wallix/awless'"
+	echo "No awless-ro binary available for OS '$OSTYPE'. You may want to use go to install awless-ro with 'go install github.com/theazz/awless-ro@latest'"
   exit
 fi
 
@@ -28,7 +28,7 @@ LATEST_VERSION=`curl -fs https://updates.awless.io | grep -oE "v[0-9]{1,3}.[0-9]
 
 FILENAME=awless-$OS-$ARCH.$EXT
 
-DOWNLOAD_URL="https://github.com/wallix/awless/releases/download/$LATEST_VERSION/$FILENAME"
+DOWNLOAD_URL="https://github.com/theazz/awless-ro/releases/download/$LATEST_VERSION/$FILENAME"
 
 echo "Downloading awless from $DOWNLOAD_URL"
 

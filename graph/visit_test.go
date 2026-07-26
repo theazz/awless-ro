@@ -20,7 +20,7 @@ import (
 	"reflect"
 	"testing"
 
-	"github.com/wallix/awless/graph"
+	"github.com/theazz/awless-ro/graph"
 )
 
 func TestCollectors(t *testing.T) {

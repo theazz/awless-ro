@@ -28,15 +28,15 @@ import (
 	"time"
 
 	"github.com/spf13/cobra"
-	"github.com/wallix/awless/aws/services"
-	"github.com/wallix/awless/cloud"
-	"github.com/wallix/awless/cloud/match"
-	"github.com/wallix/awless/cloud/properties"
-	"github.com/wallix/awless/config"
-	"github.com/wallix/awless/console"
-	"github.com/wallix/awless/graph"
-	"github.com/wallix/awless/logger"
-	"github.com/wallix/awless/ssh"
+	"github.com/theazz/awless-ro/aws/services"
+	"github.com/theazz/awless-ro/cloud"
+	"github.com/theazz/awless-ro/cloud/match"
+	"github.com/theazz/awless-ro/cloud/properties"
+	"github.com/theazz/awless-ro/config"
+	"github.com/theazz/awless-ro/console"
+	"github.com/theazz/awless-ro/graph"
+	"github.com/theazz/awless-ro/logger"
+	"github.com/theazz/awless-ro/ssh"
 )
 
 var keyPathFlag, proxyInstanceThroughFlag string

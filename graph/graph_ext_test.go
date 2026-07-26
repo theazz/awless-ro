@@ -21,9 +21,9 @@ import (
 	"testing"
 	"time"
 
-	"github.com/wallix/awless/cloud/properties"
-	"github.com/wallix/awless/graph"
-	"github.com/wallix/awless/graph/resourcetest"
+	"github.com/theazz/awless-ro/cloud/properties"
+	"github.com/theazz/awless-ro/graph"
+	"github.com/theazz/awless-ro/graph/resourcetest"
 )
 
 func TestGetResource(t *testing.T) {

@@ -18,8 +18,8 @@ package console
 
 import (
 	"github.com/fatih/color"
-	"github.com/wallix/awless/cloud"
-	"github.com/wallix/awless/cloud/properties"
+	"github.com/theazz/awless-ro/cloud"
+	"github.com/theazz/awless-ro/cloud/properties"
 )
 
 var ColumnsInListing = map[string][]string{

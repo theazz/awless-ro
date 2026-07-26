@@ -22,11 +22,11 @@ import (
 	"strings"
 
 	"github.com/spf13/cobra"
-	"github.com/wallix/awless/cloud"
-	"github.com/wallix/awless/config"
-	"github.com/wallix/awless/inspect"
-	"github.com/wallix/awless/logger"
-	"github.com/wallix/awless/sync"
+	"github.com/theazz/awless-ro/cloud"
+	"github.com/theazz/awless-ro/config"
+	"github.com/theazz/awless-ro/inspect"
+	"github.com/theazz/awless-ro/logger"
+	"github.com/theazz/awless-ro/sync"
 )
 
 var (

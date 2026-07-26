@@ -4,7 +4,7 @@ import (
 	"fmt"
 	"math/rand"
 
-	"github.com/wallix/awless/cloud/rdf"
+	"github.com/theazz/awless-ro/cloud/rdf"
 	tstore "github.com/wallix/triplestore"
 )
 

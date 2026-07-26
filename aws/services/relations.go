@@ -29,9 +29,9 @@ import (
 	"github.com/aws/aws-sdk-go/service/cloudwatch"
 	"github.com/aws/aws-sdk-go/service/elbv2"
 	"github.com/aws/aws-sdk-go/service/iam"
-	"github.com/wallix/awless/aws/conv"
-	"github.com/wallix/awless/cloud"
-	"github.com/wallix/awless/graph"
+	"github.com/theazz/awless-ro/aws/conv"
+	"github.com/theazz/awless-ro/cloud"
+	"github.com/theazz/awless-ro/graph"
 	tstore "github.com/wallix/triplestore"
 )
 

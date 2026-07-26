@@ -16,12 +16,12 @@ import (
 	"github.com/aws/aws-sdk-go/service/route53"
 	"github.com/aws/aws-sdk-go/service/s3"
 	"github.com/aws/aws-sdk-go/service/sqs"
-	"github.com/wallix/awless/aws/conv"
-	"github.com/wallix/awless/cloud"
-	"github.com/wallix/awless/cloud/properties"
-	"github.com/wallix/awless/cloud/rdf"
-	"github.com/wallix/awless/fetch"
-	"github.com/wallix/awless/graph"
+	"github.com/theazz/awless-ro/aws/conv"
+	"github.com/theazz/awless-ro/cloud"
+	"github.com/theazz/awless-ro/cloud/properties"
+	"github.com/theazz/awless-ro/cloud/rdf"
+	"github.com/theazz/awless-ro/fetch"
+	"github.com/theazz/awless-ro/graph"
 )
 
 func addManualInfraFetchFuncs(conf *Config, funcs map[string]fetch.Func) {

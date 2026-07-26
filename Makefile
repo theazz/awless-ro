@@ -8,4 +8,5 @@ generate:
 
 build: generate test
 	@echo Building application binary
-	@go build
+	@go build -o awless-ro
+

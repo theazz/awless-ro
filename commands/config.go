@@ -21,7 +21,7 @@ import (
 	"strings"
 
 	"github.com/spf13/cobra"
-	"github.com/wallix/awless/config"
+	"github.com/theazz/awless-ro/config"
 )
 
 var keysOnly bool

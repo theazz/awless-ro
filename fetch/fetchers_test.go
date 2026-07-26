@@ -5,8 +5,8 @@ import (
 	"errors"
 	"testing"
 
-	"github.com/wallix/awless/fetch"
-	"github.com/wallix/awless/graph"
+	"github.com/theazz/awless-ro/fetch"
+	"github.com/theazz/awless-ro/graph"
 )
 
 func TestIsFetchingByType(t *testing.T) {

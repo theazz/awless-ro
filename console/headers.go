@@ -24,7 +24,7 @@ import (
 	"time"
 
 	"github.com/fatih/color"
-	"github.com/wallix/awless/graph"
+	"github.com/theazz/awless-ro/graph"
 )
 
 type TimeFormat int

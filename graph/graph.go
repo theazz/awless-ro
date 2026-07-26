@@ -22,8 +22,8 @@ import (
 	"io"
 	"os"
 
-	"github.com/wallix/awless/cloud"
-	"github.com/wallix/awless/cloud/rdf"
+	"github.com/theazz/awless-ro/cloud"
+	"github.com/theazz/awless-ro/cloud/rdf"
 	tstore "github.com/wallix/triplestore"
 )
 

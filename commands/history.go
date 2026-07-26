@@ -20,14 +20,14 @@ import (
 	"fmt"
 	"os"
 
-	"github.com/wallix/awless/aws/services"
+	"github.com/theazz/awless-ro/aws/services"
 
 	"github.com/spf13/cobra"
-	"github.com/wallix/awless/cloud"
-	"github.com/wallix/awless/config"
-	"github.com/wallix/awless/console"
-	"github.com/wallix/awless/graph"
-	"github.com/wallix/awless/sync"
+	"github.com/theazz/awless-ro/cloud"
+	"github.com/theazz/awless-ro/config"
+	"github.com/theazz/awless-ro/console"
+	"github.com/theazz/awless-ro/graph"
+	"github.com/theazz/awless-ro/sync"
 )
 
 var (

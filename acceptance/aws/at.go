@@ -6,10 +6,10 @@ import (
 	"strings"
 	"testing"
 
-	"github.com/wallix/awless/aws/spec"
-	"github.com/wallix/awless/graph"
-	"github.com/wallix/awless/logger"
-	"github.com/wallix/awless/template"
+	"github.com/theazz/awless-ro/aws/spec"
+	"github.com/theazz/awless-ro/graph"
+	"github.com/theazz/awless-ro/logger"
+	"github.com/theazz/awless-ro/template"
 )
 
 type ATBuilder struct {
