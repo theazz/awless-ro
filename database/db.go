@@ -28,7 +28,10 @@ import (
 )
 
 const (
-	Filename     = "awless.db"
+	Filename = "awless-ro.db"
+	// awlessBucket is the single bucket inside Filename. Its name is internal
+	// to the file and kept as-is; the file name is what keeps awless-ro from
+	// colliding with an upstream awless install.
 	awlessBucket = "awless"
 )
 

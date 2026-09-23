@@ -19,7 +19,6 @@ package commands
 import (
 	"fmt"
 	"os"
-	"path/filepath"
 	"strings"
 
 	"github.com/aws/aws-sdk-go/aws/credentials/stscreds"
@@ -121,7 +120,7 @@ func initCloudServicesHook(cmd *cobra.Command, args []string) error {
 
 	profile, region := config.GetAWSProfile(), config.GetAWSRegion()
 
-	logger.Verbosef("awless %s - loading AWS session with profile '%s' and region '%s'", config.Version, profile, region)
+	logger.Verbosef("awless-ro %s - loading AWS session with profile '%s' and region '%s'", config.Version, profile, region)
 
 	if err := awsservices.Init(profile, region, config.GetConfigWithPrefix("aws."), logger.DefaultLogger, config.SetProfileCallback, networkMonitorFlag); err != nil {
 		return err
@@ -190,19 +189,10 @@ func onVersionUpgrade(cmd *cobra.Command, args []string) error {
 		}); err != nil {
 			fmt.Printf("cannot store upgraded version in db: %s\n", err)
 		}
-		migrationActionsAndExtraMessages(config.Version)
-		logger.Infof("You have just upgraded awless from %s to %s", lastVersion, config.Version)
+		logger.Infof("You have just upgraded awless-ro from %s to %s", lastVersion, config.Version)
 		logger.Infof("Check out %s latest features at https://github.com/theazz/awless-ro/blob/master/CHANGELOG.md", config.Version)
 	}
 
-	return nil
-}
-
-func verifyNewVersionHook(cmd *cobra.Command, args []string) error {
-	if localGlobalFlag {
-		return nil
-	}
-	config.VerifyNewVersionAvailable("https://updates.awless.io", os.Stderr)
 	return nil
 }
 
@@ -216,36 +206,11 @@ func networkMonitorHook(cmd *cobra.Command, args []string) error {
 func firstInstallDoneHook(cmd *cobra.Command, args []string) error {
 	if config.TriggerSyncOnConfigUpdate {
 		fmt.Fprintln(os.Stderr, "\nAll done. Enjoy!")
-		fmt.Fprintln(os.Stderr, "You can review and configure awless with `awless config`")
+		fmt.Fprintln(os.Stderr, "You can review and configure awless-ro with `awless-ro config`")
 		fmt.Fprintln(os.Stderr)
 		fmt.Fprintf(os.Stderr, "Now running: `%s`\n", cmd.CommandPath())
 	}
 	return nil
-}
-
-func migrationActionsAndExtraMessages(current string) {
-	switch current {
-	case "v0.1.7":
-		config.Set("instance.distro", "amazonlinux")
-		logger.Info("In v0.1.7, the default template config value 'instance.image' has been deprecated in favor of 'instance.distro'")
-
-		ami, _ := config.Get("instance.image")
-		if isNotAwlessFormerDefaultAMI(fmt.Sprint(ami)) {
-			logger.Warningf("\tYou had a customized value of '%s' for the now deprecated 'instance.image'", fmt.Sprint(ami))
-			logger.Warning("\tThis value will not be taken into account anymore as default when running templates")
-		} else {
-			logger.Info("\tMigrated correctly the deprecated 'instance.image' to 'instance.distro'")
-		}
-		config.Unset("instance.image")
-		logger.Info("\tYou can always check your config values with 'awless config'")
-	case "v0.1.9":
-		logger.Info("In v0.1.9, the local data file model has been moved to support multi-account transparently")
-		oldData := filepath.Join(os.Getenv("__AWLESS_HOME"), "aws", "rdf")
-		if err := os.RemoveAll(oldData); err == nil {
-			logger.Info("-> Stale data have been removed. The local model (ex: used for completion) will progressively be synced again through your usage of awless.")
-			logger.Info("-> You can also manually run `awless sync`")
-		}
-	}
 }
 
 func hasEmbeddedRegionInSharedConfigForProfile(profile string) (string, bool, error) {
@@ -259,14 +224,4 @@ func hasEmbeddedRegionInSharedConfigForProfile(profile string) (string, bool, er
 	}
 	region := *s.Config.Region
 	return region, len(region) > 0, nil
-}
-
-func isNotAwlessFormerDefaultAMI(s string) bool {
-	amis := []string{"ami-c58c1dd3", "ami-4191b524", "ami-7a85a01a", "ami-4836a428", "ami-0bd66a6f", "ami-d3c0c4b5", "ami-b6daced2", "ami-b968bad6", "ami-fc5ae39f", "ami-762a2315", "ami-923d12f5", "ami-9d15c7f3", "ami-52c7b43d", "ami-2bccae47"}
-	for _, e := range amis {
-		if e == s {
-			return false
-		}
-	}
-	return true
 }

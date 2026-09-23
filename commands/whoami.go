@@ -18,7 +18,7 @@ package commands
 
 import (
 	"fmt"
-	"io/ioutil"
+	"io"
 	"net"
 	"net/http"
 	"strings"
@@ -47,7 +47,7 @@ var whoamiCmd = &cobra.Command{
 	Use:               "whoami",
 	Aliases:           []string{"who"},
 	PersistentPreRun:  applyHooks(initAwlessEnvHook, initLoggerHook, initCloudServicesHook, firstInstallDoneHook),
-	PersistentPostRun: applyHooks(verifyNewVersionHook, onVersionUpgrade, networkMonitorHook),
+	PersistentPostRun: applyHooks(onVersionUpgrade, networkMonitorHook),
 	Short:             "Show your account, attached (i.e. managed) and inlined policies",
 
 	Run: func(cmd *cobra.Command, args []string) {
@@ -132,7 +132,7 @@ var whoamiCmd = &cobra.Command{
 func getMyIP() net.IP {
 	client := &http.Client{Timeout: 3 * time.Second}
 	if resp, err := client.Get("http://checkip.amazonaws.com/"); err == nil {
-		b, _ := ioutil.ReadAll(resp.Body)
+		b, _ := io.ReadAll(resp.Body)
 		resp.Body.Close()
 		return net.ParseIP(strings.TrimSpace(string(b)))
 	}

@@ -3,7 +3,6 @@ package config
 import (
 	"fmt"
 	"strings"
-	"time"
 )
 
 func GetAWSRegion() string {
@@ -46,11 +45,4 @@ func GetConfigWithPrefix(prefix string) map[string]interface{} {
 		}
 	}
 	return conf
-}
-
-func getCheckUpgradeFrequency() time.Duration {
-	if frequency, ok := Config[checkUpgradeFrequencyConfigKey].(int); ok {
-		return time.Duration(frequency) * time.Hour
-	}
-	return 8 * time.Hour
 }

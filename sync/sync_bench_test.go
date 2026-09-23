@@ -1,7 +1,6 @@
 package sync_test
 
 import (
-	"io/ioutil"
 	"os"
 	"strconv"
 	"testing"
@@ -28,7 +27,7 @@ import (
 )
 
 func BenchmarkSync(b *testing.B) {
-	dir, err := ioutil.TempDir("", "synctest")
+	dir, err := os.MkdirTemp("", "synctest")
 	if err != nil {
 		b.Fatal(err)
 	}

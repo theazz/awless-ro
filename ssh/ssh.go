@@ -6,7 +6,6 @@ import (
 	"encoding/pem"
 	"errors"
 	"fmt"
-	"io/ioutil"
 	"net"
 	"os"
 	"os/exec"
@@ -286,7 +285,7 @@ func findPrivateKeyFromName(keyname string, keyFolders ...string) (privateKey, b
 	}
 
 	for _, path := range keyPaths {
-		b, err := ioutil.ReadFile(path)
+		b, err := os.ReadFile(path)
 		if err == nil {
 			priv.path = path
 			priv.body = b
@@ -363,7 +362,7 @@ To get rid of this message, update %s`, hostname, key.Type(), gossh.FingerprintS
 }
 
 var trustKeyFunc func(hostname string, remote net.Addr, key gossh.PublicKey, keyFileName string) bool = func(hostname string, remote net.Addr, key gossh.PublicKey, keyFileName string) bool {
-	fmt.Printf("awless could not validate the authenticity of '%s' (unknown host)\n", hostname)
+	fmt.Printf("awless-ro could not validate the authenticity of '%s' (unknown host)\n", hostname)
 	fmt.Printf("%s public key fingerprint is %s.\n", key.Type(), gossh.FingerprintSHA256(key))
 	fmt.Printf("Do you want to continue connecting and persist this key to '%s' (yes/no)? ", keyFileName)
 	var yesorno string
@@ -374,7 +373,7 @@ var trustKeyFunc func(hostname string, remote net.Addr, key gossh.PublicKey, key
 	return strings.ToLower(yesorno) == "yes"
 }
 
-const tmpProxyCommandScriptFilename = "awless-ssh-proxycommand"
+const tmpProxyCommandScriptFilename = "awless-ro-ssh-proxycommand"
 
 // This hack is used to circumvent a bug i cannot yet figure out
 // Bug: when executing syscall.Exec(args[0], args, os.Environ()) and args contains

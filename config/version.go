@@ -28,10 +28,14 @@ const AWLESS_ASCII_LOGO = `
 ██╔══██║ ██║███╗██║ ██║     ██╔═╝       ██╗     ██╗   
 ██║  ██║ ╚███╔███╔╝ ██████╗ ██████╗ ██████║ ██████║   
 ╚═╝  ╚═╝  ╚══╝╚══╝  ╚═════╝ ╚═════╝ ╚═════╝ ╚═════╝
+                                        read-only
 `
 
+// Version restarts at v0.1.0: awless-ro is a fork with a different feature set
+// (no write operations), so continuing upstream's v0.1.11 numbering would imply
+// a compatibility that does not exist.
 var (
-	Version  = "v0.1.11"
+	Version  = "v0.1.0"
 	BuildFor string
 
 	buildSha, buildDate, buildArch, buildOS string
@@ -43,7 +47,7 @@ type BuildInfo struct {
 
 func (b BuildInfo) String() string {
 	var buff bytes.Buffer
-	buff.WriteString(fmt.Sprintf("version=%s", b.Version))
+	buff.WriteString(fmt.Sprintf("awless-ro %s", b.Version))
 
 	if b.Sha != "" {
 		buff.WriteString(fmt.Sprintf(", commit=%s", b.Sha))

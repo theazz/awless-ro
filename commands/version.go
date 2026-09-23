@@ -31,7 +31,7 @@ func init() {
 
 var versionCmd = &cobra.Command{
 	Use:   "version",
-	Short: "Show awless version",
+	Short: "Show awless-ro version",
 
 	Run: printVersion,
 }

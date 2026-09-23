@@ -15,80 +15,19 @@ limitations under the License.
 */
 package config
 
+// Upstream awless phoned home to https://updates.awless.io on almost every
+// command to advertise new releases. That service belonged to WALLIX and is
+// gone, so the check was removed rather than repointed: a read-only inspection
+// tool has no business making an unsolicited network call on every invocation.
+//
+// The semver comparison stays, because it still drives the one-off "you just
+// upgraded" notice.
+
 import (
-	"encoding/json"
 	"errors"
-	"fmt"
-	"io"
-	"net/http"
-	"runtime"
 	"strconv"
 	"strings"
-	"time"
-
-	"github.com/theazz/awless-ro/database"
 )
-
-const (
-	lastUpgradeCheckDbKey = "upgrade.lastcheck"
-)
-
-func VerifyNewVersionAvailable(url string, messaging io.Writer) error {
-	return database.Execute(func(db *database.DB) error {
-		last, err := db.GetTimeValue(lastUpgradeCheckDbKey)
-		if err != nil {
-			return err
-		}
-
-		upgradeFreq := getCheckUpgradeFrequency()
-		if upgradeFreq < 0 {
-			return nil
-		}
-
-		if time.Since(last) > upgradeFreq {
-			notifyIfUpgrade(url, messaging)
-		}
-
-		return db.SetTimeValue(lastUpgradeCheckDbKey, time.Now())
-	})
-}
-
-func notifyIfUpgrade(url string, messaging io.Writer) error {
-	client := &http.Client{Timeout: 1500 * time.Millisecond}
-	req, _ := http.NewRequest(http.MethodGet, url, nil)
-	req.Header.Set("User-Agent", "awless-client-"+Version)
-	resp, err := client.Do(req)
-	if err != nil {
-		return err
-	}
-	defer resp.Body.Close()
-
-	latest := struct {
-		Version, URL string
-	}{}
-
-	dec := json.NewDecoder(resp.Body)
-	if err := dec.Decode(&latest); err == nil {
-		if IsSemverUpgrade(Version, latest.Version) {
-			var install string
-			switch BuildFor {
-			case "brew":
-				install = "Run `brew upgrade awless`"
-			case "zip", "targz":
-				ext := "tar.gz"
-				if runtime.GOOS == "windows" {
-					ext = "zip"
-				}
-				install = fmt.Sprintf("Run `wget -O awless-%s.%s https://github.com/theazz/awless-ro/releases/download/%s/awless-%s-%s.%s`", latest.Version, ext, latest.Version, runtime.GOOS, runtime.GOARCH, ext)
-			default:
-				install = "Run `go get -u github.com/theazz/awless-ro`"
-			}
-			fmt.Fprintf(messaging, "New version %s available. Checkout the latest features at https://github.com/theazz/awless-ro/blob/master/CHANGELOG.md\n%s\n", latest.Version, install)
-		}
-	}
-
-	return nil
-}
 
 const semverLen = 3
 

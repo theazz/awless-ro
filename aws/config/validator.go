@@ -3,7 +3,6 @@ package awsconfig
 import (
 	"fmt"
 	"io"
-	"io/ioutil"
 	"os"
 	"path/filepath"
 	"regexp"
@@ -198,7 +197,7 @@ func AllProfiles() (profiles []string) {
 		if _, err := os.Stat(f); err != nil {
 			continue
 		}
-		out, err := ioutil.ReadFile(f)
+		out, err := os.ReadFile(f)
 		if err != nil {
 			continue
 		}

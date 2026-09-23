@@ -27,7 +27,6 @@ import (
 	"flag"
 	"fmt"
 	"io"
-	"io/ioutil"
 	"os"
 	"os/exec"
 	"path/filepath"
@@ -44,10 +43,12 @@ var (
 	buildArch  = flag.String("arch", runtime.GOARCH, "The ARCH to build")
 )
 
+// 386 was dropped and arm64 added: Apple Silicon and Graviton are the platforms
+// that matter now, and 32-bit x86 has not been a realistic target for years.
 var builds = map[string][]string{
-	"darwin":  {"amd64"},
-	"linux":   {"386", "amd64"},
-	"windows": {"386", "amd64"},
+	"darwin":  {"amd64", "arm64"},
+	"linux":   {"amd64", "arm64"},
+	"windows": {"amd64"},
 }
 
 func main() {
@@ -87,7 +88,7 @@ func buildAndZip(osname, arch string) error {
 		fmt.Sprintf("GOOS=%s", osname),
 	}
 
-	builddir, err := ioutil.TempDir("", "")
+	builddir, err := os.MkdirTemp("", "")
 	if err != nil {
 		return err
 	}
@@ -99,9 +100,9 @@ func buildAndZip(osname, arch string) error {
 
 	switch osname {
 	case "windows":
-		binName = "awless.exe"
+		binName = "awless-ro.exe"
 	default:
-		binName = "awless"
+		binName = "awless-ro"
 	}
 
 	artefactPath := filepath.Join(builddir, binName)
@@ -142,8 +143,8 @@ func buildAndZip(osname, arch string) error {
 
 	switch buildFor {
 	case "brew": //No zipping
-		fmt.Println("DO NOT forget to update the brew bottles and formula (see homebrew-awless Github repo)!")
-		return os.Rename(artefactPath, "awless")
+		fmt.Println("DO NOT forget to update the brew formula.")
+		return os.Rename(artefactPath, "awless-ro")
 	case "zip":
 		zipFile, err := os.OpenFile(fmt.Sprintf("%s-%s-%s.zip", strings.Split(binName, ".")[0], osname, arch), os.O_WRONLY|os.O_TRUNC|os.O_CREATE, 0600)
 		if err != nil {
@@ -157,7 +158,7 @@ func buildAndZip(osname, arch string) error {
 			return err
 		}
 
-		content, err := ioutil.ReadFile(artefactPath)
+		content, err := os.ReadFile(artefactPath)
 		if err != nil {
 			return err
 		}

@@ -16,33 +16,8 @@ limitations under the License.
 package config
 
 import (
-	"bytes"
-	"fmt"
-	"net/http"
-	"net/http/httptest"
-	"runtime"
-	"strings"
 	"testing"
 )
-
-func TestUpgradeMessaging(t *testing.T) {
-	BuildFor = "zip"
-	tserver := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
-		if ua := r.Header.Get("User-Agent"); !strings.HasPrefix(ua, "awless-client-"+Version) {
-			t.Fatalf("unexpected user-agent: %s", ua)
-		}
-		w.Write([]byte(`{"URL":"https://github.com/theazz/awless-ro/releases/latest","Version":"1000.0.0"}`))
-	}))
-	var buff bytes.Buffer
-	if err := notifyIfUpgrade(tserver.URL, &buff); err != nil {
-		t.Fatal(err)
-	}
-
-	exp := fmt.Sprintf("New version 1000.0.0 available. Checkout the latest features at https://github.com/theazz/awless-ro/blob/master/CHANGELOG.md\nRun `wget -O awless-1000.0.0.tar.gz https://github.com/theazz/awless-ro/releases/download/1000.0.0/awless-%s-%s.tar.gz`\n", runtime.GOOS, runtime.GOARCH)
-	if got, want := buff.String(), exp; got != want {
-		t.Fatalf("got %s, want %s", got, want)
-	}
-}
 
 func TestSemverUpgradeOrNot(t *testing.T) {
 	tcases := []struct {

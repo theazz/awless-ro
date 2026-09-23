@@ -28,7 +28,11 @@ import (
 )
 
 var (
-	AwlessHome         = filepath.Join(os.Getenv("HOME"), ".awless")
+	// AwlessHome is deliberately ~/.awless-ro and not ~/.awless: sharing the
+	// home directory with an installed upstream awless would mean sharing its
+	// BoltDB, its synced graph and its key directory, so the two tools would
+	// silently overwrite each other's configuration.
+	AwlessHome         = filepath.Join(os.Getenv("HOME"), ".awless-ro")
 	DBPath             = filepath.Join(AwlessHome, database.Filename)
 	Dir                = filepath.Join(AwlessHome, "aws")
 	KeysDir            = filepath.Join(AwlessHome, "keys")

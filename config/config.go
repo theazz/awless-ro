@@ -22,45 +22,42 @@ const (
 	defaultsDatabaseKey = "defaults"
 
 	//Config
-	autosyncConfigKey              = "autosync"
-	checkUpgradeFrequencyConfigKey = "upgrade.checkfrequency"
-	RegionConfigKey                = "aws.region"
-	ProfileConfigKey               = "aws.profile"
+	autosyncConfigKey = "autosync"
+	RegionConfigKey   = "aws.region"
+	ProfileConfigKey  = "aws.profile"
 
 	//Config prefix
 	awsCloudPrefix = "aws."
 )
 
 var configDefinitions = map[string]*Definition{
-	autosyncConfigKey:              {help: "Automatically synchronize your cloud locally", defaultValue: "true", parseParamFn: parseBool},
-	RegionConfigKey:                {help: "AWS region", parseParamFn: awsconfig.ParseRegion, stdinParamProviderFn: awsconfig.StdinRegionSelector, onUpdateFns: []onUpdateFunc{runSyncWithUpdatedRegion}},
-	ProfileConfigKey:               {help: "AWS profile", defaultValue: "default"},
-	"aws.infra.sync":               {help: "Enable/disable sync of infra services (EC2, RDS, etc.) (when empty: true)", defaultValue: "true", parseParamFn: parseBool},
-	"aws.access.sync":              {help: "Enable/disable sync of IAM service (when empty: true)", defaultValue: "true", parseParamFn: parseBool},
-	"aws.storage.sync":             {help: "Enable/disable sync of S3 service (when empty: true)", defaultValue: "true", parseParamFn: parseBool},
-	"aws.storage.s3object.sync":    {help: "Enable/disable sync of S3/s3object (when empty: true)", defaultValue: "false", parseParamFn: parseBool},
-	"aws.dns.sync":                 {help: "Enable/disable sync of DNS service (when empty: true)", defaultValue: "true", parseParamFn: parseBool},
-	"aws.dns.record.sync":          {help: "Enable/disable sync of DNS/record (when empty: true)", defaultValue: "false", parseParamFn: parseBool},
-	"aws.notification.sync":        {help: "Enable/disable sync of SNS service (when empty: true)", defaultValue: "true", parseParamFn: parseBool},
-	"aws.monitoring.sync":          {help: "Enable/disable sync of CloudWatch service (when empty: true)", defaultValue: "false", parseParamFn: parseBool},
-	"aws.lambda.sync":              {help: "Enable/disable sync of Lambda service (when empty: true)", defaultValue: "true", parseParamFn: parseBool},
-	"aws.messaging.sync":           {help: "Enable/disable sync of SQS/SNS service (when empty: true)", defaultValue: "true", parseParamFn: parseBool},
-	"aws.cdn.sync":                 {help: "Enable/disable sync of CloudFront service (when empty: true)", defaultValue: "true", parseParamFn: parseBool},
-	"aws.cloudformation.sync":      {help: "Enable/disable sync of CloudFormation service (when empty: true)", defaultValue: "true", parseParamFn: parseBool},
-	checkUpgradeFrequencyConfigKey: {help: "Upgrade check frequency (hours); a negative value disables check", defaultValue: "8", parseParamFn: parseInt},
+	autosyncConfigKey:           {help: "Automatically synchronize your cloud locally", defaultValue: "true", parseParamFn: parseBool},
+	RegionConfigKey:             {help: "AWS region", parseParamFn: awsconfig.ParseRegion, stdinParamProviderFn: awsconfig.StdinRegionSelector, onUpdateFns: []onUpdateFunc{runSyncWithUpdatedRegion}},
+	ProfileConfigKey:            {help: "AWS profile", defaultValue: "default"},
+	"aws.infra.sync":            {help: "Enable/disable sync of infra services (EC2, RDS, etc.) (when empty: true)", defaultValue: "true", parseParamFn: parseBool},
+	"aws.access.sync":           {help: "Enable/disable sync of IAM service (when empty: true)", defaultValue: "true", parseParamFn: parseBool},
+	"aws.storage.sync":          {help: "Enable/disable sync of S3 service (when empty: true)", defaultValue: "true", parseParamFn: parseBool},
+	"aws.storage.s3object.sync": {help: "Enable/disable sync of S3/s3object (when empty: true)", defaultValue: "false", parseParamFn: parseBool},
+	"aws.dns.sync":              {help: "Enable/disable sync of DNS service (when empty: true)", defaultValue: "true", parseParamFn: parseBool},
+	"aws.dns.record.sync":       {help: "Enable/disable sync of DNS/record (when empty: true)", defaultValue: "false", parseParamFn: parseBool},
+	"aws.notification.sync":     {help: "Enable/disable sync of SNS service (when empty: true)", defaultValue: "true", parseParamFn: parseBool},
+	"aws.monitoring.sync":       {help: "Enable/disable sync of CloudWatch service (when empty: true)", defaultValue: "false", parseParamFn: parseBool},
+	"aws.lambda.sync":           {help: "Enable/disable sync of Lambda service (when empty: true)", defaultValue: "true", parseParamFn: parseBool},
+	"aws.messaging.sync":        {help: "Enable/disable sync of SQS/SNS service (when empty: true)", defaultValue: "true", parseParamFn: parseBool},
+	"aws.cdn.sync":              {help: "Enable/disable sync of CloudFront service (when empty: true)", defaultValue: "true", parseParamFn: parseBool},
+	"aws.cloudformation.sync":   {help: "Enable/disable sync of CloudFormation service (when empty: true)", defaultValue: "true", parseParamFn: parseBool},
 }
 
-var defaultsDefinitions = map[string]*Definition{
-	"instance.type":          {defaultValue: "t2.micro", help: "AWS EC2 instance type", stdinParamProviderFn: awsconfig.StdinInstanceTypeSelector, parseParamFn: awsconfig.ParseInstanceType},
-	"instance.distro":        {defaultValue: "amazonlinux", help: "Query to fetch latest community bare distro image id"},
-	"instance.count":         {defaultValue: "1", help: "Number of instances to create on AWS EC2", parseParamFn: parseInt},
-	"instance.timeout":       {defaultValue: "180", help: "Time to wait when checking instance states on AWS EC2", parseParamFn: parseInt},
-	"securitygroup.protocol": {defaultValue: "tcp", help: "The IP protocol to authorize on the security group"},
-	"volume.device":          {defaultValue: "/dev/sdh", help: "Device name to expose to an EC2 instance"},
-	"elasticip.domain":       {defaultValue: "vpc", help: "The domain of elastic IP addresses (standard or vpc)"},
-	"image.delete-snapshots": {defaultValue: "true", help: "Delete linked snapshots when deleting an image"},
-	"database.type":          {defaultValue: "db.t2.micro", help: "Default RDS database type"},
-}
+// defaultsDefinitions is empty: every entry it used to hold (instance.type,
+// instance.count, securitygroup.protocol, volume.device and so on) supplied
+// default parameters to the create/delete commands, and nothing reads them now
+// that those commands are gone. A setting the user can change with no effect is
+// worse than no setting at all.
+//
+// The map and the Defaults store behind it are kept rather than deleted: they
+// still back the legacy "region" and "sync.auto" keys that older local
+// databases may contain, and a read-only default may well show up later.
+var defaultsDefinitions = map[string]*Definition{}
 
 var deprecated = map[string]string{
 	"sync.auto": autosyncConfigKey,
@@ -97,7 +94,10 @@ func LoadConfig() error {
 }
 
 func DisplayConfig() string {
-	return fmt.Sprintf("%s\n%s", displayConfig(), displayDefaults())
+	if defaults := displayDefaults(); defaults != "" {
+		return fmt.Sprintf("%s\n%s", displayConfig(), defaults)
+	}
+	return displayConfig()
 }
 
 func InitConfig(fromEnv map[string]string) error {
@@ -302,51 +302,74 @@ func displayConfig() string {
 	return b.String()
 }
 
+// displayDefaults renders the Defaults store. Since defaultsDefinitions is
+// empty, in practice this only ever shows keys the user set themselves or keys
+// inherited from an older local database, so each section is emitted only when
+// it has something in it.
 func displayDefaults() string {
-	var b bytes.Buffer
-	b.WriteString("# Template defaults\n")
-	b.WriteString("   ## Predefined\n")
-	t := tabwriter.NewWriter(&b, 0, 0, 3, ' ', 0)
 	var keys []string
 	for k := range Defaults {
 		keys = append(keys, k)
 	}
 	sort.Strings(keys)
+
+	var predefined, userDefined bytes.Buffer
+	pt := tabwriter.NewWriter(&predefined, 0, 0, 3, ' ', 0)
+	ut := tabwriter.NewWriter(&userDefined, 0, 0, 3, ' ', 0)
+
+	var predefinedCount, userDefinedCount int
+
 	for _, k := range keys {
-		if def, ok := defaultsDefinitions[k]; ok {
-			if def.help != "" {
-				fmt.Fprintf(t, "\t%s:\t%v\t(%[2]T)\t# %s\n", k, Defaults[k], def.help)
-			} else {
-				fmt.Fprintf(t, "\t%s:\t%v\t(%[2]T)\n", k, Defaults[k])
-			}
-		}
-	}
-	for k := range defaultsDefinitions {
-		if _, ok := Defaults[k]; !ok {
-			fmt.Fprintf(t, "\t%s:\t \t(UNSET)", k)
-			if def, ok := defaultsDefinitions[k]; ok && def.help != "" {
-				fmt.Fprintf(t, "\t# %s\n", def.help)
-			} else {
-				fmt.Fprintln(t)
-			}
-		}
-	}
-	t.Flush()
-	count := 0
-	t = tabwriter.NewWriter(&b, 0, 0, 3, ' ', 0)
-	for _, k := range keys {
-		if _, ok := defaultsDefinitions[k]; !ok {
-			count++
-			fmt.Fprintf(t, "\t%s:\t%v\t(%[2]T)", k, Defaults[k])
+		def, known := defaultsDefinitions[k]
+		if !known {
+			userDefinedCount++
+			fmt.Fprintf(ut, "\t%s:\t%v\t(%[2]T)", k, Defaults[k])
 			if newKey, ok := deprecated[k]; ok {
-				fmt.Fprintf(t, "\t# DEPRECATED, update with `awless config set %s` `awless config unset %s`", newKey, k)
+				fmt.Fprintf(ut, "\t# DEPRECATED, update with `awless-ro config set %s` `awless-ro config unset %s`", newKey, k)
 			}
-			fmt.Fprintln(t)
+			fmt.Fprintln(ut)
+			continue
+		}
+		predefinedCount++
+		if def.help != "" {
+			fmt.Fprintf(pt, "\t%s:\t%v\t(%[2]T)\t# %s\n", k, Defaults[k], def.help)
+		} else {
+			fmt.Fprintf(pt, "\t%s:\t%v\t(%[2]T)\n", k, Defaults[k])
 		}
 	}
-	if count > 0 {
-		b.WriteString("\n   ## User defined\n")
-		t.Flush()
+
+	for k, def := range defaultsDefinitions {
+		if _, set := Defaults[k]; set {
+			continue
+		}
+		predefinedCount++
+		fmt.Fprintf(pt, "\t%s:\t \t(UNSET)", k)
+		if def.help != "" {
+			fmt.Fprintf(pt, "\t# %s\n", def.help)
+		} else {
+			fmt.Fprintln(pt)
+		}
+	}
+
+	pt.Flush()
+	ut.Flush()
+
+	if predefinedCount == 0 && userDefinedCount == 0 {
+		return ""
+	}
+
+	var b bytes.Buffer
+	b.WriteString("# Defaults\n")
+	if predefinedCount > 0 {
+		b.WriteString("   ## Predefined\n")
+		b.Write(predefined.Bytes())
+	}
+	if userDefinedCount > 0 {
+		if predefinedCount > 0 {
+			b.WriteString("\n")
+		}
+		b.WriteString("   ## User defined\n")
+		b.Write(userDefined.Bytes())
 	}
 	return b.String()
 }

@@ -1,7 +1,6 @@
 package awsconfig
 
 import (
-	"io/ioutil"
 	"os"
 	"path/filepath"
 	"testing"
@@ -82,7 +81,7 @@ func TestIsValidRegion(t *testing.T) {
 }
 
 func TestProfileValid(t *testing.T) {
-	awsHomeTmp, err := ioutil.TempDir("", "")
+	awsHomeTmp, err := os.MkdirTemp("", "")
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -94,7 +93,7 @@ func TestProfileValid(t *testing.T) {
 		return awsHomeTmp
 	}
 
-	ioutil.WriteFile(filepath.Join(awsHomeTmp, "config"), []byte(`[profile mfa]
+	os.WriteFile(filepath.Join(awsHomeTmp, "config"), []byte(`[profile mfa]
 region = us-west-1
 role_arn = arn:aws:iam::1234567890:role/my-role
 source_profile = default
@@ -103,7 +102,7 @@ source_profile = jdoe
 mfa_serial = arn:aws:iam::1234567890:mfa/janedoe
 role_arn = arn:aws:iam::1234567890:role/my-role
 `), 0600)
-	ioutil.WriteFile(filepath.Join(awsHomeTmp, "credentials"), []byte(`[default]
+	os.WriteFile(filepath.Join(awsHomeTmp, "credentials"), []byte(`[default]
 aws_access_key_id = ABCDEXAMPLE01234
 aws_secret_access_key = aSecretKeyInMycredentials
 

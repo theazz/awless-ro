@@ -53,9 +53,9 @@ func init() {
 	RootCmd.PersistentFlags().BoolVarP(&forceGlobalFlag, "force", "f", false, "Force the command and bypass confirmation prompts")
 	RootCmd.PersistentFlags().BoolVar(&noSyncGlobalFlag, "no-sync", false, "Do not run any sync on command")
 	RootCmd.PersistentFlags().StringVarP(&awsRegionGlobalFlag, "aws-region", "r", "", "Override AWS region temporarily for the current command")
-	RootCmd.PersistentFlags().SetAnnotation("aws-region", cobra.BashCompCustom, []string{"__awless_region_list"})
+	RootCmd.PersistentFlags().SetAnnotation("aws-region", cobra.BashCompCustom, []string{"__awless_ro_region_list"})
 	RootCmd.PersistentFlags().StringVarP(&awsProfileGlobalFlag, "aws-profile", "p", "", "Override AWS profile temporarily for the current command")
-	RootCmd.PersistentFlags().SetAnnotation("aws-profile", cobra.BashCompCustom, []string{"__awless_profile_list"})
+	RootCmd.PersistentFlags().SetAnnotation("aws-profile", cobra.BashCompCustom, []string{"__awless_ro_profile_list"})
 	RootCmd.PersistentFlags().StringVar(&awsColorGlobalFlag, "color", "auto", "Force enabling/disabling colors in display (auto, never, always)")
 	RootCmd.PersistentFlags().BoolVar(&networkMonitorFlag, "network-monitor", false, "Debug requests with network monitor")
 	RootCmd.PersistentFlags().MarkHidden("network-monitor")
@@ -75,9 +75,9 @@ func init() {
 }
 
 var RootCmd = &cobra.Command{
-	Use:                    "awless COMMAND",
-	Short:                  "Manage  and explore your cloud",
-	Long:                   "awless is a powerful CLI to explore, sync and manage your cloud infrastructure",
+	Use:                    "awless-ro COMMAND",
+	Short:                  "Explore your cloud, read-only",
+	Long:                   "awless-ro is a read-only CLI to explore and sync your cloud infrastructure",
 	BashCompletionFunction: bash_completion_func,
 	RunE: func(c *cobra.Command, args []string) error {
 		if versionGlobalFlag {
@@ -119,52 +119,52 @@ var bash_completion_func = fmt.Sprintf(bashCompletionTempl, strings.Join(awsconf
 
 const (
 	bashCompletionTempl = `
-__awless_get_all_ids()
+__awless_ro_get_all_ids()
 {
 		local all_ids_output
-		if all_ids_output=$(awless list infra --local --ids 2>/dev/null; awless list access --local --ids 2>/dev/null); then
+		if all_ids_output=$(awless-ro list infra --local --ids 2>/dev/null; awless-ro list access --local --ids 2>/dev/null); then
 		COMPREPLY=( $( compgen -W "${all_ids_output[*]}" -- "$cur" ) )
 		fi
 }
-__awless_get_instances_ids()
+__awless_ro_get_instances_ids()
 {
 		local all_ids_output
-		if all_ids_output=$(awless list instances --local --ids 2>/dev/null); then
+		if all_ids_output=$(awless-ro list instances --local --ids 2>/dev/null); then
 		COMPREPLY=( $( compgen -W "${all_ids_output[*]}" -- "$cur" ) )
 		fi
 }
-__awless_get_conf_keys()
+__awless_ro_get_conf_keys()
 {
 		local all_keys_output
-		if all_keys_output=$(awless config list --keys 2>/dev/null); then
+		if all_keys_output=$(awless-ro config list --keys 2>/dev/null); then
 		COMPREPLY=( $( compgen -W "${all_keys_output[*]}" -- "$cur" ) )
 		fi
 }
 
 __custom_func() {
     case ${last_command} in
-				awless_ssh )
-            __awless_get_instances_ids
+				awless-ro_ssh )
+            __awless_ro_get_instances_ids
             return
             ;;
-				awless_show )
-            __awless_get_all_ids
+				awless-ro_show )
+            __awless_ro_get_all_ids
             return
             ;;
-				awless_config_set )
-						__awless_get_conf_keys
+				awless-ro_config_set )
+						__awless_ro_get_conf_keys
 						return
 						;;
-				awless_config_get )
-						__awless_get_conf_keys
+				awless-ro_config_get )
+						__awless_ro_get_conf_keys
 						return
 						;;
-				awless_config_unset )
-						__awless_get_conf_keys
+				awless-ro_config_unset )
+						__awless_ro_get_conf_keys
 						return
 						;;
-				awless_switch )
-						__awless_profile_region_list
+				awless-ro_switch )
+						__awless_ro_profile_region_list
 						return
 						;;
         *)
@@ -172,29 +172,29 @@ __custom_func() {
     esac
 }
 
-__awless_regions()
+__awless_ro_regions()
 {
     echo "%[1]s"
 }
 
-__awless_region_list()
+__awless_ro_region_list()
 {
     cur="${COMP_WORDS[COMP_CWORD]#*=}"
-    COMPREPLY=( $(compgen -W "$(__awless_regions)" -- ${cur}) )
+    COMPREPLY=( $(compgen -W "$(__awless_ro_regions)" -- ${cur}) )
 }
 
-__awless_profile_list()
+__awless_ro_profile_list()
 {
     cur="${COMP_WORDS[COMP_CWORD]#*=}"
     profiles="$((egrep '^\[ *[a-zA-Z0-9_-]+ *\]$' ~/.aws/credentials 2>/dev/null; grep '\[profile' ~/.aws/config 2>/dev/null | sed 's|\[profile ||g') | tr -d '[]' | sort | uniq)"
     COMPREPLY=( $(compgen -W "${profiles}" -- ${cur}) )
 }
 
-__awless_profile_region_list()
+__awless_ro_profile_region_list()
 {
     cur="${COMP_WORDS[COMP_CWORD]#*=}"
     profiles="$((egrep '^\[ *[a-zA-Z0-9_-]+ *\]$' ~/.aws/credentials 2>/dev/null; grep '\[profile' ~/.aws/config 2>/dev/null | sed 's|\[profile ||g') | tr -d '[]' | sort | uniq)"
-    COMPREPLY=( $(compgen -W "${profiles} $(__awless_regions)" -- ${cur}) )
+    COMPREPLY=( $(compgen -W "${profiles} $(__awless_ro_regions)" -- ${cur}) )
 }
 
 `

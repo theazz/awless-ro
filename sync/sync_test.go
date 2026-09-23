@@ -7,15 +7,13 @@ import (
 
 	"github.com/theazz/awless-ro/cloud"
 
-	"io/ioutil"
-
 	"path/filepath"
 
 	"github.com/theazz/awless-ro/graph"
 )
 
 func TestSyncTripleFiles(t *testing.T) {
-	tmpDir, err := ioutil.TempDir("", "awlessunittest_")
+	tmpDir, err := os.MkdirTemp("", "awlessunittest_")
 	if err != nil {
 		t.Fatal(err)
 	}

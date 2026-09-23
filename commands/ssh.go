@@ -84,7 +84,7 @@ var sshCmd = &cobra.Command{
   awless ssh 172.31.77.151 --port 2222 --through my-proxy --through-port 23  # specifying target & proxy port`,
 
 	PersistentPreRun:  applyHooks(initLoggerHook, initAwlessEnvHook, initCloudServicesHook, firstInstallDoneHook),
-	PersistentPostRun: applyHooks(verifyNewVersionHook, onVersionUpgrade, networkMonitorHook),
+	PersistentPostRun: applyHooks(onVersionUpgrade, networkMonitorHook),
 
 	RunE: func(cmd *cobra.Command, args []string) error {
 		if len(args) != 1 {

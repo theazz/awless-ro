@@ -2,14 +2,13 @@ package config
 
 import (
 	"fmt"
-	"io/ioutil"
 	"os"
 	"reflect"
 	"testing"
 )
 
 func TestDefaults(t *testing.T) {
-	f, e := ioutil.TempDir(".", "test")
+	f, e := os.MkdirTemp(".", "test")
 	if e != nil {
 		t.Fatal(e)
 	}
@@ -119,7 +118,7 @@ func TestDefaults(t *testing.T) {
    aws.region:     us-west-1   (string)   # AWS region
    ec2.autosync:   true        (bool)     # Auto sync AWS EC2
 
-# Template defaults
+# Defaults
    ## Predefined
    instance.type:   t2.nano   (string)
 
