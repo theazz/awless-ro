@@ -43,15 +43,10 @@ func TestSyncTripleFiles(t *testing.T) {
 		t.Fatal(err)
 	}
 
-	gitInfo, err := os.Stat(filepath.Join(tmpDir, "aws", "rdf", ".git"))
-	if err != nil {
-		t.Fatalf("cannot find expected .git dir: %s", err)
-	}
-	if !gitInfo.IsDir() {
-		t.Fatalf("expected .git to be dir")
-	}
-	if got, want := gitInfo.Name(), ".git"; got != want {
-		t.Fatalf("got %s, want %s", got, want)
+	// The storage directory is a plain directory: syncing no longer initialises
+	// a git repository there.
+	if _, err := os.Stat(filepath.Join(tmpDir, "aws", "rdf", ".git")); !os.IsNotExist(err) {
+		t.Fatalf("expected no .git dir in the storage directory, got err %v", err)
 	}
 
 	for _, srv := range []cloud.Service{srv1, srv2} {

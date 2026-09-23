@@ -23,8 +23,6 @@ import (
 	gosync "sync"
 	"time"
 
-	"runtime"
-
 	"github.com/theazz/awless-ro/cloud"
 	"github.com/theazz/awless-ro/graph"
 	"github.com/theazz/awless-ro/logger"
@@ -127,8 +125,6 @@ Loop:
 		}
 	}
 
-	var filepaths []string
-
 	for name, g := range graphs {
 		serviceRegion := servicesByName[name].Region()
 		serviceProfile := servicesByName[name].Profile()
@@ -151,21 +147,7 @@ Loop:
 			closeFile()
 			continue
 		}
-		relPath, err := filepath.Rel(s.BaseDir(), fullpath)
-		if err != nil {
-			allErrors = append(allErrors, err)
-			closeFile()
-			continue
-		}
-
-		filepaths = append(filepaths, relPath)
 		closeFile()
-	}
-
-	if runtime.GOOS != "windows" { // https://github.com/theazz/awless-ro/issues/119
-		if err := s.Commit(filepaths...); err != nil {
-			allErrors = append(allErrors, fmt.Errorf("committing %s: %s", strings.Join(filepaths, ", "), err))
-		}
 	}
 
 	return graphs, concatErrors(allErrors)
