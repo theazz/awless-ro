@@ -484,17 +484,21 @@ func TestMaxWidth(t *testing.T) {
 		WithMaxWidth(45),
 	).SetSource(g).Build()
 
-	expected = `|  ID  | NAME | STATE ▲ | TYPE | PUBLIC IP |
-|------|------|------|------|------|
-| inst | apac | runn | t2.  |      |
-| _3   | he   | ing  | xlar |      |
-|      |      |      | ge   |      |
-| inst | redi | runn | t2.  | 1.2. |
-| _1   | s    | ing  | micr | 3.4  |
-|      |      |      | o    |      |
-| inst | djan | stop | t2.  |      |
-| _2   | go   | ped  | medi |      |
-|      |      |      | um   |      |
+	// Headers are wrapped to the column width like any other cell, so a header
+	// longer than its column spills onto a second header line instead of
+	// widening the header row past the separator.
+	expected = `|  ID  | NAME | STATE | TYPE | PUBLIC |
+|      |      |   ▲   |      |   IP   |
+|------|------|-------|------|--------|
+| inst | apac | runn  | t2.  |        |
+| _3   | he   | ing   | xlar |        |
+|      |      |       | ge   |        |
+| inst | redi | runn  | t2.  | 1.2.   |
+| _1   | s    | ing   | micr | 3.4    |
+|      |      |       | o    |        |
+| inst | djan | stop  | t2.  |        |
+| _2   | go   | ped   | medi |        |
+|      |      |       | um   |        |
 `
 	w.Reset()
 	if err := displayer.Print(&w); err != nil {
@@ -511,7 +515,8 @@ func TestMaxWidth(t *testing.T) {
 		WithMaxWidth(70),
 	).SetSource(g).Build()
 
-	expected = `|   ID   |  NAME  | STATE ▲ |   TYPE    | PUBLIC IP |
+	expected = `|   ID   |  NAME  |  STATE  |   TYPE    | PUBLIC  |
+|        |        |    ▲    |           |   IP    |
 |--------|--------|---------|-----------|---------|
 | inst_3 | apache | running | t2.xlarge |         |
 | inst_1 | redis  | running | t2.micro  | 1.2.3.4 |

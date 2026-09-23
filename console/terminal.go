@@ -94,7 +94,9 @@ func InteractiveTerminal(client *ssh.Client) error {
 		return err
 	}
 
-	signalc := make(chan os.Signal)
+	// Buffered: signal.Notify never blocks, so an unbuffered channel silently
+	// drops signals that arrive while propagateSignals is busy.
+	signalc := make(chan os.Signal, 1)
 	defer func() {
 		signal.Reset()
 		close(signalc)

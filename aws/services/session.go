@@ -24,7 +24,6 @@ import (
 
 	awssdk "github.com/aws/aws-sdk-go/aws"
 	"github.com/aws/aws-sdk-go/aws/awserr"
-	"github.com/aws/aws-sdk-go/aws/credentials"
 	"github.com/aws/aws-sdk-go/aws/credentials/stscreds"
 	"github.com/aws/aws-sdk-go/aws/ec2metadata"
 	"github.com/aws/aws-sdk-go/aws/request"
@@ -142,24 +141,16 @@ func (s *sessionResolver) resolve() (*session.Session, error) {
 		})
 	}
 
+	// Resolve credentials eagerly so that a missing or broken profile is
+	// reported before any command starts fetching, instead of surfacing as an
+	// opaque failure mid-sync.
+	//
+	// The on-disk cache of temporary credentials and the interactive profile
+	// creation prompt used to live here, backed by the deleted aws/spec
+	// package. Both are reintroduced on AWS SDK v2 primitives in the
+	// aws/credentials package (see .kiro/specs/awless-ro/design.md, D5), which
+	// is also where profileSetterCallback gets wired back in.
 	if s.enableCredentialResolvers {
-		session.Config.Credentials = credentials.NewCredentials(
-			&credentials.ChainProvider{
-				VerboseErrors: true,
-				Providers: []credentials.Provider{
-					&fileCacheProvider{
-						creds:   session.Config.Credentials,
-						profile: s.profile,
-						log:     s.logger,
-					},
-					&credentialsPrompterProvider{
-						profile: s.profile,
-						out:     os.Stderr,
-						profileSetterCallback: s.profileSetterCallback,
-					},
-				},
-			})
-
 		if _, err = session.Config.Credentials.Get(); err != nil {
 			return session, err
 		}

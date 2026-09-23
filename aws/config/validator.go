@@ -8,11 +8,9 @@ import (
 	"path/filepath"
 	"regexp"
 	"runtime"
-	"sort"
 	"strings"
 	"text/tabwriter"
 
-	"github.com/aws/aws-sdk-go/aws/endpoints"
 	"github.com/chzyer/readline"
 )
 
@@ -42,7 +40,7 @@ func ParseInstanceType(i string) (interface{}, error) {
 
 func StdinRegionSelector() string {
 	var regionItems []readline.PrefixCompleterInterface
-	for _, r := range allRegions() {
+	for _, r := range SuggestedRegions {
 		regionItems = append(regionItems, readline.PcItem(r))
 	}
 	var regionCompleter = readline.NewPrefixCompleter(regionItems...)
@@ -110,28 +108,79 @@ func StdinInstanceTypeSelector() string {
 	return instanceType
 }
 
-func IsValidRegion(given string) bool {
-	reg, _ := regexp.Compile("^(us|eu|ap|sa|ca)\\-\\w+\\-\\d+$")
-	regChina, _ := regexp.Compile("^cn\\-\\w+\\-\\d+$")
-	regUsGov, _ := regexp.Compile("^us\\-gov\\-\\w+\\-\\d+$")
+// regionPrefixes enumerates the geography and partition prefixes AWS uses in
+// region codes. Validation is deliberately format-based rather than a lookup in
+// a curated list of region codes: AWS launches regions faster than we release,
+// and for a read-only tool an unknown-but-well-formed region simply surfaces an
+// AWS-side error, whereas rejecting it makes the tool unusable in that region.
+//
+// Prefixes change very rarely, so enumerating them still catches typos such as
+// "aa-test-1" while accepting every region within a known partition.
+var regionPrefixes = []string{
+	// commercial geographies
+	"us", "eu", "ap", "sa", "ca", "af", "me", "il", "mx",
+	// China
+	"cn",
+	// GovCloud
+	"us-gov",
+	// US and EU ISO partitions
+	"us-iso", "us-isob", "us-isof", "eu-isoe",
+	// European Sovereign Cloud
+	"eusc-de",
+}
 
-	return reg.MatchString(given) || regChina.MatchString(given) || regUsGov.MatchString(given)
+var regionFormat = regexp.MustCompile(
+	`^(` + strings.Join(regionPrefixes, "|") + `)-[a-z]+-\d+$`,
+)
+
+// SuggestedRegions lists commercial AWS regions offered as completions and in
+// the interactive region selector. It is a convenience list, not a validation
+// whitelist: IsValidRegion accepts any well-formed region code, so a region
+// missing here still works. GovCloud, China and ISO partitions are omitted
+// because they need separate credentials and endpoints.
+var SuggestedRegions = []string{
+	"af-south-1",
+	"ap-east-1",
+	"ap-east-2",
+	"ap-northeast-1",
+	"ap-northeast-2",
+	"ap-northeast-3",
+	"ap-south-1",
+	"ap-south-2",
+	"ap-southeast-1",
+	"ap-southeast-2",
+	"ap-southeast-3",
+	"ap-southeast-4",
+	"ap-southeast-5",
+	"ap-southeast-7",
+	"ca-central-1",
+	"ca-west-1",
+	"eu-central-1",
+	"eu-central-2",
+	"eu-north-1",
+	"eu-south-1",
+	"eu-south-2",
+	"eu-west-1",
+	"eu-west-2",
+	"eu-west-3",
+	"il-central-1",
+	"me-central-1",
+	"me-south-1",
+	"mx-central-1",
+	"sa-east-1",
+	"us-east-1",
+	"us-east-2",
+	"us-west-1",
+	"us-west-2",
+}
+
+// IsValidRegion reports whether given looks like an AWS region code.
+func IsValidRegion(given string) bool {
+	return regionFormat.MatchString(given)
 }
 
 func isValidInstanceType(given string) bool {
 	return regexp.MustCompile("\\w+\\.\\w+").MatchString(given)
-}
-
-func allRegions() []string {
-	var regions sort.StringSlice
-	partitions := endpoints.DefaultResolver().(endpoints.EnumPartitions).Partitions()
-	for _, p := range partitions {
-		for id := range p.Regions() {
-			regions = append(regions, id)
-		}
-	}
-	sort.Sort(regions)
-	return regions
 }
 
 func IsValidProfile(given string) bool {

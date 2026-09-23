@@ -199,8 +199,8 @@ func showResource(resource cloud.Resource, gph cloud.GraphAPI) {
 
 	if len(parents) > 0 || hasChildren {
 		fmt.Println(renderCyanBoldFn("\nLineage:"))
-		fmt.Printf(parentsW.String())
-		fmt.Printf(childrenW.String())
+		fmt.Print(parentsW.String())
+		fmt.Print(childrenW.String())
 	}
 
 	appliedOn, err := gph.ResourceRelations(resource, rdf.ApplyOn, false)
@@ -250,7 +250,7 @@ func findResourceInLocalGraphs(ref string) (cloud.Resource, cloud.GraphAPI) {
 			if state, ok := res.Properties()[properties.State].(string); ok {
 				buf.WriteString(fmt.Sprintf(" (state: '%s')", state))
 			}
-			logger.Infof(buf.String())
+			logger.Info(buf.String())
 		}
 
 		os.Exit(0)

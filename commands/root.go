@@ -17,8 +17,12 @@ limitations under the License.
 package commands
 
 import (
+	"fmt"
+	"strings"
+
 	"github.com/fatih/color"
 	"github.com/spf13/cobra"
+	awsconfig "github.com/theazz/awless-ro/aws/config"
 )
 
 var (
@@ -58,9 +62,6 @@ func init() {
 
 	RootCmd.Flags().BoolVar(&versionGlobalFlag, "version", false, "Print awless version")
 
-	cobra.AddTemplateFunc("IsCmdAnnotatedOneliner", IsCmdAnnotatedOneliner)
-	cobra.AddTemplateFunc("HasCmdOnelinerChilds", HasCmdOnelinerChilds)
-
 	RootCmd.SetUsageTemplate(customRootUsage)
 
 	cobra.OnInitialize(func() {
@@ -74,9 +75,9 @@ func init() {
 }
 
 var RootCmd = &cobra.Command{
-	Use:   "awless COMMAND",
-	Short: "Manage  and explore your cloud",
-	Long:  "awless is a powerful CLI to explore, sync and manage your cloud infrastructure",
+	Use:                    "awless COMMAND",
+	Short:                  "Manage  and explore your cloud",
+	Long:                   "awless is a powerful CLI to explore, sync and manage your cloud infrastructure",
 	BashCompletionFunction: bash_completion_func,
 	RunE: func(c *cobra.Command, args []string) error {
 		if versionGlobalFlag {
@@ -97,11 +98,8 @@ ALIASES:
 EXAMPLES:
 {{ .Example }}{{end}}{{ if .HasAvailableSubCommands}}
 
-COMMANDS:{{range .Commands}}{{ if not (IsCmdAnnotatedOneliner .Annotations)}}{{if .IsAvailableCommand }}
-  {{rpad .Name .NamePadding }} {{.Short}}{{end}}{{end}}{{end}}{{ if HasCmdOnelinerChilds .}}
-
-ONE-LINER TEMPLATE COMMANDS:{{range .Commands}}{{ if IsCmdAnnotatedOneliner .Annotations}}{{if .IsAvailableCommand }}
-  {{rpad .Name .NamePadding }} {{.Short}}{{end}}{{end}}{{end}}{{end}}{{end}}{{ if .HasAvailableLocalFlags}}
+COMMANDS:{{range .Commands}}{{if .IsAvailableCommand }}
+  {{rpad .Name .NamePadding }} {{.Short}}{{end}}{{end}}{{end}}{{ if .HasAvailableLocalFlags}}
 
 FLAGS:
 {{.LocalFlags.FlagUsages | trimRightSpace}}{{end}}{{ if .HasAvailableInheritedFlags}}
@@ -115,26 +113,12 @@ Additional help topics:{{range .Commands}}{{if .IsHelpCommand}}
 Use "{{.CommandPath}} [command] --help" for more information about a command.{{end}}
 `
 
-func IsCmdAnnotatedOneliner(annot map[string]string) bool {
-	if annot == nil {
-		return false
-	}
-	_, ok := annot["one-liner"]
-	return ok
-}
-
-func HasCmdOnelinerChilds(cmd *cobra.Command) bool {
-	for _, child := range cmd.Commands() {
-		if IsCmdAnnotatedOneliner(child.Annotations) {
-			return true
-		}
-	}
-
-	return false
-}
+// bash_completion_func is built from awsconfig.SuggestedRegions so that the
+// shell completion and the tool's own region handling can never drift apart.
+var bash_completion_func = fmt.Sprintf(bashCompletionTempl, strings.Join(awsconfig.SuggestedRegions, " "))
 
 const (
-	bash_completion_func = `
+	bashCompletionTempl = `
 __awless_get_all_ids()
 {
 		local all_ids_output
@@ -188,11 +172,15 @@ __custom_func() {
     esac
 }
 
+__awless_regions()
+{
+    echo "%[1]s"
+}
+
 __awless_region_list()
 {
     cur="${COMP_WORDS[COMP_CWORD]#*=}"
-    regions="us-east-1 us-east-2 us-west-1 us-west-2 ca-central-1 eu-west-1 eu-central-1 eu-west-2 eu-west-3 ap-northeast-1 ap-northeast-2 ap-southeast-1 ap-southeast-2 ap-south-1 sa-east-1"
-    COMPREPLY=( $(compgen -W "${regions}" -- ${cur}) )
+    COMPREPLY=( $(compgen -W "$(__awless_regions)" -- ${cur}) )
 }
 
 __awless_profile_list()
@@ -205,9 +193,8 @@ __awless_profile_list()
 __awless_profile_region_list()
 {
     cur="${COMP_WORDS[COMP_CWORD]#*=}"
-		regions="us-east-1 us-east-2 us-west-1 us-west-2 ca-central-1 eu-west-1 eu-central-1 eu-west-2 eu-west-3 ap-northeast-1 ap-northeast-2 ap-southeast-1 ap-southeast-2 ap-south-1 sa-east-1"
     profiles="$((egrep '^\[ *[a-zA-Z0-9_-]+ *\]$' ~/.aws/credentials 2>/dev/null; grep '\[profile' ~/.aws/config 2>/dev/null | sed 's|\[profile ||g') | tr -d '[]' | sort | uniq)"
-    COMPREPLY=( $(compgen -W "${profiles} ${regions}" -- ${cur}) )
+    COMPREPLY=( $(compgen -W "${profiles} $(__awless_regions)" -- ${cur}) )
 }
 
 `

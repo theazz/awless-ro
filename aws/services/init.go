@@ -19,11 +19,8 @@ package awsservices
 import (
 	"errors"
 
-	"github.com/theazz/awless-ro/aws/spec"
 	"github.com/theazz/awless-ro/cloud"
-	"github.com/theazz/awless-ro/graph"
 	"github.com/theazz/awless-ro/logger"
-	"github.com/theazz/awless-ro/sync"
 )
 
 var (
@@ -62,18 +59,6 @@ func Init(profile, region string, extraConf map[string]interface{}, log *logger.
 	cloud.ServiceRegistry[MonitoringService.Name()] = MonitoringService
 	cloud.ServiceRegistry[CdnService.Name()] = CdnService
 	cloud.ServiceRegistry[CloudformationService.Name()] = CloudformationService
-
-	awsspec.CommandFactory = &awsspec.AWSFactory{
-		Log:  log,
-		Sess: sess,
-		Graph: &cloud.LazyGraph{LoadingFunc: func() cloud.GraphAPI {
-			g, err := sync.LoadLocalGraphs(profile, region)
-			if err != nil || g == nil {
-				g = graph.NewGraph()
-			}
-			return g
-		}},
-	}
 
 	return nil
 }

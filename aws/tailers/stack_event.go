@@ -2,6 +2,7 @@ package awstailers
 
 import (
 	"bytes"
+	"errors"
 	"fmt"
 	"io"
 	"strings"
@@ -143,7 +144,7 @@ func (t *stackEventTailer) Tail(w io.Writer) error {
 					t.deploymentStatus.failedEvents.printReverse(errTab, f)
 					errTab.Flush()
 
-					return fmt.Errorf(errBuf.String())
+					return errors.New(errBuf.String())
 				}
 				return nil
 			}
@@ -330,7 +331,7 @@ func (f filters) header() []byte {
 
 	// with "\n" formatted with bold, tabwriter somehow shift lines
 	// so we need to add "\n" after string being bolded
-	return []byte(color.New(color.Bold).Sprintf(buf.String()) + "\n")
+	return []byte(color.New(color.Bold).Sprint(buf.String()) + "\n")
 }
 
 func (e *stackEvent) filter(filters []string) (out []byte) {

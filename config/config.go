@@ -9,7 +9,6 @@ import (
 	"text/tabwriter"
 
 	"github.com/theazz/awless-ro/aws/config"
-	"github.com/theazz/awless-ro/aws/spec"
 	"github.com/theazz/awless-ro/database"
 )
 
@@ -55,7 +54,7 @@ var configDefinitions = map[string]*Definition{
 
 var defaultsDefinitions = map[string]*Definition{
 	"instance.type":          {defaultValue: "t2.micro", help: "AWS EC2 instance type", stdinParamProviderFn: awsconfig.StdinInstanceTypeSelector, parseParamFn: awsconfig.ParseInstanceType},
-	"instance.distro":        {defaultValue: "amazonlinux", help: "Query to fetch latest community bare distro image id (see awless search images -h)", parseParamFn: parseDistroQuery},
+	"instance.distro":        {defaultValue: "amazonlinux", help: "Query to fetch latest community bare distro image id"},
 	"instance.count":         {defaultValue: "1", help: "Number of instances to create on AWS EC2", parseParamFn: parseInt},
 	"instance.timeout":       {defaultValue: "180", help: "Time to wait when checking instance states on AWS EC2", parseParamFn: parseInt},
 	"securitygroup.protocol": {defaultValue: "tcp", help: "The IP protocol to authorize on the security group"},
@@ -226,11 +225,6 @@ func defaultParser(value string) (interface{}, error) {
 		return b, nil
 	}
 	return value, nil
-}
-
-func parseDistroQuery(v string) (interface{}, error) {
-	_, err := awsspec.ParseImageQuery(v)
-	return v, err
 }
 
 func defaultStdinParamProvider() string {
