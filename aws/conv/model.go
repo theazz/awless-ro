@@ -295,7 +295,7 @@ var awsResourcesDef = map[string]map[string]*propertyTransform{
 		properties.KeyPair:        {name: "KeyName", transform: extractValueFn},
 		properties.SecurityGroups: {name: "SecurityGroups", transform: extractStringPointerSliceValues},
 		properties.SpotPrice:      {name: "SpotPrice", transform: extractValueFn},
-		properties.UserData:       {name: "Userdata", transform: extractValueFn},
+		properties.UserData:       {name: "UserData", transform: extractValueFn},
 	},
 	cloud.ScalingGroup: {
 		properties.Name:                    {name: "AutoScalingGroupName", transform: extractValueFn},
@@ -373,6 +373,11 @@ var awsResourcesDef = map[string]map[string]*propertyTransform{
 		properties.Name: {name: "DomainName", transform: extractValueFn},
 	},
 	//IAM
+	// Users arrive as two different SDK shapes: iam.UserDetail from
+	// GetAccountAuthorizationDetails, which carries the inline policies, and
+	// iam.User from ListUsers, which carries PasswordLastUsed. Neither shape has
+	// every field below; NewResource skips the ones its argument lacks and the
+	// graph merges the two resources.
 	cloud.User: {
 		properties.Name:             {name: "UserName", transform: extractValueFn},
 		properties.Arn:              {name: "Arn", transform: extractValueFn},
