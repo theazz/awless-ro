@@ -23,19 +23,56 @@ import (
 	"github.com/theazz/awless-ro/gen/aws"
 )
 
+// guardPath returns the expression that has to be non-nil before an outputs
+// extractor can be dereferenced, or "" when the extractor reads a field of the
+// output directly. SDK v2 keeps nested shapes behind pointers, so an extractor
+// such as "DistributionList.Items" panics on an empty response without this.
+func guardPath(extractor string) string {
+	idx := strings.LastIndex(extractor, ".")
+	if idx < 0 {
+		return ""
+	}
+	return "out." + extractor[:idx]
+}
+
+// importLine is one entry of a generated import block.
+type importLine struct {
+	Alias string
+	Path  string
+}
+
+// fetchersView is what the fetchers template renders. Imports are computed here
+// rather than derived in the template so that services reached only through
+// hand-written fetchers, or not fetched at all, do not end up imported and
+// unused.
+type fetchersView struct {
+	Imports  []importLine
+	Services interface{}
+}
+
 func generateFetcherFuncs() {
 	templ, err := template.New("funcs").Funcs(template.FuncMap{
-		"Title":          strings.Title,
-		"ToUpper":        strings.ToUpper,
-		"Join":           strings.Join,
-		"ApiToInterface": aws.ApiToInterface,
+		"Title":      aws.Title,
+		"Join":       strings.Join,
+		"ApiPackage": aws.ApiPackage,
+		"ApiField":   aws.ApiField,
+		"GuardPath":  guardPath,
 	}).Parse(fetchersTempl)
 
 	if err != nil {
 		panic(err)
 	}
 
-	writeTemplateToFile(templ, aws.FetchersDefs, FETCHERS_DIR, "gen_fetchers.go")
+	var imports []importLine
+	for _, api := range aws.GeneratedFetcherApis() {
+		imports = append(imports,
+			importLine{Path: aws.ApiImportPath(api)},
+			importLine{Alias: aws.ApiTypesAlias(api), Path: aws.ApiImportPath(api) + "/types"},
+		)
+	}
+
+	view := fetchersView{Imports: imports, Services: aws.FetchersDefs}
+	writeTemplateToFile(templ, view, FETCHERS_DIR, "gen_fetchers.go")
 }
 
 const fetchersTempl = `// Auto generated implementation for the AWS cloud service
@@ -61,88 +98,92 @@ package awsfetch
 // DO NOT EDIT - This file was automatically generated with go generate
 
 import (
-  "context"
- 
-  awssdk "github.com/aws/aws-sdk-go/aws"
-  "github.com/aws/aws-sdk-go/aws/awserr"
-  "github.com/aws/aws-sdk-go/aws/session"
-  {{- range $index, $service := . }}
-  {{- range $, $api := $service.Api }}
-  "github.com/aws/aws-sdk-go/service/{{ $api }}"
-  "github.com/aws/aws-sdk-go/service/{{ $api }}/{{ $api }}iface"
-  {{- end }}
-  {{- end }}
-  "github.com/theazz/awless-ro/fetch"
-  "github.com/theazz/awless-ro/graph"
-  "github.com/theazz/awless-ro/aws/conv"
+	"context"
+
+{{- range $, $imp := .Imports }}
+	{{ $imp.Alias }} "{{ $imp.Path }}"
+{{- end }}
+
+	"github.com/theazz/awless-ro/aws/conv"
+	"github.com/theazz/awless-ro/fetch"
+	"github.com/theazz/awless-ro/graph"
 )
 
-{{- range $index, $service := . }}
+{{- range $, $service := .Services }}
 func Build{{ Title $service.Name }}FetchFuncs(conf *Config) fetch.Funcs {
 	funcs := make(map[string]fetch.Func)
 
 	addManual{{ Title $service.Name }}FetchFuncs(conf, funcs)
-	
-{{- range $index, $fetcher := $service.Fetchers }}
-	{{- if not $fetcher.ManualFetcher }}
+
+{{- range $, $fetcher := $service.Fetchers }}
+{{- if not $fetcher.ManualFetcher }}
 
 	funcs["{{ $fetcher.ResourceType }}"] = func(ctx context.Context, cache fetch.Cache) ([]*graph.Resource, interface{}, error) {
 		var resources []*graph.Resource
-		var objects []*{{ $fetcher.AWSType }}
+		var objects []{{ $fetcher.AWSType }}
 
 		if !conf.getBoolDefaultTrue("aws.{{ $service.Name }}.{{ $fetcher.ResourceType }}.sync") && !getBoolFromContext(ctx, "force") {
 			conf.Log.Verbose("sync: *disabled* for resource {{ $service.Name }}[{{ $fetcher.ResourceType }}]")
 			return resources, objects, nil
 		}
-		
-		{{- if $fetcher.Multipage }}
-		var badResErr error
-		err := conf.APIs.{{ Title $fetcher.Api}}.{{ $fetcher.ApiMethod }}(&{{ $fetcher.Input }},
-			func(out *{{ $fetcher.Output }}, lastPage bool) (shouldContinue bool) {
-				{{- if ne $fetcher.OutputsContainers "" }}
-				for _, all := range out.{{ $fetcher.OutputsContainers }} {
-				{{- end }}
-					for _, output := range {{ if ne $fetcher.OutputsContainers "" }}all{{ else }}out{{ end }}.{{ $fetcher.OutputsExtractor }} {
-						if badResErr != nil {
-							return false
-						}
-						objects = append(objects, output)
-						var res *graph.Resource
-						if res, badResErr = awsconv.NewResource(output); badResErr != nil {
-							return false
-						}
-						resources = append(resources, res)
-					}
-				{{- if ne $fetcher.OutputsContainers "" }}
-				}
-				{{- end }}
-				return out.{{ $fetcher.NextPageMarker }} != nil
-			})
-		if err != nil {
-			return resources, objects, err
-		}
 
-		return resources, objects, badResErr
-		{{- else }}
-		
-		out, err := conf.APIs.{{ Title $fetcher.Api}}.{{ $fetcher.ApiMethod }}(&{{ $fetcher.Input }})
-		if err != nil {
-			return resources, objects, err
-		}
+		input := &{{ ApiPackage $fetcher.Api }}.{{ $fetcher.ApiMethod }}Input{ {{ $fetcher.InputFields }} }
+{{- if $fetcher.Paginated }}
 
-		for _, output := range out.{{ $fetcher.OutputsExtractor }} {
-			objects = append(objects, output)
-			res, err := awsconv.NewResource(output)
+		paginator := {{ ApiPackage $fetcher.Api }}.New{{ $fetcher.ApiMethod }}Paginator(conf.APIs.{{ ApiField $fetcher.Api }}, input)
+		for paginator.HasMorePages() {
+			out, err := paginator.NextPage(ctx)
 			if err != nil {
 				return resources, objects, err
 			}
-			resources = append(resources, res)
+{{ template "collect" $fetcher }}
 		}
-			
-		return resources, objects, nil{{ end }}
+
+		return resources, objects, nil
+{{- else }}
+
+		out, err := conf.APIs.{{ ApiField $fetcher.Api }}.{{ $fetcher.ApiMethod }}(ctx, input)
+		if err != nil {
+			return resources, objects, err
+		}
+{{ template "collect" $fetcher }}
+
+		return resources, objects, nil
+{{- end }}
 	}
 {{- end }}
 {{- end }}
 	return funcs
 }
-{{- end }}`
+{{ end }}
+
+{{- define "collect" }}
+{{- if .OutputsContainers }}
+			for _, container := range out.{{ .OutputsContainers }} {
+				for _, output := range container.{{ .OutputsExtractor }} {
+					objects = append(objects, output)
+					res, err := awsconv.NewResource(output)
+					if err != nil {
+						return resources, objects, err
+					}
+					resources = append(resources, res)
+				}
+			}
+{{- else }}
+{{- if GuardPath .OutputsExtractor }}
+			if {{ GuardPath .OutputsExtractor }} != nil {
+{{- end }}
+			for _, output := range out.{{ .OutputsExtractor }} {
+				objects = append(objects, output)
+				res, err := awsconv.NewResource(output)
+				if err != nil {
+					return resources, objects, err
+				}
+				resources = append(resources, res)
+			}
+{{- if GuardPath .OutputsExtractor }}
+			}
+{{- end }}
+{{- end }}
+{{- end }}
+`

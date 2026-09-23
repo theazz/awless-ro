@@ -1,4 +1,4 @@
-// Auto generated implementation for the AWS cloud service
+// Auto generated test mocks for the AWS cloud service
 
 /*
 Copyright 2017 WALLIX
@@ -18,675 +18,546 @@ limitations under the License.
 
 package awsservices
 
+// DO NOT EDIT - This file was automatically generated with go generate
+
+// Each mock embeds the narrow interface of its service rather than implementing
+// it in full. That is what lets a mock answer only the operations a test cares
+// about; anything else is a nil interface call, which panics with the operation
+// name instead of quietly returning a zero value.
+//
+// Mocks hand back all their objects in a single page. Verifying that the
+// paginators actually accumulate pages is a separate, hand-written test: the
+// continuation token is named differently by each service, so generating
+// multi-page mocks would encode more SDK trivia than it is worth.
+//
+// Each mock also embeds a manual<Api>Mock struct declared in mocks_test.go. That
+// is where the canned answers for the hand-written fetchers live, since Go does
+// not let one file add fields to a type declared in another.
+
 import (
 	"context"
-	"strconv"
+	"github.com/aws/aws-sdk-go-v2/service/acm"
+	acmtypes "github.com/aws/aws-sdk-go-v2/service/acm/types"
+	"github.com/aws/aws-sdk-go-v2/service/autoscaling"
+	autoscalingtypes "github.com/aws/aws-sdk-go-v2/service/autoscaling/types"
+	"github.com/aws/aws-sdk-go-v2/service/cloudformation"
+	cloudformationtypes "github.com/aws/aws-sdk-go-v2/service/cloudformation/types"
+	"github.com/aws/aws-sdk-go-v2/service/cloudfront"
+	cloudfronttypes "github.com/aws/aws-sdk-go-v2/service/cloudfront/types"
+	"github.com/aws/aws-sdk-go-v2/service/cloudwatch"
+	cloudwatchtypes "github.com/aws/aws-sdk-go-v2/service/cloudwatch/types"
+	"github.com/aws/aws-sdk-go-v2/service/ec2"
+	ec2types "github.com/aws/aws-sdk-go-v2/service/ec2/types"
+	"github.com/aws/aws-sdk-go-v2/service/ecr"
+	ecrtypes "github.com/aws/aws-sdk-go-v2/service/ecr/types"
+	"github.com/aws/aws-sdk-go-v2/service/elasticloadbalancing"
+	elbtypes "github.com/aws/aws-sdk-go-v2/service/elasticloadbalancing/types"
+	"github.com/aws/aws-sdk-go-v2/service/elasticloadbalancingv2"
+	elbv2types "github.com/aws/aws-sdk-go-v2/service/elasticloadbalancingv2/types"
+	"github.com/aws/aws-sdk-go-v2/service/iam"
+	iamtypes "github.com/aws/aws-sdk-go-v2/service/iam/types"
+	"github.com/aws/aws-sdk-go-v2/service/lambda"
+	lambdatypes "github.com/aws/aws-sdk-go-v2/service/lambda/types"
+	"github.com/aws/aws-sdk-go-v2/service/rds"
+	rdstypes "github.com/aws/aws-sdk-go-v2/service/rds/types"
+	"github.com/aws/aws-sdk-go-v2/service/route53"
+	route53types "github.com/aws/aws-sdk-go-v2/service/route53/types"
+	"github.com/aws/aws-sdk-go-v2/service/sns"
+	snstypes "github.com/aws/aws-sdk-go-v2/service/sns/types"
 
-	"github.com/aws/aws-sdk-go/aws"
-	"github.com/aws/aws-sdk-go/service/acm"
-	"github.com/aws/aws-sdk-go/service/acm/acmiface"
-	"github.com/aws/aws-sdk-go/service/autoscaling"
-	"github.com/aws/aws-sdk-go/service/autoscaling/autoscalingiface"
-	"github.com/aws/aws-sdk-go/service/cloudformation"
-	"github.com/aws/aws-sdk-go/service/cloudformation/cloudformationiface"
-	"github.com/aws/aws-sdk-go/service/cloudfront"
-	"github.com/aws/aws-sdk-go/service/cloudfront/cloudfrontiface"
-	"github.com/aws/aws-sdk-go/service/cloudwatch"
-	"github.com/aws/aws-sdk-go/service/cloudwatch/cloudwatchiface"
-	"github.com/aws/aws-sdk-go/service/ec2"
-	"github.com/aws/aws-sdk-go/service/ec2/ec2iface"
-	"github.com/aws/aws-sdk-go/service/ecr"
-	"github.com/aws/aws-sdk-go/service/ecr/ecriface"
-	"github.com/aws/aws-sdk-go/service/ecs"
-	"github.com/aws/aws-sdk-go/service/ecs/ecsiface"
-	"github.com/aws/aws-sdk-go/service/elb"
-	"github.com/aws/aws-sdk-go/service/elb/elbiface"
-	"github.com/aws/aws-sdk-go/service/elbv2"
-	"github.com/aws/aws-sdk-go/service/elbv2/elbv2iface"
-	"github.com/aws/aws-sdk-go/service/iam"
-	"github.com/aws/aws-sdk-go/service/iam/iamiface"
-	"github.com/aws/aws-sdk-go/service/lambda"
-	"github.com/aws/aws-sdk-go/service/lambda/lambdaiface"
-	"github.com/aws/aws-sdk-go/service/rds"
-	"github.com/aws/aws-sdk-go/service/rds/rdsiface"
-	"github.com/aws/aws-sdk-go/service/route53"
-	"github.com/aws/aws-sdk-go/service/route53/route53iface"
-	"github.com/aws/aws-sdk-go/service/s3"
-	"github.com/aws/aws-sdk-go/service/s3/s3iface"
-	"github.com/aws/aws-sdk-go/service/sns"
-	"github.com/aws/aws-sdk-go/service/sns/snsiface"
-	"github.com/aws/aws-sdk-go/service/sqs"
-	"github.com/aws/aws-sdk-go/service/sqs/sqsiface"
+	"github.com/theazz/awless-ro/aws/fetch"
 	"github.com/theazz/awless-ro/cloud"
 )
 
-// DO NOT EDIT - This file was automatically generated with go generate
-
-type mockEc2 struct {
-	ec2iface.EC2API
-	instances         []*ec2.Instance
-	subnets           []*ec2.Subnet
-	vpcs              []*ec2.Vpc
-	keypairinfos      []*ec2.KeyPairInfo
-	securitygroups    []*ec2.SecurityGroup
-	volumes           []*ec2.Volume
-	internetgateways  []*ec2.InternetGateway
-	natgateways       []*ec2.NatGateway
-	routetables       []*ec2.RouteTable
-	availabilityzones []*ec2.AvailabilityZone
-	images            []*ec2.Image
-	importimagetasks  []*ec2.ImportImageTask
-	addresss          []*ec2.Address
-	snapshots         []*ec2.Snapshot
-	networkinterfaces []*ec2.NetworkInterface
-}
-
-func (m *mockEc2) Name() string {
-	return ""
-}
-
-func (m *mockEc2) Region() string {
-	return ""
-}
-
-func (m *mockEc2) Profile() string {
-	return ""
-}
-
-func (m *mockEc2) Provider() string {
-	return ""
-}
-
-func (m *mockEc2) ProviderAPI() string {
-	return ""
-}
-
-func (m *mockEc2) ResourceTypes() []string {
-	return []string{}
-}
-
-func (m *mockEc2) Fetch(context.Context) (cloud.GraphAPI, error) {
-	return nil, nil
-}
-
-func (m *mockEc2) IsSyncDisabled() bool {
-	return false
-}
-
-func (m *mockEc2) FetchByType(context.Context, string) (cloud.GraphAPI, error) {
-	return nil, nil
-}
-
-func (m *mockEc2) DescribeSubnets(input *ec2.DescribeSubnetsInput) (*ec2.DescribeSubnetsOutput, error) {
-	return &ec2.DescribeSubnetsOutput{Subnets: m.subnets}, nil
-}
-
-func (m *mockEc2) DescribeVpcs(input *ec2.DescribeVpcsInput) (*ec2.DescribeVpcsOutput, error) {
-	return &ec2.DescribeVpcsOutput{Vpcs: m.vpcs}, nil
-}
-
-func (m *mockEc2) DescribeKeyPairs(input *ec2.DescribeKeyPairsInput) (*ec2.DescribeKeyPairsOutput, error) {
-	return &ec2.DescribeKeyPairsOutput{KeyPairs: m.keypairinfos}, nil
-}
-
-func (m *mockEc2) DescribeSecurityGroups(input *ec2.DescribeSecurityGroupsInput) (*ec2.DescribeSecurityGroupsOutput, error) {
-	return &ec2.DescribeSecurityGroupsOutput{SecurityGroups: m.securitygroups}, nil
-}
-
-func (m *mockEc2) DescribeVolumesPages(input *ec2.DescribeVolumesInput, fn func(p *ec2.DescribeVolumesOutput, lastPage bool) (shouldContinue bool)) error {
-	var pages [][]*ec2.Volume
-	for i := 0; i < len(m.volumes); i += 2 {
-		page := []*ec2.Volume{m.volumes[i]}
-		if i+1 < len(m.volumes) {
-			page = append(page, m.volumes[i+1])
-		}
-		pages = append(pages, page)
-	}
-	for i, page := range pages {
-		fn(&ec2.DescribeVolumesOutput{Volumes: page, NextToken: aws.String(strconv.Itoa(i + 1))},
-			i < len(pages),
-		)
-	}
-	return nil
-}
-
-func (m *mockEc2) DescribeInternetGateways(input *ec2.DescribeInternetGatewaysInput) (*ec2.DescribeInternetGatewaysOutput, error) {
-	return &ec2.DescribeInternetGatewaysOutput{InternetGateways: m.internetgateways}, nil
-}
-
-func (m *mockEc2) DescribeNatGateways(input *ec2.DescribeNatGatewaysInput) (*ec2.DescribeNatGatewaysOutput, error) {
-	return &ec2.DescribeNatGatewaysOutput{NatGateways: m.natgateways}, nil
-}
-
-func (m *mockEc2) DescribeRouteTables(input *ec2.DescribeRouteTablesInput) (*ec2.DescribeRouteTablesOutput, error) {
-	return &ec2.DescribeRouteTablesOutput{RouteTables: m.routetables}, nil
-}
-
-func (m *mockEc2) DescribeAvailabilityZones(input *ec2.DescribeAvailabilityZonesInput) (*ec2.DescribeAvailabilityZonesOutput, error) {
-	return &ec2.DescribeAvailabilityZonesOutput{AvailabilityZones: m.availabilityzones}, nil
-}
-
-func (m *mockEc2) DescribeImages(input *ec2.DescribeImagesInput) (*ec2.DescribeImagesOutput, error) {
-	return &ec2.DescribeImagesOutput{Images: m.images}, nil
-}
-
-func (m *mockEc2) DescribeImportImageTasks(input *ec2.DescribeImportImageTasksInput) (*ec2.DescribeImportImageTasksOutput, error) {
-	return &ec2.DescribeImportImageTasksOutput{ImportImageTasks: m.importimagetasks}, nil
-}
-
-func (m *mockEc2) DescribeAddresses(input *ec2.DescribeAddressesInput) (*ec2.DescribeAddressesOutput, error) {
-	return &ec2.DescribeAddressesOutput{Addresses: m.addresss}, nil
-}
-
-func (m *mockEc2) DescribeSnapshotsPages(input *ec2.DescribeSnapshotsInput, fn func(p *ec2.DescribeSnapshotsOutput, lastPage bool) (shouldContinue bool)) error {
-	var pages [][]*ec2.Snapshot
-	for i := 0; i < len(m.snapshots); i += 2 {
-		page := []*ec2.Snapshot{m.snapshots[i]}
-		if i+1 < len(m.snapshots) {
-			page = append(page, m.snapshots[i+1])
-		}
-		pages = append(pages, page)
-	}
-	for i, page := range pages {
-		fn(&ec2.DescribeSnapshotsOutput{Snapshots: page, NextToken: aws.String(strconv.Itoa(i + 1))},
-			i < len(pages),
-		)
-	}
-	return nil
-}
-
-func (m *mockEc2) DescribeNetworkInterfaces(input *ec2.DescribeNetworkInterfacesInput) (*ec2.DescribeNetworkInterfacesOutput, error) {
-	return &ec2.DescribeNetworkInterfacesOutput{NetworkInterfaces: m.networkinterfaces}, nil
-}
-
-type mockElbv2 struct {
-	elbv2iface.ELBV2API
-	loadbalancers            []*elbv2.LoadBalancer
-	targetgroups             []*elbv2.TargetGroup
-	listeners                []*elbv2.Listener
-	targethealthdescriptions map[string][]*elbv2.TargetHealthDescription
-}
-
-func (m *mockElbv2) Name() string {
-	return ""
-}
-
-func (m *mockElbv2) Region() string {
-	return ""
-}
-
-func (m *mockElbv2) Profile() string {
-	return ""
-}
-
-func (m *mockElbv2) Provider() string {
-	return ""
-}
-
-func (m *mockElbv2) ProviderAPI() string {
-	return ""
-}
-
-func (m *mockElbv2) ResourceTypes() []string {
-	return []string{}
-}
-
-func (m *mockElbv2) Fetch(context.Context) (cloud.GraphAPI, error) {
-	return nil, nil
-}
-
-func (m *mockElbv2) IsSyncDisabled() bool {
-	return false
-}
-
-func (m *mockElbv2) FetchByType(context.Context, string) (cloud.GraphAPI, error) {
-	return nil, nil
-}
-
-func (m *mockElbv2) DescribeLoadBalancersPages(input *elbv2.DescribeLoadBalancersInput, fn func(p *elbv2.DescribeLoadBalancersOutput, lastPage bool) (shouldContinue bool)) error {
-	var pages [][]*elbv2.LoadBalancer
-	for i := 0; i < len(m.loadbalancers); i += 2 {
-		page := []*elbv2.LoadBalancer{m.loadbalancers[i]}
-		if i+1 < len(m.loadbalancers) {
-			page = append(page, m.loadbalancers[i+1])
-		}
-		pages = append(pages, page)
-	}
-	for i, page := range pages {
-		fn(&elbv2.DescribeLoadBalancersOutput{LoadBalancers: page, NextMarker: aws.String(strconv.Itoa(i + 1))},
-			i < len(pages),
-		)
-	}
-	return nil
-}
-
-func (m *mockElbv2) DescribeTargetGroups(input *elbv2.DescribeTargetGroupsInput) (*elbv2.DescribeTargetGroupsOutput, error) {
-	return &elbv2.DescribeTargetGroupsOutput{TargetGroups: m.targetgroups}, nil
-}
-
-type mockElb struct {
-	elbiface.ELBAPI
-	loadbalancerdescriptions []*elb.LoadBalancerDescription
-}
-
-func (m *mockElb) Name() string {
-	return ""
-}
-
-func (m *mockElb) Region() string {
-	return ""
-}
-
-func (m *mockElb) Profile() string {
-	return ""
-}
-
-func (m *mockElb) Provider() string {
-	return ""
-}
-
-func (m *mockElb) ProviderAPI() string {
-	return ""
-}
-
-func (m *mockElb) ResourceTypes() []string {
-	return []string{}
-}
-
-func (m *mockElb) Fetch(context.Context) (cloud.GraphAPI, error) {
-	return nil, nil
-}
-
-func (m *mockElb) IsSyncDisabled() bool {
-	return false
-}
-
-func (m *mockElb) FetchByType(context.Context, string) (cloud.GraphAPI, error) {
-	return nil, nil
-}
-
-func (m *mockElb) DescribeLoadBalancersPages(input *elb.DescribeLoadBalancersInput, fn func(p *elb.DescribeLoadBalancersOutput, lastPage bool) (shouldContinue bool)) error {
-	var pages [][]*elb.LoadBalancerDescription
-	for i := 0; i < len(m.loadbalancerdescriptions); i += 2 {
-		page := []*elb.LoadBalancerDescription{m.loadbalancerdescriptions[i]}
-		if i+1 < len(m.loadbalancerdescriptions) {
-			page = append(page, m.loadbalancerdescriptions[i+1])
-		}
-		pages = append(pages, page)
-	}
-	for i, page := range pages {
-		fn(&elb.DescribeLoadBalancersOutput{LoadBalancerDescriptions: page, NextMarker: aws.String(strconv.Itoa(i + 1))},
-			i < len(pages),
-		)
-	}
-	return nil
-}
-
-type mockRds struct {
-	rdsiface.RDSAPI
-	dbinstances    []*rds.DBInstance
-	dbsubnetgroups []*rds.DBSubnetGroup
-}
-
-func (m *mockRds) Name() string {
-	return ""
-}
-
-func (m *mockRds) Region() string {
-	return ""
-}
-
-func (m *mockRds) Profile() string {
-	return ""
-}
-
-func (m *mockRds) Provider() string {
-	return ""
-}
-
-func (m *mockRds) ProviderAPI() string {
-	return ""
-}
-
-func (m *mockRds) ResourceTypes() []string {
-	return []string{}
-}
-
-func (m *mockRds) Fetch(context.Context) (cloud.GraphAPI, error) {
-	return nil, nil
-}
-
-func (m *mockRds) IsSyncDisabled() bool {
-	return false
-}
-
-func (m *mockRds) FetchByType(context.Context, string) (cloud.GraphAPI, error) {
-	return nil, nil
-}
-
-func (m *mockRds) DescribeDBInstancesPages(input *rds.DescribeDBInstancesInput, fn func(p *rds.DescribeDBInstancesOutput, lastPage bool) (shouldContinue bool)) error {
-	var pages [][]*rds.DBInstance
-	for i := 0; i < len(m.dbinstances); i += 2 {
-		page := []*rds.DBInstance{m.dbinstances[i]}
-		if i+1 < len(m.dbinstances) {
-			page = append(page, m.dbinstances[i+1])
-		}
-		pages = append(pages, page)
-	}
-	for i, page := range pages {
-		fn(&rds.DescribeDBInstancesOutput{DBInstances: page, Marker: aws.String(strconv.Itoa(i + 1))},
-			i < len(pages),
-		)
-	}
-	return nil
-}
-
-func (m *mockRds) DescribeDBSubnetGroupsPages(input *rds.DescribeDBSubnetGroupsInput, fn func(p *rds.DescribeDBSubnetGroupsOutput, lastPage bool) (shouldContinue bool)) error {
-	var pages [][]*rds.DBSubnetGroup
-	for i := 0; i < len(m.dbsubnetgroups); i += 2 {
-		page := []*rds.DBSubnetGroup{m.dbsubnetgroups[i]}
-		if i+1 < len(m.dbsubnetgroups) {
-			page = append(page, m.dbsubnetgroups[i+1])
-		}
-		pages = append(pages, page)
-	}
-	for i, page := range pages {
-		fn(&rds.DescribeDBSubnetGroupsOutput{DBSubnetGroups: page, Marker: aws.String(strconv.Itoa(i + 1))},
-			i < len(pages),
-		)
-	}
-	return nil
-}
-
-type mockAutoscaling struct {
-	autoscalingiface.AutoScalingAPI
-	launchconfigurations []*autoscaling.LaunchConfiguration
-	groups               []*autoscaling.Group
-	scalingpolicys       []*autoscaling.ScalingPolicy
-}
-
-func (m *mockAutoscaling) Name() string {
-	return ""
-}
-
-func (m *mockAutoscaling) Region() string {
-	return ""
-}
-
-func (m *mockAutoscaling) Profile() string {
-	return ""
-}
-
-func (m *mockAutoscaling) Provider() string {
-	return ""
-}
-
-func (m *mockAutoscaling) ProviderAPI() string {
-	return ""
-}
-
-func (m *mockAutoscaling) ResourceTypes() []string {
-	return []string{}
-}
-
-func (m *mockAutoscaling) Fetch(context.Context) (cloud.GraphAPI, error) {
-	return nil, nil
-}
-
-func (m *mockAutoscaling) IsSyncDisabled() bool {
-	return false
-}
-
-func (m *mockAutoscaling) FetchByType(context.Context, string) (cloud.GraphAPI, error) {
-	return nil, nil
-}
-
-func (m *mockAutoscaling) DescribeLaunchConfigurationsPages(input *autoscaling.DescribeLaunchConfigurationsInput, fn func(p *autoscaling.DescribeLaunchConfigurationsOutput, lastPage bool) (shouldContinue bool)) error {
-	var pages [][]*autoscaling.LaunchConfiguration
-	for i := 0; i < len(m.launchconfigurations); i += 2 {
-		page := []*autoscaling.LaunchConfiguration{m.launchconfigurations[i]}
-		if i+1 < len(m.launchconfigurations) {
-			page = append(page, m.launchconfigurations[i+1])
-		}
-		pages = append(pages, page)
-	}
-	for i, page := range pages {
-		fn(&autoscaling.DescribeLaunchConfigurationsOutput{LaunchConfigurations: page, NextToken: aws.String(strconv.Itoa(i + 1))},
-			i < len(pages),
-		)
-	}
-	return nil
-}
-
-func (m *mockAutoscaling) DescribeAutoScalingGroupsPages(input *autoscaling.DescribeAutoScalingGroupsInput, fn func(p *autoscaling.DescribeAutoScalingGroupsOutput, lastPage bool) (shouldContinue bool)) error {
-	var pages [][]*autoscaling.Group
-	for i := 0; i < len(m.groups); i += 2 {
-		page := []*autoscaling.Group{m.groups[i]}
-		if i+1 < len(m.groups) {
-			page = append(page, m.groups[i+1])
-		}
-		pages = append(pages, page)
-	}
-	for i, page := range pages {
-		fn(&autoscaling.DescribeAutoScalingGroupsOutput{AutoScalingGroups: page, NextToken: aws.String(strconv.Itoa(i + 1))},
-			i < len(pages),
-		)
-	}
-	return nil
-}
-
-func (m *mockAutoscaling) DescribePoliciesPages(input *autoscaling.DescribePoliciesInput, fn func(p *autoscaling.DescribePoliciesOutput, lastPage bool) (shouldContinue bool)) error {
-	var pages [][]*autoscaling.ScalingPolicy
-	for i := 0; i < len(m.scalingpolicys); i += 2 {
-		page := []*autoscaling.ScalingPolicy{m.scalingpolicys[i]}
-		if i+1 < len(m.scalingpolicys) {
-			page = append(page, m.scalingpolicys[i+1])
-		}
-		pages = append(pages, page)
-	}
-	for i, page := range pages {
-		fn(&autoscaling.DescribePoliciesOutput{ScalingPolicies: page, NextToken: aws.String(strconv.Itoa(i + 1))},
-			i < len(pages),
-		)
-	}
-	return nil
-}
-
 type mockAcm struct {
-	acmiface.ACMAPI
-	certificatesummarys []*acm.CertificateSummary
+	awsfetch.AcmAPI
+	manualAcmMock
+	certificatesummarys []acmtypes.CertificateSummary
 }
 
-func (m *mockAcm) Name() string {
-	return ""
-}
-
-func (m *mockAcm) Region() string {
-	return ""
-}
-
-func (m *mockAcm) Profile() string {
-	return ""
-}
-
-func (m *mockAcm) Provider() string {
-	return ""
-}
-
-func (m *mockAcm) ProviderAPI() string {
-	return ""
-}
-
-func (m *mockAcm) ResourceTypes() []string {
-	return []string{}
-}
+// cloud.Service, so that a mock can stand in for a whole service in the
+// registry. The graph-building tests drive the fetchers directly, so these are
+// inert on purpose.
+func (m *mockAcm) Name() string            { return "" }
+func (m *mockAcm) Region() string          { return "" }
+func (m *mockAcm) Profile() string         { return "" }
+func (m *mockAcm) ResourceTypes() []string { return []string{} }
+func (m *mockAcm) IsSyncDisabled() bool    { return false }
 
 func (m *mockAcm) Fetch(context.Context) (cloud.GraphAPI, error) {
 	return nil, nil
-}
-
-func (m *mockAcm) IsSyncDisabled() bool {
-	return false
 }
 
 func (m *mockAcm) FetchByType(context.Context, string) (cloud.GraphAPI, error) {
 	return nil, nil
 }
 
-func (m *mockAcm) ListCertificatesPages(input *acm.ListCertificatesInput, fn func(p *acm.ListCertificatesOutput, lastPage bool) (shouldContinue bool)) error {
-	var pages [][]*acm.CertificateSummary
-	for i := 0; i < len(m.certificatesummarys); i += 2 {
-		page := []*acm.CertificateSummary{m.certificatesummarys[i]}
-		if i+1 < len(m.certificatesummarys) {
-			page = append(page, m.certificatesummarys[i+1])
-		}
-		pages = append(pages, page)
-	}
-	for i, page := range pages {
-		fn(&acm.ListCertificatesOutput{CertificateSummaryList: page, NextToken: aws.String(strconv.Itoa(i + 1))},
-			i < len(pages),
-		)
-	}
-	return nil
+func (m *mockAcm) ListCertificates(_ context.Context, _ *acm.ListCertificatesInput, _ ...func(*acm.Options)) (*acm.ListCertificatesOutput, error) {
+	return &acm.ListCertificatesOutput{CertificateSummaryList: m.certificatesummarys}, nil
 }
 
-type mockIam struct {
-	iamiface.IAMAPI
-	userdetails          []*iam.UserDetail
-	groupdetails         []*iam.GroupDetail
-	roledetails          []*iam.RoleDetail
-	policys              []*iam.Policy
-	accesskeymetadatas   []*iam.AccessKeyMetadata
-	instanceprofiles     []*iam.InstanceProfile
-	managedpolicydetails []*iam.ManagedPolicyDetail
-	users                []*iam.User
-	virtualmfadevices    []*iam.VirtualMFADevice
+type mockAutoscaling struct {
+	awsfetch.AutoscalingAPI
+	manualAutoscalingMock
+	launchconfigurations []autoscalingtypes.LaunchConfiguration
+	autoscalinggroups    []autoscalingtypes.AutoScalingGroup
+	scalingpolicys       []autoscalingtypes.ScalingPolicy
 }
 
-func (m *mockIam) Name() string {
-	return ""
-}
+// cloud.Service, so that a mock can stand in for a whole service in the
+// registry. The graph-building tests drive the fetchers directly, so these are
+// inert on purpose.
+func (m *mockAutoscaling) Name() string            { return "" }
+func (m *mockAutoscaling) Region() string          { return "" }
+func (m *mockAutoscaling) Profile() string         { return "" }
+func (m *mockAutoscaling) ResourceTypes() []string { return []string{} }
+func (m *mockAutoscaling) IsSyncDisabled() bool    { return false }
 
-func (m *mockIam) Region() string {
-	return ""
-}
-
-func (m *mockIam) Profile() string {
-	return ""
-}
-
-func (m *mockIam) Provider() string {
-	return ""
-}
-
-func (m *mockIam) ProviderAPI() string {
-	return ""
-}
-
-func (m *mockIam) ResourceTypes() []string {
-	return []string{}
-}
-
-func (m *mockIam) Fetch(context.Context) (cloud.GraphAPI, error) {
+func (m *mockAutoscaling) Fetch(context.Context) (cloud.GraphAPI, error) {
 	return nil, nil
 }
 
-func (m *mockIam) IsSyncDisabled() bool {
-	return false
+func (m *mockAutoscaling) FetchByType(context.Context, string) (cloud.GraphAPI, error) {
+	return nil, nil
+}
+
+func (m *mockAutoscaling) DescribeLaunchConfigurations(_ context.Context, _ *autoscaling.DescribeLaunchConfigurationsInput, _ ...func(*autoscaling.Options)) (*autoscaling.DescribeLaunchConfigurationsOutput, error) {
+	return &autoscaling.DescribeLaunchConfigurationsOutput{LaunchConfigurations: m.launchconfigurations}, nil
+}
+
+func (m *mockAutoscaling) DescribeAutoScalingGroups(_ context.Context, _ *autoscaling.DescribeAutoScalingGroupsInput, _ ...func(*autoscaling.Options)) (*autoscaling.DescribeAutoScalingGroupsOutput, error) {
+	return &autoscaling.DescribeAutoScalingGroupsOutput{AutoScalingGroups: m.autoscalinggroups}, nil
+}
+
+func (m *mockAutoscaling) DescribePolicies(_ context.Context, _ *autoscaling.DescribePoliciesInput, _ ...func(*autoscaling.Options)) (*autoscaling.DescribePoliciesOutput, error) {
+	return &autoscaling.DescribePoliciesOutput{ScalingPolicies: m.scalingpolicys}, nil
+}
+
+type mockCloudformation struct {
+	awsfetch.CloudformationAPI
+	manualCloudformationMock
+	stacks []cloudformationtypes.Stack
+}
+
+// cloud.Service, so that a mock can stand in for a whole service in the
+// registry. The graph-building tests drive the fetchers directly, so these are
+// inert on purpose.
+func (m *mockCloudformation) Name() string            { return "" }
+func (m *mockCloudformation) Region() string          { return "" }
+func (m *mockCloudformation) Profile() string         { return "" }
+func (m *mockCloudformation) ResourceTypes() []string { return []string{} }
+func (m *mockCloudformation) IsSyncDisabled() bool    { return false }
+
+func (m *mockCloudformation) Fetch(context.Context) (cloud.GraphAPI, error) {
+	return nil, nil
+}
+
+func (m *mockCloudformation) FetchByType(context.Context, string) (cloud.GraphAPI, error) {
+	return nil, nil
+}
+
+func (m *mockCloudformation) DescribeStacks(_ context.Context, _ *cloudformation.DescribeStacksInput, _ ...func(*cloudformation.Options)) (*cloudformation.DescribeStacksOutput, error) {
+	return &cloudformation.DescribeStacksOutput{Stacks: m.stacks}, nil
+}
+
+type mockCloudfront struct {
+	awsfetch.CloudfrontAPI
+	manualCloudfrontMock
+	distributionsummarys []cloudfronttypes.DistributionSummary
+}
+
+// cloud.Service, so that a mock can stand in for a whole service in the
+// registry. The graph-building tests drive the fetchers directly, so these are
+// inert on purpose.
+func (m *mockCloudfront) Name() string            { return "" }
+func (m *mockCloudfront) Region() string          { return "" }
+func (m *mockCloudfront) Profile() string         { return "" }
+func (m *mockCloudfront) ResourceTypes() []string { return []string{} }
+func (m *mockCloudfront) IsSyncDisabled() bool    { return false }
+
+func (m *mockCloudfront) Fetch(context.Context) (cloud.GraphAPI, error) {
+	return nil, nil
+}
+
+func (m *mockCloudfront) FetchByType(context.Context, string) (cloud.GraphAPI, error) {
+	return nil, nil
+}
+
+func (m *mockCloudfront) ListDistributions(_ context.Context, _ *cloudfront.ListDistributionsInput, _ ...func(*cloudfront.Options)) (*cloudfront.ListDistributionsOutput, error) {
+	return &cloudfront.ListDistributionsOutput{DistributionList: &cloudfronttypes.DistributionList{Items: m.distributionsummarys}}, nil
+}
+
+type mockCloudwatch struct {
+	awsfetch.CloudwatchAPI
+	manualCloudwatchMock
+	metrics      []cloudwatchtypes.Metric
+	metricalarms []cloudwatchtypes.MetricAlarm
+}
+
+// cloud.Service, so that a mock can stand in for a whole service in the
+// registry. The graph-building tests drive the fetchers directly, so these are
+// inert on purpose.
+func (m *mockCloudwatch) Name() string            { return "" }
+func (m *mockCloudwatch) Region() string          { return "" }
+func (m *mockCloudwatch) Profile() string         { return "" }
+func (m *mockCloudwatch) ResourceTypes() []string { return []string{} }
+func (m *mockCloudwatch) IsSyncDisabled() bool    { return false }
+
+func (m *mockCloudwatch) Fetch(context.Context) (cloud.GraphAPI, error) {
+	return nil, nil
+}
+
+func (m *mockCloudwatch) FetchByType(context.Context, string) (cloud.GraphAPI, error) {
+	return nil, nil
+}
+
+func (m *mockCloudwatch) ListMetrics(_ context.Context, _ *cloudwatch.ListMetricsInput, _ ...func(*cloudwatch.Options)) (*cloudwatch.ListMetricsOutput, error) {
+	return &cloudwatch.ListMetricsOutput{Metrics: m.metrics}, nil
+}
+
+func (m *mockCloudwatch) DescribeAlarms(_ context.Context, _ *cloudwatch.DescribeAlarmsInput, _ ...func(*cloudwatch.Options)) (*cloudwatch.DescribeAlarmsOutput, error) {
+	return &cloudwatch.DescribeAlarmsOutput{MetricAlarms: m.metricalarms}, nil
+}
+
+type mockEc2 struct {
+	awsfetch.Ec2API
+	manualEc2Mock
+	instances         []ec2types.Instance
+	subnets           []ec2types.Subnet
+	vpcs              []ec2types.Vpc
+	keypairinfos      []ec2types.KeyPairInfo
+	securitygroups    []ec2types.SecurityGroup
+	volumes           []ec2types.Volume
+	internetgateways  []ec2types.InternetGateway
+	natgateways       []ec2types.NatGateway
+	routetables       []ec2types.RouteTable
+	availabilityzones []ec2types.AvailabilityZone
+	images            []ec2types.Image
+	importimagetasks  []ec2types.ImportImageTask
+	addresss          []ec2types.Address
+	snapshots         []ec2types.Snapshot
+	networkinterfaces []ec2types.NetworkInterface
+}
+
+// cloud.Service, so that a mock can stand in for a whole service in the
+// registry. The graph-building tests drive the fetchers directly, so these are
+// inert on purpose.
+func (m *mockEc2) Name() string            { return "" }
+func (m *mockEc2) Region() string          { return "" }
+func (m *mockEc2) Profile() string         { return "" }
+func (m *mockEc2) ResourceTypes() []string { return []string{} }
+func (m *mockEc2) IsSyncDisabled() bool    { return false }
+
+func (m *mockEc2) Fetch(context.Context) (cloud.GraphAPI, error) {
+	return nil, nil
+}
+
+func (m *mockEc2) FetchByType(context.Context, string) (cloud.GraphAPI, error) {
+	return nil, nil
+}
+
+func (m *mockEc2) DescribeInstances(_ context.Context, _ *ec2.DescribeInstancesInput, _ ...func(*ec2.Options)) (*ec2.DescribeInstancesOutput, error) {
+	return &ec2.DescribeInstancesOutput{Reservations: []ec2types.Reservation{{Instances: m.instances}}}, nil
+}
+
+func (m *mockEc2) DescribeSubnets(_ context.Context, _ *ec2.DescribeSubnetsInput, _ ...func(*ec2.Options)) (*ec2.DescribeSubnetsOutput, error) {
+	return &ec2.DescribeSubnetsOutput{Subnets: m.subnets}, nil
+}
+
+func (m *mockEc2) DescribeVpcs(_ context.Context, _ *ec2.DescribeVpcsInput, _ ...func(*ec2.Options)) (*ec2.DescribeVpcsOutput, error) {
+	return &ec2.DescribeVpcsOutput{Vpcs: m.vpcs}, nil
+}
+
+func (m *mockEc2) DescribeKeyPairs(_ context.Context, _ *ec2.DescribeKeyPairsInput, _ ...func(*ec2.Options)) (*ec2.DescribeKeyPairsOutput, error) {
+	return &ec2.DescribeKeyPairsOutput{KeyPairs: m.keypairinfos}, nil
+}
+
+func (m *mockEc2) DescribeSecurityGroups(_ context.Context, _ *ec2.DescribeSecurityGroupsInput, _ ...func(*ec2.Options)) (*ec2.DescribeSecurityGroupsOutput, error) {
+	return &ec2.DescribeSecurityGroupsOutput{SecurityGroups: m.securitygroups}, nil
+}
+
+func (m *mockEc2) DescribeVolumes(_ context.Context, _ *ec2.DescribeVolumesInput, _ ...func(*ec2.Options)) (*ec2.DescribeVolumesOutput, error) {
+	return &ec2.DescribeVolumesOutput{Volumes: m.volumes}, nil
+}
+
+func (m *mockEc2) DescribeInternetGateways(_ context.Context, _ *ec2.DescribeInternetGatewaysInput, _ ...func(*ec2.Options)) (*ec2.DescribeInternetGatewaysOutput, error) {
+	return &ec2.DescribeInternetGatewaysOutput{InternetGateways: m.internetgateways}, nil
+}
+
+func (m *mockEc2) DescribeNatGateways(_ context.Context, _ *ec2.DescribeNatGatewaysInput, _ ...func(*ec2.Options)) (*ec2.DescribeNatGatewaysOutput, error) {
+	return &ec2.DescribeNatGatewaysOutput{NatGateways: m.natgateways}, nil
+}
+
+func (m *mockEc2) DescribeRouteTables(_ context.Context, _ *ec2.DescribeRouteTablesInput, _ ...func(*ec2.Options)) (*ec2.DescribeRouteTablesOutput, error) {
+	return &ec2.DescribeRouteTablesOutput{RouteTables: m.routetables}, nil
+}
+
+func (m *mockEc2) DescribeAvailabilityZones(_ context.Context, _ *ec2.DescribeAvailabilityZonesInput, _ ...func(*ec2.Options)) (*ec2.DescribeAvailabilityZonesOutput, error) {
+	return &ec2.DescribeAvailabilityZonesOutput{AvailabilityZones: m.availabilityzones}, nil
+}
+
+func (m *mockEc2) DescribeImages(_ context.Context, _ *ec2.DescribeImagesInput, _ ...func(*ec2.Options)) (*ec2.DescribeImagesOutput, error) {
+	return &ec2.DescribeImagesOutput{Images: m.images}, nil
+}
+
+func (m *mockEc2) DescribeImportImageTasks(_ context.Context, _ *ec2.DescribeImportImageTasksInput, _ ...func(*ec2.Options)) (*ec2.DescribeImportImageTasksOutput, error) {
+	return &ec2.DescribeImportImageTasksOutput{ImportImageTasks: m.importimagetasks}, nil
+}
+
+func (m *mockEc2) DescribeAddresses(_ context.Context, _ *ec2.DescribeAddressesInput, _ ...func(*ec2.Options)) (*ec2.DescribeAddressesOutput, error) {
+	return &ec2.DescribeAddressesOutput{Addresses: m.addresss}, nil
+}
+
+func (m *mockEc2) DescribeSnapshots(_ context.Context, _ *ec2.DescribeSnapshotsInput, _ ...func(*ec2.Options)) (*ec2.DescribeSnapshotsOutput, error) {
+	return &ec2.DescribeSnapshotsOutput{Snapshots: m.snapshots}, nil
+}
+
+func (m *mockEc2) DescribeNetworkInterfaces(_ context.Context, _ *ec2.DescribeNetworkInterfacesInput, _ ...func(*ec2.Options)) (*ec2.DescribeNetworkInterfacesOutput, error) {
+	return &ec2.DescribeNetworkInterfacesOutput{NetworkInterfaces: m.networkinterfaces}, nil
+}
+
+type mockEcr struct {
+	awsfetch.EcrAPI
+	manualEcrMock
+	repositorys []ecrtypes.Repository
+}
+
+// cloud.Service, so that a mock can stand in for a whole service in the
+// registry. The graph-building tests drive the fetchers directly, so these are
+// inert on purpose.
+func (m *mockEcr) Name() string            { return "" }
+func (m *mockEcr) Region() string          { return "" }
+func (m *mockEcr) Profile() string         { return "" }
+func (m *mockEcr) ResourceTypes() []string { return []string{} }
+func (m *mockEcr) IsSyncDisabled() bool    { return false }
+
+func (m *mockEcr) Fetch(context.Context) (cloud.GraphAPI, error) {
+	return nil, nil
+}
+
+func (m *mockEcr) FetchByType(context.Context, string) (cloud.GraphAPI, error) {
+	return nil, nil
+}
+
+func (m *mockEcr) DescribeRepositories(_ context.Context, _ *ecr.DescribeRepositoriesInput, _ ...func(*ecr.Options)) (*ecr.DescribeRepositoriesOutput, error) {
+	return &ecr.DescribeRepositoriesOutput{Repositories: m.repositorys}, nil
+}
+
+type mockEcs struct {
+	awsfetch.EcsAPI
+	manualEcsMock
+}
+
+// cloud.Service, so that a mock can stand in for a whole service in the
+// registry. The graph-building tests drive the fetchers directly, so these are
+// inert on purpose.
+func (m *mockEcs) Name() string            { return "" }
+func (m *mockEcs) Region() string          { return "" }
+func (m *mockEcs) Profile() string         { return "" }
+func (m *mockEcs) ResourceTypes() []string { return []string{} }
+func (m *mockEcs) IsSyncDisabled() bool    { return false }
+
+func (m *mockEcs) Fetch(context.Context) (cloud.GraphAPI, error) {
+	return nil, nil
+}
+
+func (m *mockEcs) FetchByType(context.Context, string) (cloud.GraphAPI, error) {
+	return nil, nil
+}
+
+type mockElb struct {
+	awsfetch.ElbAPI
+	manualElbMock
+	loadbalancerdescriptions []elbtypes.LoadBalancerDescription
+}
+
+// cloud.Service, so that a mock can stand in for a whole service in the
+// registry. The graph-building tests drive the fetchers directly, so these are
+// inert on purpose.
+func (m *mockElb) Name() string            { return "" }
+func (m *mockElb) Region() string          { return "" }
+func (m *mockElb) Profile() string         { return "" }
+func (m *mockElb) ResourceTypes() []string { return []string{} }
+func (m *mockElb) IsSyncDisabled() bool    { return false }
+
+func (m *mockElb) Fetch(context.Context) (cloud.GraphAPI, error) {
+	return nil, nil
+}
+
+func (m *mockElb) FetchByType(context.Context, string) (cloud.GraphAPI, error) {
+	return nil, nil
+}
+
+func (m *mockElb) DescribeLoadBalancers(_ context.Context, _ *elasticloadbalancing.DescribeLoadBalancersInput, _ ...func(*elasticloadbalancing.Options)) (*elasticloadbalancing.DescribeLoadBalancersOutput, error) {
+	return &elasticloadbalancing.DescribeLoadBalancersOutput{LoadBalancerDescriptions: m.loadbalancerdescriptions}, nil
+}
+
+type mockElbv2 struct {
+	awsfetch.Elbv2API
+	manualElbv2Mock
+	loadbalancers []elbv2types.LoadBalancer
+	targetgroups  []elbv2types.TargetGroup
+}
+
+// cloud.Service, so that a mock can stand in for a whole service in the
+// registry. The graph-building tests drive the fetchers directly, so these are
+// inert on purpose.
+func (m *mockElbv2) Name() string            { return "" }
+func (m *mockElbv2) Region() string          { return "" }
+func (m *mockElbv2) Profile() string         { return "" }
+func (m *mockElbv2) ResourceTypes() []string { return []string{} }
+func (m *mockElbv2) IsSyncDisabled() bool    { return false }
+
+func (m *mockElbv2) Fetch(context.Context) (cloud.GraphAPI, error) {
+	return nil, nil
+}
+
+func (m *mockElbv2) FetchByType(context.Context, string) (cloud.GraphAPI, error) {
+	return nil, nil
+}
+
+func (m *mockElbv2) DescribeLoadBalancers(_ context.Context, _ *elasticloadbalancingv2.DescribeLoadBalancersInput, _ ...func(*elasticloadbalancingv2.Options)) (*elasticloadbalancingv2.DescribeLoadBalancersOutput, error) {
+	return &elasticloadbalancingv2.DescribeLoadBalancersOutput{LoadBalancers: m.loadbalancers}, nil
+}
+
+func (m *mockElbv2) DescribeTargetGroups(_ context.Context, _ *elasticloadbalancingv2.DescribeTargetGroupsInput, _ ...func(*elasticloadbalancingv2.Options)) (*elasticloadbalancingv2.DescribeTargetGroupsOutput, error) {
+	return &elasticloadbalancingv2.DescribeTargetGroupsOutput{TargetGroups: m.targetgroups}, nil
+}
+
+type mockIam struct {
+	awsfetch.IamAPI
+	manualIamMock
+	instanceprofiles  []iamtypes.InstanceProfile
+	virtualmfadevices []iamtypes.VirtualMFADevice
+}
+
+// cloud.Service, so that a mock can stand in for a whole service in the
+// registry. The graph-building tests drive the fetchers directly, so these are
+// inert on purpose.
+func (m *mockIam) Name() string            { return "" }
+func (m *mockIam) Region() string          { return "" }
+func (m *mockIam) Profile() string         { return "" }
+func (m *mockIam) ResourceTypes() []string { return []string{} }
+func (m *mockIam) IsSyncDisabled() bool    { return false }
+
+func (m *mockIam) Fetch(context.Context) (cloud.GraphAPI, error) {
+	return nil, nil
 }
 
 func (m *mockIam) FetchByType(context.Context, string) (cloud.GraphAPI, error) {
 	return nil, nil
 }
 
-func (m *mockIam) ListAccessKeysPages(input *iam.ListAccessKeysInput, fn func(p *iam.ListAccessKeysOutput, lastPage bool) (shouldContinue bool)) error {
-	var pages [][]*iam.AccessKeyMetadata
-	for i := 0; i < len(m.accesskeymetadatas); i += 2 {
-		page := []*iam.AccessKeyMetadata{m.accesskeymetadatas[i]}
-		if i+1 < len(m.accesskeymetadatas) {
-			page = append(page, m.accesskeymetadatas[i+1])
-		}
-		pages = append(pages, page)
-	}
-	for i, page := range pages {
-		fn(&iam.ListAccessKeysOutput{AccessKeyMetadata: page, Marker: aws.String(strconv.Itoa(i + 1))},
-			i < len(pages),
-		)
-	}
-	return nil
+func (m *mockIam) ListInstanceProfiles(_ context.Context, _ *iam.ListInstanceProfilesInput, _ ...func(*iam.Options)) (*iam.ListInstanceProfilesOutput, error) {
+	return &iam.ListInstanceProfilesOutput{InstanceProfiles: m.instanceprofiles}, nil
 }
 
-func (m *mockIam) ListInstanceProfilesPages(input *iam.ListInstanceProfilesInput, fn func(p *iam.ListInstanceProfilesOutput, lastPage bool) (shouldContinue bool)) error {
-	var pages [][]*iam.InstanceProfile
-	for i := 0; i < len(m.instanceprofiles); i += 2 {
-		page := []*iam.InstanceProfile{m.instanceprofiles[i]}
-		if i+1 < len(m.instanceprofiles) {
-			page = append(page, m.instanceprofiles[i+1])
-		}
-		pages = append(pages, page)
-	}
-	for i, page := range pages {
-		fn(&iam.ListInstanceProfilesOutput{InstanceProfiles: page, Marker: aws.String(strconv.Itoa(i + 1))},
-			i < len(pages),
-		)
-	}
-	return nil
+func (m *mockIam) ListVirtualMFADevices(_ context.Context, _ *iam.ListVirtualMFADevicesInput, _ ...func(*iam.Options)) (*iam.ListVirtualMFADevicesOutput, error) {
+	return &iam.ListVirtualMFADevicesOutput{VirtualMFADevices: m.virtualmfadevices}, nil
 }
 
-func (m *mockIam) ListVirtualMFADevicesPages(input *iam.ListVirtualMFADevicesInput, fn func(p *iam.ListVirtualMFADevicesOutput, lastPage bool) (shouldContinue bool)) error {
-	var pages [][]*iam.VirtualMFADevice
-	for i := 0; i < len(m.virtualmfadevices); i += 2 {
-		page := []*iam.VirtualMFADevice{m.virtualmfadevices[i]}
-		if i+1 < len(m.virtualmfadevices) {
-			page = append(page, m.virtualmfadevices[i+1])
-		}
-		pages = append(pages, page)
-	}
-	for i, page := range pages {
-		fn(&iam.ListVirtualMFADevicesOutput{VirtualMFADevices: page, Marker: aws.String(strconv.Itoa(i + 1))},
-			i < len(pages),
-		)
-	}
-	return nil
+type mockLambda struct {
+	awsfetch.LambdaAPI
+	manualLambdaMock
+	functionconfigurations []lambdatypes.FunctionConfiguration
 }
 
-type mockS3 struct {
-	s3iface.S3API
-	buckets map[string][]*s3.Bucket
-	objects map[string][]*s3.Object
-	grants  map[string][]*s3.Grant
-}
+// cloud.Service, so that a mock can stand in for a whole service in the
+// registry. The graph-building tests drive the fetchers directly, so these are
+// inert on purpose.
+func (m *mockLambda) Name() string            { return "" }
+func (m *mockLambda) Region() string          { return "" }
+func (m *mockLambda) Profile() string         { return "" }
+func (m *mockLambda) ResourceTypes() []string { return []string{} }
+func (m *mockLambda) IsSyncDisabled() bool    { return false }
 
-func (m *mockS3) Name() string {
-	return ""
-}
-
-func (m *mockS3) Region() string {
-	return ""
-}
-
-func (m *mockS3) Profile() string {
-	return ""
-}
-
-func (m *mockS3) Provider() string {
-	return ""
-}
-
-func (m *mockS3) ProviderAPI() string {
-	return ""
-}
-
-func (m *mockS3) ResourceTypes() []string {
-	return []string{}
-}
-
-func (m *mockS3) Fetch(context.Context) (cloud.GraphAPI, error) {
+func (m *mockLambda) Fetch(context.Context) (cloud.GraphAPI, error) {
 	return nil, nil
 }
 
-func (m *mockS3) IsSyncDisabled() bool {
-	return false
+func (m *mockLambda) FetchByType(context.Context, string) (cloud.GraphAPI, error) {
+	return nil, nil
+}
+
+func (m *mockLambda) ListFunctions(_ context.Context, _ *lambda.ListFunctionsInput, _ ...func(*lambda.Options)) (*lambda.ListFunctionsOutput, error) {
+	return &lambda.ListFunctionsOutput{Functions: m.functionconfigurations}, nil
+}
+
+type mockRds struct {
+	awsfetch.RdsAPI
+	manualRdsMock
+	dbinstances    []rdstypes.DBInstance
+	dbsubnetgroups []rdstypes.DBSubnetGroup
+}
+
+// cloud.Service, so that a mock can stand in for a whole service in the
+// registry. The graph-building tests drive the fetchers directly, so these are
+// inert on purpose.
+func (m *mockRds) Name() string            { return "" }
+func (m *mockRds) Region() string          { return "" }
+func (m *mockRds) Profile() string         { return "" }
+func (m *mockRds) ResourceTypes() []string { return []string{} }
+func (m *mockRds) IsSyncDisabled() bool    { return false }
+
+func (m *mockRds) Fetch(context.Context) (cloud.GraphAPI, error) {
+	return nil, nil
+}
+
+func (m *mockRds) FetchByType(context.Context, string) (cloud.GraphAPI, error) {
+	return nil, nil
+}
+
+func (m *mockRds) DescribeDBInstances(_ context.Context, _ *rds.DescribeDBInstancesInput, _ ...func(*rds.Options)) (*rds.DescribeDBInstancesOutput, error) {
+	return &rds.DescribeDBInstancesOutput{DBInstances: m.dbinstances}, nil
+}
+
+func (m *mockRds) DescribeDBSubnetGroups(_ context.Context, _ *rds.DescribeDBSubnetGroupsInput, _ ...func(*rds.Options)) (*rds.DescribeDBSubnetGroupsOutput, error) {
+	return &rds.DescribeDBSubnetGroupsOutput{DBSubnetGroups: m.dbsubnetgroups}, nil
+}
+
+type mockRoute53 struct {
+	awsfetch.Route53API
+	manualRoute53Mock
+	hostedzones []route53types.HostedZone
+}
+
+// cloud.Service, so that a mock can stand in for a whole service in the
+// registry. The graph-building tests drive the fetchers directly, so these are
+// inert on purpose.
+func (m *mockRoute53) Name() string            { return "" }
+func (m *mockRoute53) Region() string          { return "" }
+func (m *mockRoute53) Profile() string         { return "" }
+func (m *mockRoute53) ResourceTypes() []string { return []string{} }
+func (m *mockRoute53) IsSyncDisabled() bool    { return false }
+
+func (m *mockRoute53) Fetch(context.Context) (cloud.GraphAPI, error) {
+	return nil, nil
+}
+
+func (m *mockRoute53) FetchByType(context.Context, string) (cloud.GraphAPI, error) {
+	return nil, nil
+}
+
+func (m *mockRoute53) ListHostedZones(_ context.Context, _ *route53.ListHostedZonesInput, _ ...func(*route53.Options)) (*route53.ListHostedZonesOutput, error) {
+	return &route53.ListHostedZonesOutput{HostedZones: m.hostedzones}, nil
+}
+
+type mockS3 struct {
+	awsfetch.S3API
+	manualS3Mock
+}
+
+// cloud.Service, so that a mock can stand in for a whole service in the
+// registry. The graph-building tests drive the fetchers directly, so these are
+// inert on purpose.
+func (m *mockS3) Name() string            { return "" }
+func (m *mockS3) Region() string          { return "" }
+func (m *mockS3) Profile() string         { return "" }
+func (m *mockS3) ResourceTypes() []string { return []string{} }
+func (m *mockS3) IsSyncDisabled() bool    { return false }
+
+func (m *mockS3) Fetch(context.Context) (cloud.GraphAPI, error) {
+	return nil, nil
 }
 
 func (m *mockS3) FetchByType(context.Context, string) (cloud.GraphAPI, error) {
@@ -694,555 +565,77 @@ func (m *mockS3) FetchByType(context.Context, string) (cloud.GraphAPI, error) {
 }
 
 type mockSns struct {
-	snsiface.SNSAPI
-	subscriptions []*sns.Subscription
-	topics        []*sns.Topic
+	awsfetch.SnsAPI
+	manualSnsMock
+	subscriptions []snstypes.Subscription
+	topics        []snstypes.Topic
 }
 
-func (m *mockSns) Name() string {
-	return ""
-}
-
-func (m *mockSns) Region() string {
-	return ""
-}
-
-func (m *mockSns) Profile() string {
-	return ""
-}
-
-func (m *mockSns) Provider() string {
-	return ""
-}
-
-func (m *mockSns) ProviderAPI() string {
-	return ""
-}
-
-func (m *mockSns) ResourceTypes() []string {
-	return []string{}
-}
+// cloud.Service, so that a mock can stand in for a whole service in the
+// registry. The graph-building tests drive the fetchers directly, so these are
+// inert on purpose.
+func (m *mockSns) Name() string            { return "" }
+func (m *mockSns) Region() string          { return "" }
+func (m *mockSns) Profile() string         { return "" }
+func (m *mockSns) ResourceTypes() []string { return []string{} }
+func (m *mockSns) IsSyncDisabled() bool    { return false }
 
 func (m *mockSns) Fetch(context.Context) (cloud.GraphAPI, error) {
 	return nil, nil
-}
-
-func (m *mockSns) IsSyncDisabled() bool {
-	return false
 }
 
 func (m *mockSns) FetchByType(context.Context, string) (cloud.GraphAPI, error) {
 	return nil, nil
 }
 
-func (m *mockSns) ListSubscriptionsPages(input *sns.ListSubscriptionsInput, fn func(p *sns.ListSubscriptionsOutput, lastPage bool) (shouldContinue bool)) error {
-	var pages [][]*sns.Subscription
-	for i := 0; i < len(m.subscriptions); i += 2 {
-		page := []*sns.Subscription{m.subscriptions[i]}
-		if i+1 < len(m.subscriptions) {
-			page = append(page, m.subscriptions[i+1])
-		}
-		pages = append(pages, page)
-	}
-	for i, page := range pages {
-		fn(&sns.ListSubscriptionsOutput{Subscriptions: page, NextToken: aws.String(strconv.Itoa(i + 1))},
-			i < len(pages),
-		)
-	}
-	return nil
+func (m *mockSns) ListSubscriptions(_ context.Context, _ *sns.ListSubscriptionsInput, _ ...func(*sns.Options)) (*sns.ListSubscriptionsOutput, error) {
+	return &sns.ListSubscriptionsOutput{Subscriptions: m.subscriptions}, nil
 }
 
-func (m *mockSns) ListTopicsPages(input *sns.ListTopicsInput, fn func(p *sns.ListTopicsOutput, lastPage bool) (shouldContinue bool)) error {
-	var pages [][]*sns.Topic
-	for i := 0; i < len(m.topics); i += 2 {
-		page := []*sns.Topic{m.topics[i]}
-		if i+1 < len(m.topics) {
-			page = append(page, m.topics[i+1])
-		}
-		pages = append(pages, page)
-	}
-	for i, page := range pages {
-		fn(&sns.ListTopicsOutput{Topics: page, NextToken: aws.String(strconv.Itoa(i + 1))},
-			i < len(pages),
-		)
-	}
-	return nil
+func (m *mockSns) ListTopics(_ context.Context, _ *sns.ListTopicsInput, _ ...func(*sns.Options)) (*sns.ListTopicsOutput, error) {
+	return &sns.ListTopicsOutput{Topics: m.topics}, nil
 }
 
 type mockSqs struct {
-	sqsiface.SQSAPI
-	strings    []*string
-	attributes map[string]map[string]*string
+	awsfetch.SqsAPI
+	manualSqsMock
 }
 
-func (m *mockSqs) Name() string {
-	return ""
-}
-
-func (m *mockSqs) Region() string {
-	return ""
-}
-
-func (m *mockSqs) Profile() string {
-	return ""
-}
-
-func (m *mockSqs) Provider() string {
-	return ""
-}
-
-func (m *mockSqs) ProviderAPI() string {
-	return ""
-}
-
-func (m *mockSqs) ResourceTypes() []string {
-	return []string{}
-}
+// cloud.Service, so that a mock can stand in for a whole service in the
+// registry. The graph-building tests drive the fetchers directly, so these are
+// inert on purpose.
+func (m *mockSqs) Name() string            { return "" }
+func (m *mockSqs) Region() string          { return "" }
+func (m *mockSqs) Profile() string         { return "" }
+func (m *mockSqs) ResourceTypes() []string { return []string{} }
+func (m *mockSqs) IsSyncDisabled() bool    { return false }
 
 func (m *mockSqs) Fetch(context.Context) (cloud.GraphAPI, error) {
 	return nil, nil
-}
-
-func (m *mockSqs) IsSyncDisabled() bool {
-	return false
 }
 
 func (m *mockSqs) FetchByType(context.Context, string) (cloud.GraphAPI, error) {
 	return nil, nil
 }
 
-func (m *mockSqs) ListQueues(input *sqs.ListQueuesInput) (*sqs.ListQueuesOutput, error) {
-	return &sqs.ListQueuesOutput{QueueUrls: m.strings}, nil
+type mockSts struct {
+	awsfetch.StsAPI
+	manualStsMock
 }
 
-type mockRoute53 struct {
-	route53iface.Route53API
-	hostedzones        []*route53.HostedZone
-	resourcerecordsets map[string][]*route53.ResourceRecordSet
-}
+// cloud.Service, so that a mock can stand in for a whole service in the
+// registry. The graph-building tests drive the fetchers directly, so these are
+// inert on purpose.
+func (m *mockSts) Name() string            { return "" }
+func (m *mockSts) Region() string          { return "" }
+func (m *mockSts) Profile() string         { return "" }
+func (m *mockSts) ResourceTypes() []string { return []string{} }
+func (m *mockSts) IsSyncDisabled() bool    { return false }
 
-func (m *mockRoute53) Name() string {
-	return ""
-}
-
-func (m *mockRoute53) Region() string {
-	return ""
-}
-
-func (m *mockRoute53) Profile() string {
-	return ""
-}
-
-func (m *mockRoute53) Provider() string {
-	return ""
-}
-
-func (m *mockRoute53) ProviderAPI() string {
-	return ""
-}
-
-func (m *mockRoute53) ResourceTypes() []string {
-	return []string{}
-}
-
-func (m *mockRoute53) Fetch(context.Context) (cloud.GraphAPI, error) {
+func (m *mockSts) Fetch(context.Context) (cloud.GraphAPI, error) {
 	return nil, nil
 }
 
-func (m *mockRoute53) IsSyncDisabled() bool {
-	return false
-}
-
-func (m *mockRoute53) FetchByType(context.Context, string) (cloud.GraphAPI, error) {
+func (m *mockSts) FetchByType(context.Context, string) (cloud.GraphAPI, error) {
 	return nil, nil
-}
-
-func (m *mockRoute53) ListHostedZonesPages(input *route53.ListHostedZonesInput, fn func(p *route53.ListHostedZonesOutput, lastPage bool) (shouldContinue bool)) error {
-	var pages [][]*route53.HostedZone
-	for i := 0; i < len(m.hostedzones); i += 2 {
-		page := []*route53.HostedZone{m.hostedzones[i]}
-		if i+1 < len(m.hostedzones) {
-			page = append(page, m.hostedzones[i+1])
-		}
-		pages = append(pages, page)
-	}
-	for i, page := range pages {
-		fn(&route53.ListHostedZonesOutput{HostedZones: page, NextMarker: aws.String(strconv.Itoa(i + 1))},
-			i < len(pages),
-		)
-	}
-	return nil
-}
-
-type mockLambda struct {
-	lambdaiface.LambdaAPI
-	functionconfigurations []*lambda.FunctionConfiguration
-}
-
-func (m *mockLambda) Name() string {
-	return ""
-}
-
-func (m *mockLambda) Region() string {
-	return ""
-}
-
-func (m *mockLambda) Profile() string {
-	return ""
-}
-
-func (m *mockLambda) Provider() string {
-	return ""
-}
-
-func (m *mockLambda) ProviderAPI() string {
-	return ""
-}
-
-func (m *mockLambda) ResourceTypes() []string {
-	return []string{}
-}
-
-func (m *mockLambda) Fetch(context.Context) (cloud.GraphAPI, error) {
-	return nil, nil
-}
-
-func (m *mockLambda) IsSyncDisabled() bool {
-	return false
-}
-
-func (m *mockLambda) FetchByType(context.Context, string) (cloud.GraphAPI, error) {
-	return nil, nil
-}
-
-func (m *mockLambda) ListFunctionsPages(input *lambda.ListFunctionsInput, fn func(p *lambda.ListFunctionsOutput, lastPage bool) (shouldContinue bool)) error {
-	var pages [][]*lambda.FunctionConfiguration
-	for i := 0; i < len(m.functionconfigurations); i += 2 {
-		page := []*lambda.FunctionConfiguration{m.functionconfigurations[i]}
-		if i+1 < len(m.functionconfigurations) {
-			page = append(page, m.functionconfigurations[i+1])
-		}
-		pages = append(pages, page)
-	}
-	for i, page := range pages {
-		fn(&lambda.ListFunctionsOutput{Functions: page, NextMarker: aws.String(strconv.Itoa(i + 1))},
-			i < len(pages),
-		)
-	}
-	return nil
-}
-
-type mockCloudwatch struct {
-	cloudwatchiface.CloudWatchAPI
-	metrics      []*cloudwatch.Metric
-	metricalarms []*cloudwatch.MetricAlarm
-}
-
-func (m *mockCloudwatch) Name() string {
-	return ""
-}
-
-func (m *mockCloudwatch) Region() string {
-	return ""
-}
-
-func (m *mockCloudwatch) Profile() string {
-	return ""
-}
-
-func (m *mockCloudwatch) Provider() string {
-	return ""
-}
-
-func (m *mockCloudwatch) ProviderAPI() string {
-	return ""
-}
-
-func (m *mockCloudwatch) ResourceTypes() []string {
-	return []string{}
-}
-
-func (m *mockCloudwatch) Fetch(context.Context) (cloud.GraphAPI, error) {
-	return nil, nil
-}
-
-func (m *mockCloudwatch) IsSyncDisabled() bool {
-	return false
-}
-
-func (m *mockCloudwatch) FetchByType(context.Context, string) (cloud.GraphAPI, error) {
-	return nil, nil
-}
-
-func (m *mockCloudwatch) ListMetricsPages(input *cloudwatch.ListMetricsInput, fn func(p *cloudwatch.ListMetricsOutput, lastPage bool) (shouldContinue bool)) error {
-	var pages [][]*cloudwatch.Metric
-	for i := 0; i < len(m.metrics); i += 2 {
-		page := []*cloudwatch.Metric{m.metrics[i]}
-		if i+1 < len(m.metrics) {
-			page = append(page, m.metrics[i+1])
-		}
-		pages = append(pages, page)
-	}
-	for i, page := range pages {
-		fn(&cloudwatch.ListMetricsOutput{Metrics: page, NextToken: aws.String(strconv.Itoa(i + 1))},
-			i < len(pages),
-		)
-	}
-	return nil
-}
-
-func (m *mockCloudwatch) DescribeAlarmsPages(input *cloudwatch.DescribeAlarmsInput, fn func(p *cloudwatch.DescribeAlarmsOutput, lastPage bool) (shouldContinue bool)) error {
-	var pages [][]*cloudwatch.MetricAlarm
-	for i := 0; i < len(m.metricalarms); i += 2 {
-		page := []*cloudwatch.MetricAlarm{m.metricalarms[i]}
-		if i+1 < len(m.metricalarms) {
-			page = append(page, m.metricalarms[i+1])
-		}
-		pages = append(pages, page)
-	}
-	for i, page := range pages {
-		fn(&cloudwatch.DescribeAlarmsOutput{MetricAlarms: page, NextToken: aws.String(strconv.Itoa(i + 1))},
-			i < len(pages),
-		)
-	}
-	return nil
-}
-
-type mockCloudfront struct {
-	cloudfrontiface.CloudFrontAPI
-	distributionsummarys []*cloudfront.DistributionSummary
-}
-
-func (m *mockCloudfront) Name() string {
-	return ""
-}
-
-func (m *mockCloudfront) Region() string {
-	return ""
-}
-
-func (m *mockCloudfront) Profile() string {
-	return ""
-}
-
-func (m *mockCloudfront) Provider() string {
-	return ""
-}
-
-func (m *mockCloudfront) ProviderAPI() string {
-	return ""
-}
-
-func (m *mockCloudfront) ResourceTypes() []string {
-	return []string{}
-}
-
-func (m *mockCloudfront) Fetch(context.Context) (cloud.GraphAPI, error) {
-	return nil, nil
-}
-
-func (m *mockCloudfront) IsSyncDisabled() bool {
-	return false
-}
-
-func (m *mockCloudfront) FetchByType(context.Context, string) (cloud.GraphAPI, error) {
-	return nil, nil
-}
-
-type mockCloudformation struct {
-	cloudformationiface.CloudFormationAPI
-	stacks []*cloudformation.Stack
-}
-
-func (m *mockCloudformation) Name() string {
-	return ""
-}
-
-func (m *mockCloudformation) Region() string {
-	return ""
-}
-
-func (m *mockCloudformation) Profile() string {
-	return ""
-}
-
-func (m *mockCloudformation) Provider() string {
-	return ""
-}
-
-func (m *mockCloudformation) ProviderAPI() string {
-	return ""
-}
-
-func (m *mockCloudformation) ResourceTypes() []string {
-	return []string{}
-}
-
-func (m *mockCloudformation) Fetch(context.Context) (cloud.GraphAPI, error) {
-	return nil, nil
-}
-
-func (m *mockCloudformation) IsSyncDisabled() bool {
-	return false
-}
-
-func (m *mockCloudformation) FetchByType(context.Context, string) (cloud.GraphAPI, error) {
-	return nil, nil
-}
-
-func (m *mockCloudformation) DescribeStacksPages(input *cloudformation.DescribeStacksInput, fn func(p *cloudformation.DescribeStacksOutput, lastPage bool) (shouldContinue bool)) error {
-	var pages [][]*cloudformation.Stack
-	for i := 0; i < len(m.stacks); i += 2 {
-		page := []*cloudformation.Stack{m.stacks[i]}
-		if i+1 < len(m.stacks) {
-			page = append(page, m.stacks[i+1])
-		}
-		pages = append(pages, page)
-	}
-	for i, page := range pages {
-		fn(&cloudformation.DescribeStacksOutput{Stacks: page, NextToken: aws.String(strconv.Itoa(i + 1))},
-			i < len(pages),
-		)
-	}
-	return nil
-}
-
-type mockEcr struct {
-	ecriface.ECRAPI
-	repositorys []*ecr.Repository
-}
-
-func (m *mockEcr) Name() string {
-	return ""
-}
-
-func (m *mockEcr) Region() string {
-	return ""
-}
-
-func (m *mockEcr) Profile() string {
-	return ""
-}
-
-func (m *mockEcr) Provider() string {
-	return ""
-}
-
-func (m *mockEcr) ProviderAPI() string {
-	return ""
-}
-
-func (m *mockEcr) ResourceTypes() []string {
-	return []string{}
-}
-
-func (m *mockEcr) Fetch(context.Context) (cloud.GraphAPI, error) {
-	return nil, nil
-}
-
-func (m *mockEcr) IsSyncDisabled() bool {
-	return false
-}
-
-func (m *mockEcr) FetchByType(context.Context, string) (cloud.GraphAPI, error) {
-	return nil, nil
-}
-
-func (m *mockEcr) DescribeRepositoriesPages(input *ecr.DescribeRepositoriesInput, fn func(p *ecr.DescribeRepositoriesOutput, lastPage bool) (shouldContinue bool)) error {
-	var pages [][]*ecr.Repository
-	for i := 0; i < len(m.repositorys); i += 2 {
-		page := []*ecr.Repository{m.repositorys[i]}
-		if i+1 < len(m.repositorys) {
-			page = append(page, m.repositorys[i+1])
-		}
-		pages = append(pages, page)
-	}
-	for i, page := range pages {
-		fn(&ecr.DescribeRepositoriesOutput{Repositories: page, NextToken: aws.String(strconv.Itoa(i + 1))},
-			i < len(pages),
-		)
-	}
-	return nil
-}
-
-type mockEcs struct {
-	ecsiface.ECSAPI
-	clusters                []*ecs.Cluster
-	clusterNames            []*string
-	taskdefinitions         []*ecs.TaskDefinition
-	taskdefinitionNames     []*string
-	tasks                   map[string][]*ecs.Task
-	tasksNames              map[string][]*string
-	containerinstancesNames map[string][]*string
-	containerinstances      map[string][]*ecs.ContainerInstance
-}
-
-func (m *mockEcs) Name() string {
-	return ""
-}
-
-func (m *mockEcs) Region() string {
-	return ""
-}
-
-func (m *mockEcs) Profile() string {
-	return ""
-}
-
-func (m *mockEcs) Provider() string {
-	return ""
-}
-
-func (m *mockEcs) ProviderAPI() string {
-	return ""
-}
-
-func (m *mockEcs) ResourceTypes() []string {
-	return []string{}
-}
-
-func (m *mockEcs) Fetch(context.Context) (cloud.GraphAPI, error) {
-	return nil, nil
-}
-
-func (m *mockEcs) IsSyncDisabled() bool {
-	return false
-}
-
-func (m *mockEcs) FetchByType(context.Context, string) (cloud.GraphAPI, error) {
-	return nil, nil
-}
-
-func (m *mockEcs) ListClustersPages(input *ecs.ListClustersInput, fn func(p *ecs.ListClustersOutput, lastPage bool) (shouldContinue bool)) error {
-	var pages [][]*string
-	for i := 0; i < len(m.clusterNames); i += 2 {
-		page := []*string{m.clusterNames[i]}
-		if i+1 < len(m.clusterNames) {
-			page = append(page, m.clusterNames[i+1])
-		}
-		pages = append(pages, page)
-	}
-	for i, page := range pages {
-		fn(&ecs.ListClustersOutput{ClusterArns: page, NextToken: aws.String(strconv.Itoa(i + 1))},
-			i < len(pages),
-		)
-	}
-	return nil
-}
-
-func (m *mockEcs) ListTaskDefinitionsPages(input *ecs.ListTaskDefinitionsInput, fn func(p *ecs.ListTaskDefinitionsOutput, lastPage bool) (shouldContinue bool)) error {
-	var pages [][]*string
-	for i := 0; i < len(m.taskdefinitionNames); i += 2 {
-		page := []*string{m.taskdefinitionNames[i]}
-		if i+1 < len(m.taskdefinitionNames) {
-			page = append(page, m.taskdefinitionNames[i+1])
-		}
-		pages = append(pages, page)
-	}
-	for i, page := range pages {
-		fn(&ecs.ListTaskDefinitionsOutput{TaskDefinitionArns: page, NextToken: aws.String(strconv.Itoa(i + 1))},
-			i < len(pages),
-		)
-	}
-	return nil
 }

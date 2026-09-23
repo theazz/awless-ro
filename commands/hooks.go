@@ -17,12 +17,12 @@ limitations under the License.
 package commands
 
 import (
+	"context"
 	"fmt"
 	"os"
 	"strings"
 
-	"github.com/aws/aws-sdk-go/aws/credentials/stscreds"
-	"github.com/aws/aws-sdk-go/aws/session"
+	awsconfigv2 "github.com/aws/aws-sdk-go-v2/config"
 	"github.com/spf13/cobra"
 	"github.com/theazz/awless-ro/aws/services"
 	"github.com/theazz/awless-ro/cloud"
@@ -213,15 +213,16 @@ func firstInstallDoneHook(cmd *cobra.Command, args []string) error {
 	return nil
 }
 
+// hasEmbeddedRegionInSharedConfigForProfile reports the region the named profile
+// pins in ~/.aws/{config,credentials}, if any. It is loaded without credential
+// resolution because only the region is wanted here; asking for credentials
+// would prompt for an MFA code just to answer a question about a config file.
 func hasEmbeddedRegionInSharedConfigForProfile(profile string) (string, bool, error) {
-	s, err := session.NewSessionWithOptions(session.Options{
-		AssumeRoleTokenProvider: stscreds.StdinTokenProvider,
-		SharedConfigState:       session.SharedConfigEnable,
-		Profile:                 profile,
-	})
+	cfg, err := awsconfigv2.LoadDefaultConfig(context.Background(),
+		awsconfigv2.WithSharedConfigProfile(profile),
+	)
 	if err != nil {
 		return "", false, fmt.Errorf("cannot check profile '%s' has embedded region in shared config file: %s", profile, err)
 	}
-	region := *s.Config.Region
-	return region, len(region) > 0, nil
+	return cfg.Region, cfg.Region != "", nil
 }

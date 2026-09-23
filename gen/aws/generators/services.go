@@ -23,19 +23,36 @@ import (
 	"github.com/theazz/awless-ro/gen/aws"
 )
 
+// servicesView is what the services template renders; see fetchersView for why
+// the imports are computed here.
+type servicesView struct {
+	Imports  []importLine
+	Services interface{}
+}
+
 func generateServicesFuncs() {
-	templ, err := template.New("funcs").Funcs(template.FuncMap{
-		"Title":          strings.Title,
-		"ToUpper":        strings.ToUpper,
-		"Join":           strings.Join,
-		"ApiToInterface": aws.ApiToInterface,
+	templ, err := template.New("services").Funcs(template.FuncMap{
+		"Title":        aws.Title,
+		"Join":         strings.Join,
+		"ApiPackage":   aws.ApiPackage,
+		"ApiField":     aws.ApiField,
+		"ApiInterface": aws.ApiInterface,
 	}).Parse(servicesTempl)
 
 	if err != nil {
 		panic(err)
 	}
 
-	writeTemplateToFile(templ, aws.FetchersDefs, SERVICES_DIR, "gen_services.go")
+	var imports []importLine
+	for _, api := range aws.UniqueApis() {
+		imports = append(imports, importLine{Path: aws.ApiImportPath(api)})
+	}
+	for _, api := range aws.FetcherTypeApis() {
+		imports = append(imports, importLine{Alias: aws.ApiTypesAlias(api), Path: aws.ApiImportPath(api) + "/types"})
+	}
+
+	view := servicesView{Imports: imports, Services: aws.FetchersDefs}
+	writeTemplateToFile(templ, view, SERVICES_DIR, "gen_services.go")
 }
 
 const servicesTempl = `// Auto generated implementation for the AWS cloud service
@@ -61,125 +78,120 @@ package awsservices
 // DO NOT EDIT - This file was automatically generated with go generate
 
 import (
-  "fmt"
+	"context"
+	"errors"
 	"sync"
 
-  awssdk "github.com/aws/aws-sdk-go/aws"
-	"github.com/aws/aws-sdk-go/aws/awserr"
-  "github.com/aws/aws-sdk-go/aws/session"
-  {{- range $index, $service := . }}
-  {{- range $, $api := $service.Api }}
-  "github.com/aws/aws-sdk-go/service/{{ $api }}"
-  "github.com/aws/aws-sdk-go/service/{{ $api }}/{{ $api }}iface"
-  {{- end }}
-  {{- end }}
-	"github.com/theazz/awless-ro/cloud"
-	"github.com/theazz/awless-ro/config"
-	"github.com/theazz/awless-ro/logger"
-	"github.com/theazz/awless-ro/fetch"
+	awssdk "github.com/aws/aws-sdk-go-v2/aws"
+{{- range $, $imp := .Imports }}
+	{{ $imp.Alias }} "{{ $imp.Path }}"
+{{- end }}
+
 	"github.com/theazz/awless-ro/aws/fetch"
+	"github.com/theazz/awless-ro/cloud"
+	"github.com/theazz/awless-ro/fetch"
+	"github.com/theazz/awless-ro/graph"
+	"github.com/theazz/awless-ro/logger"
 	tstore "github.com/wallix/triplestore"
 )
 
-const accessDenied = "Access Denied"
-
 var ServiceNames = []string{
-	{{- range $index, $service := . }}
-  "{{ $service.Name }}",
-  {{- end }}
-}
-
-var ResourceTypes = []string {
-{{- range $index, $service := . }}
-    {{- range $idx, $fetcher := $service.Fetchers }}
-      "{{ $fetcher.ResourceType }}",
-    {{- end }}
+{{- range $, $service := .Services }}
+	"{{ $service.Name }}",
 {{- end }}
 }
 
-var ServicePerAPI = map[string]string {
-{{- range $index, $service := . }}
+var ResourceTypes = []string{
+{{- range $, $service := .Services }}
+{{- range $, $fetcher := $service.Fetchers }}
+	"{{ $fetcher.ResourceType }}",
+{{- end }}
+{{- end }}
+}
+
+var ServicePerAPI = map[string]string{
+{{- range $, $service := .Services }}
 {{- range $, $api := $service.Api }}
-  "{{ $api }}": "{{ $service.Name }}",
+	"{{ $api }}": "{{ $service.Name }}",
 {{- end }}
 {{- end }}
 }
 
-var ServicePerResourceType = map[string]string {
-{{- range $index, $service := . }}
-  {{- range $idx, $fetcher := $service.Fetchers }}
-  "{{ $fetcher.ResourceType }}": "{{ $service.Name }}",
-  {{- end }}
+var ServicePerResourceType = map[string]string{
+{{- range $, $service := .Services }}
+{{- range $, $fetcher := $service.Fetchers }}
+	"{{ $fetcher.ResourceType }}": "{{ $service.Name }}",
+{{- end }}
 {{- end }}
 }
 
-var APIPerResourceType = map[string]string {
-{{- range $index, $service := . }}
-  {{- range $idx, $fetcher := $service.Fetchers }}
-  "{{ $fetcher.ResourceType }}": "{{ $fetcher.Api }}",
-  {{- end }}
+var APIPerResourceType = map[string]string{
+{{- range $, $service := .Services }}
+{{- range $, $fetcher := $service.Fetchers }}
+	"{{ $fetcher.ResourceType }}": "{{ $fetcher.Api }}",
+{{- end }}
 {{- end }}
 }
 
-{{ range $index, $service := . }}
+{{ range $, $service := .Services }}
 type {{ Title $service.Name }} struct {
-	fetcher fetch.Fetcher
-  region, profile string
-	config map[string]interface{}
-	log *logger.Logger
-	{{- range $, $api := $service.Api }}
-		{{ $api }}iface.{{ ApiToInterface $api }}
-	{{- end }}
+	fetcher         fetch.Fetcher
+	region, profile string
+	config          map[string]interface{}
+	log             *logger.Logger
+{{- range $, $api := $service.Api }}
+	awsfetch.{{ ApiInterface $api }}
+{{- end }}
 }
 
-func New{{ Title $service.Name }}(sess *session.Session, profile string, extraConf map[string]interface{}, log *logger.Logger) cloud.Service {
-  {{- if $service.Global }}
+func New{{ Title $service.Name }}(cfg awssdk.Config, profile string, extraConf map[string]interface{}, log *logger.Logger) cloud.Service {
+{{- if $service.Global }}
 	region := "global"
-	{{- else}}
-	region := awssdk.StringValue(sess.Config.Region)
-	{{- end}}	
+{{- else }}
+	region := cfg.Region
+{{- end }}
 
-	{{- range $, $api := $service.Api }}
-		{{$api }}API := {{ $api }}.New(sess)
-	{{- end }}
+{{- range $, $api := $service.Api }}
+	{{ $api }}API := {{ ApiPackage $api }}.NewFromConfig(cfg)
+{{- end }}
 
-	fetchConfig := awsfetch.NewConfig(
-		{{- range $, $api := $service.Api }}
-			{{$api }}API,
-		{{- end }}
-	)
+	fetchConfig := awsfetch.NewConfig(&awsfetch.AWSAPI{
+{{- range $, $api := $service.Api }}
+		{{ ApiField $api }}: {{ $api }}API,
+{{- end }}
+	})
 	fetchConfig.Extra = extraConf
 	fetchConfig.Log = log
 
-	return &{{ Title $service.Name }}{ 
-	{{- range $, $api := $service.Api }}
-		{{ApiToInterface $api }}: {{ $api }}API,
-	{{- end }}
+	return &{{ Title $service.Name }}{
+{{- range $, $api := $service.Api }}
+		{{ ApiInterface $api }}: {{ $api }}API,
+{{- end }}
 		fetcher: fetch.NewFetcher(awsfetch.Build{{ Title $service.Name }}FetchFuncs(fetchConfig)),
-		config: extraConf,
-		region: region,
+		config:  extraConf,
+		region:  region,
 		profile: profile,
-		log: log,
-  }
+		log:     log,
+	}
 }
 
 func (s *{{ Title $service.Name }}) Name() string {
-  return "{{ $service.Name }}"
+	return "{{ $service.Name }}"
 }
 
 func (s *{{ Title $service.Name }}) Region() string {
-  return s.region
+	return s.region
 }
 
 func (s *{{ Title $service.Name }}) Profile() string {
-  return s.profile
+	return s.profile
 }
 
 func (s *{{ Title $service.Name }}) ResourceTypes() []string {
 	return []string{
-	{{- range $index, $fetcher := $service.Fetchers }}
+{{- range $, $fetcher := $service.Fetchers }}
 		"{{ $fetcher.ResourceType }}",
-	{{- end }}
+{{- end }}
 	}
 }
 
@@ -190,22 +202,17 @@ func (s *{{ Title $service.Name }}) Fetch(ctx context.Context) (cloud.GraphAPI, 
 
 	allErrors := new(fetch.Error)
 
-  gph, err := s.fetcher.Fetch(context.WithValue(ctx, "region", s.region))
+	gph, err := s.fetcher.Fetch(context.WithValue(ctx, "region", s.region))
 	defer s.fetcher.Reset()
-	
+
 	for _, e := range *fetch.WrapError(err) {
-		switch ee := e.(type) {
-		case awserr.RequestFailure:
-			switch ee.Message() {
-			case accessDenied:
-				allErrors.Add(cloud.ErrFetchAccessDenied)
-			default:
-				allErrors.Add(ee)
-			}
-		case nil:
+		switch {
+		case e == nil:
 			continue
+		case awsfetch.IsAccessDenied(e):
+			allErrors.Add(cloud.ErrFetchAccessDenied)
 		default:
-			allErrors.Add(ee)
+			allErrors.Add(e)
 		}
 	}
 
@@ -218,30 +225,29 @@ func (s *{{ Title $service.Name }}) Fetch(ctx context.Context) (cloud.GraphAPI, 
 	errc := make(chan error)
 	var wg sync.WaitGroup
 
-	{{- range $index, $fetcher := $service.Fetchers }}
+{{- range $, $fetcher := $service.Fetchers }}
 	if getBool(s.config, "aws.{{ $service.Name }}.{{ $fetcher.ResourceType }}.sync", true) {
 		list, err := s.fetcher.Get("{{ $fetcher.ResourceType }}_objects")
 		if err != nil {
 			return gph, err
 		}
-		if _, ok := list.([]*{{ $fetcher.AWSType }}); !ok {
-			return gph, errors.New("cannot cast to '[]*{{ $fetcher.AWSType }}' type from fetch context")
+		objects, ok := list.([]{{ $fetcher.AWSType }})
+		if !ok {
+			return gph, errors.New("cannot cast to '[]{{ $fetcher.AWSType }}' type from fetch context")
 		}
-		for _, r := range list.([]*{{ $fetcher.AWSType }}) {
+		for _, r := range objects {
 			for _, fn := range addParentsFns["{{ $fetcher.ResourceType }}"] {
 				wg.Add(1)
-				go func(f addParentFn, snap tstore.RDFGraph, region string, res *{{ $fetcher.AWSType }}) {
+				go func(f addParentFn, snap tstore.RDFGraph, region string, res {{ $fetcher.AWSType }}) {
 					defer wg.Done()
-					err := f(gph, snap, region, res)
-					if err != nil {
+					if err := f(gph, snap, region, res); err != nil {
 						errc <- err
-						return
 					}
 				}(fn, snap, s.region, r)
 			}
 		}
 	}
-  {{- end }}
+{{- end }}
 
 	go func() {
 		wg.Wait()
@@ -250,7 +256,7 @@ func (s *{{ Title $service.Name }}) Fetch(ctx context.Context) (cloud.GraphAPI, 
 
 	for err := range errc {
 		if err != nil {
-				allErrors.Add(err)
+			allErrors.Add(err)
 		}
 	}
 
@@ -263,11 +269,10 @@ func (s *{{ Title $service.Name }}) Fetch(ctx context.Context) (cloud.GraphAPI, 
 
 func (s *{{ Title $service.Name }}) FetchByType(ctx context.Context, t string) (cloud.GraphAPI, error) {
 	defer s.fetcher.Reset()
-  return s.fetcher.FetchByType(context.WithValue(ctx, "region", s.region), t)
+	return s.fetcher.FetchByType(context.WithValue(ctx, "region", s.region), t)
 }
 
 func (s *{{ Title $service.Name }}) IsSyncDisabled() bool {
 	return !getBool(s.config, "aws.{{ $service.Name }}.sync", true)
 }
-
 {{ end }}`

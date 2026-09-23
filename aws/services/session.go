@@ -17,35 +17,41 @@ limitations under the License.
 package awsservices
 
 import (
+	"context"
 	"fmt"
 	"net/http"
 	"os"
 	"time"
 
-	awssdk "github.com/aws/aws-sdk-go/aws"
-	"github.com/aws/aws-sdk-go/aws/awserr"
-	"github.com/aws/aws-sdk-go/aws/credentials/stscreds"
-	"github.com/aws/aws-sdk-go/aws/ec2metadata"
-	"github.com/aws/aws-sdk-go/aws/request"
-	"github.com/aws/aws-sdk-go/aws/session"
-	"github.com/theazz/awless-ro/aws/config"
+	awssdk "github.com/aws/aws-sdk-go-v2/aws"
+	"github.com/aws/aws-sdk-go-v2/config"
+	"github.com/aws/aws-sdk-go-v2/credentials/stscreds"
+	"github.com/aws/aws-sdk-go-v2/feature/ec2/imds"
+
+	awsconfig "github.com/theazz/awless-ro/aws/config"
 	"github.com/theazz/awless-ro/logger"
 )
 
+// ResolveRegionFromEnv works out a region to start from on first run: the one
+// the environment or the shared config already names, failing that the one this
+// machine runs in if it is an EC2 instance, and failing that it asks.
 func ResolveRegionFromEnv() (region string) {
-	var sess *session.Session
-	var err error
+	ctx := context.Background()
 
-	if sess, err = newSessionResolver().resolve(); err == nil {
-		region = awssdk.StringValue(sess.Config.Region)
+	cfg, err := config.LoadDefaultConfig(ctx,
+		config.WithHTTPClient(&http.Client{Timeout: 1 * time.Second}),
+	)
+	if err == nil {
+		region = cfg.Region
 	}
 
 	if awsconfig.IsValidRegion(region) {
 		fmt.Fprintf(os.Stderr, "Found existing AWS region '%s'. Setting it as your default region.\n", region)
-	} else if sess != nil {
-		if r, err := ec2metadata.New(sess).Region(); err == nil {
-			fmt.Fprintf(os.Stderr, "Found AWS region '%s' from local EC2 instance metadata. Setting it as your default region.\n", r)
-			region = r
+	} else if err == nil {
+		out, merr := imds.NewFromConfig(cfg).GetRegion(ctx, &imds.GetRegionInput{})
+		if merr == nil && awsconfig.IsValidRegion(out.Region) {
+			fmt.Fprintf(os.Stderr, "Found AWS region '%s' from local EC2 instance metadata. Setting it as your default region.\n", out.Region)
+			region = out.Region
 		}
 	}
 
@@ -57,106 +63,79 @@ func ResolveRegionFromEnv() (region string) {
 	return
 }
 
-type sessionResolver struct {
-	region, profile                      string
-	profileSetterCallback                func(val string) error
-	httpClient                           *http.Client
-	credentialHTTPClient                 *http.Client
-	logger                               *logger.Logger
-	enableRequestsFullLogging            bool
-	enableNetworkMonitorRequestsHandlers bool
-	enableCredentialResolvers            bool
+// configResolver builds the aws.Config every service client is created from.
+type configResolver struct {
+	region, profile           string
+	logger                    *logger.Logger
+	enableNetworkMonitor      bool
+	enableCredentialResolvers bool
 }
 
-func newSessionResolver() *sessionResolver {
-	return &sessionResolver{
-		credentialHTTPClient:  &http.Client{Timeout: 1 * time.Second},
-		httpClient:            http.DefaultClient,
-		profileSetterCallback: func(val string) error { return nil },
-		logger:                logger.DiscardLogger,
-	}
+func newConfigResolver() *configResolver {
+	return &configResolver{logger: logger.DiscardLogger}
 }
 
-func (s *sessionResolver) withRegion(region string) *sessionResolver {
+func (s *configResolver) withRegion(region string) *configResolver {
 	s.region = region
 	return s
 }
 
-func (s *sessionResolver) withProfile(profile string) *sessionResolver {
+func (s *configResolver) withProfile(profile string) *configResolver {
 	s.profile = profile
 	return s
 }
 
-func (s *sessionResolver) withCredentialResolvers() *sessionResolver {
+// withCredentialResolvers makes resolve verify up front that credentials can
+// actually be obtained, so a missing or broken profile is reported before any
+// command starts fetching instead of surfacing mid-sync.
+func (s *configResolver) withCredentialResolvers() *configResolver {
 	s.enableCredentialResolvers = true
 	return s
 }
 
-func (s *sessionResolver) withProfileSetter(f func(val string) error) *sessionResolver {
-	s.profileSetterCallback = f
-	return s
-}
-
-func (s *sessionResolver) withLogger(l *logger.Logger) *sessionResolver {
+func (s *configResolver) withLogger(l *logger.Logger) *configResolver {
 	s.logger = l
 	return s
 }
 
-func (s *sessionResolver) withNetworkMonitor(enableNetworkMonitor bool) *sessionResolver {
-	s.enableNetworkMonitorRequestsHandlers = enableNetworkMonitor
+func (s *configResolver) withNetworkMonitor(enable bool) *configResolver {
+	s.enableNetworkMonitor = enable
 	return s
 }
 
-func (s *sessionResolver) resolve() (*session.Session, error) {
-	session, err := session.NewSessionWithOptions(session.Options{
-		Config: awssdk.Config{
-			Region:                        awssdk.String(s.region),
-			HTTPClient:                    s.credentialHTTPClient,
-			CredentialsChainVerboseErrors: awssdk.Bool(true),
-		},
-		SharedConfigState:       session.SharedConfigEnable,
-		AssumeRoleTokenProvider: stscreds.StdinTokenProvider,
-		Profile:                 s.profile,
-	})
+func (s *configResolver) resolve() (awssdk.Config, error) {
+	ctx := context.Background()
+
+	opts := []func(*config.LoadOptions) error{
+		// The shared config files are what carry named profiles, assume-role
+		// chains and SSO sessions, and they are the normal way users configure
+		// AWS, so they are always consulted.
+		config.WithSharedConfigProfile(s.profile),
+		// MFA codes are read from the terminal, the same as the AWS CLI does.
+		config.WithAssumeRoleCredentialOptions(func(o *stscreds.AssumeRoleOptions) {
+			o.TokenProvider = stscreds.StdinTokenProvider
+		}),
+	}
+	if s.region != "" {
+		opts = append(opts, config.WithRegion(s.region))
+	}
+	if s.enableNetworkMonitor {
+		opts = append(opts, config.WithAPIOptions(DefaultNetworkMonitor.APIOptions()))
+	}
+
+	cfg, err := config.LoadDefaultConfig(ctx, opts...)
 	if err != nil {
-		return nil, err
+		return cfg, err
 	}
 
-	if s.enableRequestsFullLogging {
-		session.Config = session.Config.WithLogLevel(awssdk.LogDebugWithHTTPBody)
-	}
-
-	session.Handlers.Retry.PushFront(func(req *request.Request) {
-		if req.IsErrorThrottle() && s.logger != nil {
-			s.logger.Verbosef("retrying %s: %s: %s", req.Operation.Name, req.Error.(awserr.Error).Code(), req.Error.(awserr.Error).Message())
-		}
-	})
-
-	if s.enableNetworkMonitorRequestsHandlers {
-		session.Handlers.Send.PushFront(func(r *request.Request) {
-			DefaultNetworkMonitor.addRequest(r)
-		})
-		session.Handlers.Complete.PushBack(func(r *request.Request) {
-			DefaultNetworkMonitor.setRequestEnd(r)
-		})
-	}
-
-	// Resolve credentials eagerly so that a missing or broken profile is
-	// reported before any command starts fetching, instead of surfacing as an
-	// opaque failure mid-sync.
-	//
-	// The on-disk cache of temporary credentials and the interactive profile
-	// creation prompt used to live here, backed by the deleted aws/spec
-	// package. Both are reintroduced on AWS SDK v2 primitives in the
-	// aws/credentials package (see .kiro/specs/awless-ro/design.md, D5), which
-	// is also where profileSetterCallback gets wired back in.
 	if s.enableCredentialResolvers {
-		if _, err = session.Config.Credentials.Get(); err != nil {
-			return session, err
+		if cfg.Credentials == nil {
+			return cfg, fmt.Errorf("no AWS credentials found for profile '%s'", s.profile)
+		}
+		if _, err := cfg.Credentials.Retrieve(ctx); err != nil {
+			return cfg, err
 		}
 	}
 
-	session.Config.HTTPClient = s.httpClient
-
-	return session, nil
+	return cfg, nil
 }

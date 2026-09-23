@@ -1,19 +1,20 @@
 package awsservices
 
 import (
+	"context"
 	"testing"
 
-	awssdk "github.com/aws/aws-sdk-go/aws"
-	"github.com/aws/aws-sdk-go/service/sts"
-	"github.com/aws/aws-sdk-go/service/sts/stsiface"
+	awssdk "github.com/aws/aws-sdk-go-v2/aws"
+	"github.com/aws/aws-sdk-go-v2/service/sts"
 )
 
-type mockSTS struct {
-	stsiface.STSAPI
+// stubSTS satisfies awsfetch.StsAPI outright: the only STS operation awless-ro
+// calls is GetCallerIdentity, so the narrow interface has exactly one method.
+type stubSTS struct {
 	output *sts.GetCallerIdentityOutput
 }
 
-func (m *mockSTS) GetCallerIdentity(in *sts.GetCallerIdentityInput) (*sts.GetCallerIdentityOutput, error) {
+func (m *stubSTS) GetCallerIdentity(_ context.Context, _ *sts.GetCallerIdentityInput, _ ...func(*sts.Options)) (*sts.GetCallerIdentityOutput, error) {
 	return m.output, nil
 }
 
@@ -30,8 +31,9 @@ func TestGetIdentityParseAllTypesOfUsername(t *testing.T) {
 
 	for _, tcase := range tcases {
 		out := &sts.GetCallerIdentityOutput{Arn: awssdk.String(tcase.arn)}
-		access := Access{STSAPI: &mockSTS{output: out}}
-		id, err := access.GetIdentity()
+		access := Access{StsAPI: &stubSTS{output: out}}
+
+		id, err := access.GetIdentity(context.Background())
 		if err != nil {
 			t.Fatal(err)
 		}

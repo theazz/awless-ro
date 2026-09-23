@@ -17,6 +17,7 @@ limitations under the License.
 package commands
 
 import (
+	"context"
 	"fmt"
 	"io"
 	"net"
@@ -24,8 +25,8 @@ import (
 	"strings"
 	"time"
 
-	"github.com/aws/aws-sdk-go/aws/awserr"
 	"github.com/spf13/cobra"
+	"github.com/theazz/awless-ro/aws/fetch"
 	"github.com/theazz/awless-ro/aws/services"
 	"github.com/theazz/awless-ro/logger"
 )
@@ -61,7 +62,7 @@ var whoamiCmd = &cobra.Command{
 			return
 		}
 
-		me, err := awsservices.AccessService.(*awsservices.Access).GetIdentity()
+		me, err := awsservices.AccessService.(*awsservices.Access).GetIdentity(context.Background())
 		exitOn(err)
 
 		if me.IsRoot() {
@@ -95,9 +96,9 @@ var whoamiCmd = &cobra.Command{
 
 		fmt.Printf("Username: %s, Id: %s, Account: %s\n", me.Resource, me.UserId, me.Account)
 
-		policies, err := awsservices.AccessService.(*awsservices.Access).GetUserPolicies(me.Resource)
+		policies, err := awsservices.AccessService.(*awsservices.Access).GetUserPolicies(context.Background(), me.Resource)
 		if err != nil {
-			if aerr, ok := err.(awserr.RequestFailure); ok && aerr.Code() == "AccessDenied" {
+			if awsfetch.IsAccessDenied(err) {
 				logger.Warningf("user '%s' is not authorized to list its policies", me.Resource)
 			} else {
 				logger.Error(err)

@@ -17,12 +17,15 @@ limitations under the License.
 package awsservices
 
 import (
+	"context"
 	"regexp"
 	"strings"
 	"sync"
 
-	awssdk "github.com/aws/aws-sdk-go/aws"
-	"github.com/aws/aws-sdk-go/service/iam"
+	awssdk "github.com/aws/aws-sdk-go-v2/aws"
+	"github.com/aws/aws-sdk-go-v2/service/iam"
+	"github.com/aws/aws-sdk-go-v2/service/sts"
+
 	"github.com/theazz/awless-ro/cloud"
 )
 
@@ -78,16 +81,16 @@ func (i *Identity) IsUserType() bool {
 	return i.ResourceType == "user"
 }
 
-func (s *Access) GetIdentity() (*Identity, error) {
-	resp, err := s.STSAPI.GetCallerIdentity(nil)
+func (s *Access) GetIdentity(ctx context.Context) (*Identity, error) {
+	resp, err := s.StsAPI.GetCallerIdentity(ctx, &sts.GetCallerIdentityInput{})
 	if err != nil {
 		return nil, err
 	}
 
 	ident := &Identity{
-		Account: awssdk.StringValue(resp.Account),
-		Arn:     awssdk.StringValue(resp.Arn),
-		UserId:  awssdk.StringValue(resp.UserId),
+		Account: awssdk.ToString(resp.Account),
+		Arn:     awssdk.ToString(resp.Arn),
+		UserId:  awssdk.ToString(resp.UserId),
 	}
 
 	splits := strings.Split(ident.Arn, ":")
@@ -115,7 +118,13 @@ type UserPolicies struct {
 	ByGroup  map[string][]string
 }
 
-func (s *Access) GetUserPolicies(username string) (*UserPolicies, error) {
+// GetUserPolicies collects the inline policies, the attached policies and the
+// policies a user inherits through its groups.
+//
+// Every one of these IAM calls pages. Upstream issued each of them once and so
+// reported only the first page, which for a user with many policies meant a
+// silently short answer; they are paginated here.
+func (s *Access) GetUserPolicies(ctx context.Context, username string) (*UserPolicies, error) {
 	var wg sync.WaitGroup
 
 	all := &UserPolicies{
@@ -128,44 +137,54 @@ func (s *Access) GetUserPolicies(username string) (*UserPolicies, error) {
 	wg.Add(1)
 	go func() {
 		defer wg.Done()
-		policies, err := s.ListUserPolicies(&iam.ListUserPoliciesInput{
+		paginator := iam.NewListUserPoliciesPaginator(s.IamAPI, &iam.ListUserPoliciesInput{
 			UserName: awssdk.String(username),
 		})
-		if err != nil {
-			errc <- err
-			return
-		}
-
-		for _, name := range policies.PolicyNames {
-			all.Inlined = append(all.Inlined, awssdk.StringValue(name))
+		for paginator.HasMorePages() {
+			policies, err := paginator.NextPage(ctx)
+			if err != nil {
+				errc <- err
+				return
+			}
+			all.Inlined = append(all.Inlined, policies.PolicyNames...)
 		}
 	}()
 
 	wg.Add(1)
 	go func() {
 		defer wg.Done()
-		attached, err := s.ListAttachedUserPolicies(&iam.ListAttachedUserPoliciesInput{
+		paginator := iam.NewListAttachedUserPoliciesPaginator(s.IamAPI, &iam.ListAttachedUserPoliciesInput{
 			UserName: awssdk.String(username),
 		})
-		if err != nil {
-			errc <- err
-			return
-		}
-
-		for _, pol := range attached.AttachedPolicies {
-			all.Attached = append(all.Attached, awssdk.StringValue(pol.PolicyName))
+		for paginator.HasMorePages() {
+			attached, err := paginator.NextPage(ctx)
+			if err != nil {
+				errc <- err
+				return
+			}
+			for _, pol := range attached.AttachedPolicies {
+				all.Attached = append(all.Attached, awssdk.ToString(pol.PolicyName))
+			}
 		}
 	}()
 
 	wg.Add(1)
 	go func() {
 		defer wg.Done()
-		groups, err := s.ListGroupsForUser(&iam.ListGroupsForUserInput{
+
+		var groupNames []string
+		groupsPaginator := iam.NewListGroupsForUserPaginator(s.IamAPI, &iam.ListGroupsForUserInput{
 			UserName: awssdk.String(username),
 		})
-		if err != nil {
-			errc <- err
-			return
+		for groupsPaginator.HasMorePages() {
+			groups, err := groupsPaginator.NextPage(ctx)
+			if err != nil {
+				errc <- err
+				return
+			}
+			for _, group := range groups.Groups {
+				groupNames = append(groupNames, awssdk.ToString(group.GroupName))
+			}
 		}
 
 		type result struct {
@@ -173,22 +192,25 @@ func (s *Access) GetUserPolicies(username string) (*UserPolicies, error) {
 		}
 		resultC := make(chan result)
 		var wgg sync.WaitGroup
-		for _, group := range groups.Groups {
+		for _, group := range groupNames {
 			wgg.Add(1)
 			go func(name string) {
 				defer wgg.Done()
 
-				output, err := s.ListAttachedGroupPolicies(&iam.ListAttachedGroupPoliciesInput{
+				paginator := iam.NewListAttachedGroupPoliciesPaginator(s.IamAPI, &iam.ListAttachedGroupPoliciesInput{
 					GroupName: awssdk.String(name),
 				})
-				if err != nil {
-					errc <- err
-					return
+				for paginator.HasMorePages() {
+					output, err := paginator.NextPage(ctx)
+					if err != nil {
+						errc <- err
+						return
+					}
+					for _, pol := range output.AttachedPolicies {
+						resultC <- result{group: name, policy: awssdk.ToString(pol.PolicyName)}
+					}
 				}
-				for _, pol := range output.AttachedPolicies {
-					resultC <- result{group: name, policy: awssdk.StringValue(pol.PolicyName)}
-				}
-			}(awssdk.StringValue(group.GroupName))
+			}(group)
 		}
 
 		go func() {

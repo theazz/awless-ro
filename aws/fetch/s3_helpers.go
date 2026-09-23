@@ -2,27 +2,27 @@ package awsfetch
 
 import (
 	"context"
+	"strings"
 	"sync"
 
-	"strings"
+	"github.com/aws/aws-sdk-go-v2/aws"
+	"github.com/aws/aws-sdk-go-v2/service/s3"
+	s3types "github.com/aws/aws-sdk-go-v2/service/s3/types"
 
-	awssdk "github.com/aws/aws-sdk-go/aws"
-	"github.com/aws/aws-sdk-go/service/s3"
-	"github.com/aws/aws-sdk-go/service/s3/s3iface"
 	"github.com/theazz/awless-ro/aws/conv"
 	"github.com/theazz/awless-ro/cloud/rdf"
 	"github.com/theazz/awless-ro/fetch"
 	"github.com/theazz/awless-ro/graph"
 )
 
-func forEachBucketParallel(ctx context.Context, cache fetch.Cache, api s3iface.S3API, f func(b *s3.Bucket) error) error {
-	var buckets []*s3.Bucket
+func forEachBucketParallel(ctx context.Context, cache fetch.Cache, api S3API, f func(b s3types.Bucket) error) error {
+	var buckets []s3types.Bucket
 
 	if val, e := cache.Get("getBucketsPerRegion", func() (interface{}, error) {
 		return getBucketsPerRegion(ctx, api)
 	}); e != nil {
 		return e
-	} else if v, ok := val.([]*s3.Bucket); ok {
+	} else if v, ok := val.([]s3types.Bucket); ok {
 		buckets = v
 	}
 
@@ -31,7 +31,7 @@ func forEachBucketParallel(ctx context.Context, cache fetch.Cache, api s3iface.S
 
 	for _, output := range buckets {
 		wg.Add(1)
-		go func(b *s3.Bucket) {
+		go func(b s3types.Bucket) {
 			defer wg.Done()
 			if err := f(b); err != nil {
 				errc <- err
@@ -52,65 +52,38 @@ func forEachBucketParallel(ctx context.Context, cache fetch.Cache, api s3iface.S
 	return nil
 }
 
-func fetchObjectsForBucket(ctx context.Context, api s3iface.S3API, bucket *s3.Bucket, resourcesC chan<- *graph.Resource) error {
-	objectc := make(chan []*s3.Object)
-	errc := make(chan error)
-
-	var wg sync.WaitGroup
-	wg.Add(1)
-	go func() {
-		defer wg.Done()
-		if err := api.ListObjectsPages(&s3.ListObjectsInput{Bucket: bucket.Name}, func(page *s3.ListObjectsOutput, lastPage bool) bool {
-			objectc <- page.Contents
-			return !lastPage
-		}); err != nil {
-			errc <- err
-			return
+func fetchObjectsForBucket(ctx context.Context, api S3API, bucket s3types.Bucket, resourcesC chan<- *graph.Resource) error {
+	paginator := s3.NewListObjectsV2Paginator(api, &s3.ListObjectsV2Input{Bucket: bucket.Name})
+	for paginator.HasMorePages() {
+		page, err := paginator.NextPage(ctx)
+		if err != nil {
+			return err
 		}
-	}()
-
-	processObjects := func(objs []*s3.Object) {
-		for _, output := range objs {
+		for _, output := range page.Contents {
 			res, err := awsconv.NewResource(output)
 			if err != nil {
-				errc <- err
-				return
+				return err
 			}
-			res.SetProperty("Bucket", awssdk.StringValue(bucket.Name))
+			res.SetProperty("Bucket", aws.ToString(bucket.Name))
 			resourcesC <- res
+
 			parent, err := awsconv.InitResource(bucket)
 			if err != nil {
-				errc <- err
-				return
+				return err
 			}
 			res.AddRelation(rdf.ChildrenOfRel, parent)
 			resourcesC <- parent
 		}
 	}
-
-	go func() {
-		wg.Wait()
-		close(objectc)
-		close(errc)
-	}()
-
-	for {
-		select {
-		case err := <-errc:
-			return err
-		case objects, ok := <-objectc:
-			if !ok {
-				return nil
-			}
-			processObjects(objects)
-		}
-	}
+	return nil
 }
 
-func getBucketsPerRegion(ctx context.Context, api s3iface.S3API) ([]*s3.Bucket, error) {
-	var buckets []*s3.Bucket
+// getBucketsPerRegion keeps only the buckets that live in the region being
+// synced. ListBuckets is global, so each bucket's location needs its own call.
+func getBucketsPerRegion(ctx context.Context, api S3API) ([]s3types.Bucket, error) {
+	var buckets []s3types.Bucket
 
-	out, err := api.ListBuckets(&s3.ListBucketsInput{})
+	out, err := api.ListBuckets(ctx, &s3.ListBucketsInput{})
 	if err != nil {
 		return buckets, err
 	}
@@ -127,7 +100,7 @@ func getBucketsPerRegion(ctx context.Context, api s3iface.S3API) ([]*s3.Bucket, 
 
 	if hasBucketFilter {
 		for _, b := range out.Buckets {
-			if strings.Contains(strings.ToLower(*b.Name), strings.ToLower(userBucketName)) {
+			if strings.Contains(strings.ToLower(aws.ToString(b.Name)), strings.ToLower(userBucketName)) {
 				buckets = append(buckets, b)
 			}
 		}
@@ -135,23 +108,24 @@ func getBucketsPerRegion(ctx context.Context, api s3iface.S3API) ([]*s3.Bucket, 
 		buckets = out.Buckets
 	}
 
-	bucketc := make(chan *s3.Bucket)
+	bucketc := make(chan s3types.Bucket)
 	errc := make(chan error)
 
 	var wg sync.WaitGroup
 
 	for _, bucket := range buckets {
 		wg.Add(1)
-		go func(b *s3.Bucket) {
+		go func(b s3types.Bucket) {
 			defer wg.Done()
-			loc, err := api.GetBucketLocation(&s3.GetBucketLocationInput{Bucket: b.Name})
+			loc, err := api.GetBucketLocation(ctx, &s3.GetBucketLocationInput{Bucket: b.Name})
 			if err != nil {
 				errc <- err
 				return
 			}
 
 			region, _ := ctx.Value("region").(string)
-			switch awssdk.StringValue(loc.LocationConstraint) {
+			// An empty location constraint means us-east-1.
+			switch string(loc.LocationConstraint) {
 			case "":
 				if region == "us-east-1" {
 					bucketc <- b
@@ -166,7 +140,7 @@ func getBucketsPerRegion(ctx context.Context, api s3iface.S3API) ([]*s3.Bucket, 
 		close(bucketc)
 	}()
 
-	var bucketsInRegion []*s3.Bucket
+	var bucketsInRegion []s3types.Bucket
 	for {
 		select {
 		case err := <-errc:
@@ -182,32 +156,34 @@ func getBucketsPerRegion(ctx context.Context, api s3iface.S3API) ([]*s3.Bucket, 
 	}
 }
 
-func fetchAndExtractGrantsFn(ctx context.Context, api s3iface.S3API, bucketName string) ([]*graph.Grant, error) {
-	acls, err := api.GetBucketAcl(&s3.GetBucketAclInput{Bucket: awssdk.String(bucketName)})
+func fetchAndExtractGrantsFn(ctx context.Context, api S3API, bucketName string) ([]*graph.Grant, error) {
+	acls, err := api.GetBucketAcl(ctx, &s3.GetBucketAclInput{Bucket: aws.String(bucketName)})
 	if err != nil {
 		return nil, err
 	}
 	var grants []*graph.Grant
 	for _, acl := range acls.Grants {
-		displayName := awssdk.StringValue(acl.Grantee.DisplayName)
-		granteeType := awssdk.StringValue(acl.Grantee.Type)
-		granteeId := awssdk.StringValue(acl.Grantee.ID)
+		var displayName, granteeType, granteeId string
+		if acl.Grantee != nil {
+			displayName = aws.ToString(acl.Grantee.DisplayName)
+			granteeType = string(acl.Grantee.Type)
+			granteeId = aws.ToString(acl.Grantee.ID)
 
-		if awssdk.StringValue(acl.Grantee.EmailAddress) != "" {
-			displayName += "<" + awssdk.StringValue(acl.Grantee.EmailAddress) + ">"
+			if aws.ToString(acl.Grantee.EmailAddress) != "" {
+				displayName += "<" + aws.ToString(acl.Grantee.EmailAddress) + ">"
+			}
+			if granteeType == "Group" {
+				granteeId += aws.ToString(acl.Grantee.URI)
+			}
 		}
-		if granteeType == "Group" {
-			granteeId += awssdk.StringValue(acl.Grantee.URI)
-		}
-		grant := &graph.Grant{
-			Permission: awssdk.StringValue(acl.Permission),
+		grants = append(grants, &graph.Grant{
+			Permission: string(acl.Permission),
 			Grantee: graph.Grantee{
 				GranteeID:          granteeId,
 				GranteeType:        granteeType,
 				GranteeDisplayName: displayName,
 			},
-		}
-		grants = append(grants, grant)
+		})
 	}
 	return grants, nil
 }

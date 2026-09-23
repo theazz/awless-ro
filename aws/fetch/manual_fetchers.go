@@ -2,20 +2,25 @@ package awsfetch
 
 import (
 	"context"
+	"errors"
 	"fmt"
 	"strconv"
 	"strings"
 	"sync"
 	"time"
 
-	awssdk "github.com/aws/aws-sdk-go/aws"
-	"github.com/aws/aws-sdk-go/aws/awserr"
-	"github.com/aws/aws-sdk-go/service/ecs"
-	"github.com/aws/aws-sdk-go/service/elbv2"
-	"github.com/aws/aws-sdk-go/service/iam"
-	"github.com/aws/aws-sdk-go/service/route53"
-	"github.com/aws/aws-sdk-go/service/s3"
-	"github.com/aws/aws-sdk-go/service/sqs"
+	awssdk "github.com/aws/aws-sdk-go-v2/aws"
+	"github.com/aws/aws-sdk-go-v2/service/ecs"
+	ecstypes "github.com/aws/aws-sdk-go-v2/service/ecs/types"
+	"github.com/aws/aws-sdk-go-v2/service/elasticloadbalancingv2"
+	elbv2types "github.com/aws/aws-sdk-go-v2/service/elasticloadbalancingv2/types"
+	"github.com/aws/aws-sdk-go-v2/service/iam"
+	iamtypes "github.com/aws/aws-sdk-go-v2/service/iam/types"
+	"github.com/aws/aws-sdk-go-v2/service/route53"
+	route53types "github.com/aws/aws-sdk-go-v2/service/route53/types"
+	s3types "github.com/aws/aws-sdk-go-v2/service/s3/types"
+	"github.com/aws/aws-sdk-go-v2/service/sqs"
+	sqstypes "github.com/aws/aws-sdk-go-v2/service/sqs/types"
 	"github.com/theazz/awless-ro/aws/conv"
 	"github.com/theazz/awless-ro/cloud"
 	"github.com/theazz/awless-ro/cloud/properties"
@@ -26,7 +31,7 @@ import (
 
 func addManualInfraFetchFuncs(conf *Config, funcs map[string]fetch.Func) {
 	funcs["containerinstance"] = func(ctx context.Context, cache fetch.Cache) ([]*graph.Resource, interface{}, error) {
-		var objects []*ecs.ContainerInstance
+		var objects []ecstypes.ContainerInstance
 		var resources []*graph.Resource
 
 		if !conf.getBoolDefaultTrue("aws.infra.containerinstance.sync") && !getBoolFromContext(ctx, "force") {
@@ -40,42 +45,44 @@ func addManualInfraFetchFuncs(conf *Config, funcs map[string]fetch.Func) {
 		}
 
 		for _, cluster := range clusterArns {
-			var badResErr error
-			err := conf.APIs.Ecs.ListContainerInstancesPages(&ecs.ListContainerInstancesInput{Cluster: &cluster}, func(out *ecs.ListContainerInstancesOutput, lastPage bool) (shouldContinue bool) {
-				var containerInstancesOut *ecs.DescribeContainerInstancesOutput
+			paginator := ecs.NewListContainerInstancesPaginator(conf.APIs.Ecs, &ecs.ListContainerInstancesInput{
+				Cluster: awssdk.String(cluster),
+			})
+			for paginator.HasMorePages() {
+				out, err := paginator.NextPage(ctx)
+				if err != nil {
+					return resources, objects, err
+				}
 				if len(out.ContainerInstanceArns) == 0 {
-					return out.NextToken != nil
+					continue
 				}
 
-				if containerInstancesOut, badResErr = conf.APIs.Ecs.DescribeContainerInstances(&ecs.DescribeContainerInstancesInput{Cluster: &cluster, ContainerInstances: out.ContainerInstanceArns}); badResErr != nil {
-					return false
+				described, err := conf.APIs.Ecs.DescribeContainerInstances(ctx, &ecs.DescribeContainerInstancesInput{
+					Cluster:            awssdk.String(cluster),
+					ContainerInstances: out.ContainerInstanceArns,
+				})
+				if err != nil {
+					return resources, objects, err
 				}
 
-				for _, inst := range containerInstancesOut.ContainerInstances {
+				for _, inst := range described.ContainerInstances {
 					objects = append(objects, inst)
-					var res *graph.Resource
-					if res, badResErr = awsconv.NewResource(inst); badResErr != nil {
-						return false
+					res, err := awsconv.NewResource(inst)
+					if err != nil {
+						return resources, objects, err
 					}
 					res.Properties()[properties.Cluster] = cluster
 					resources = append(resources, res)
 					parent := graph.InitResource(cloud.ContainerCluster, cluster)
 					res.AddRelation(rdf.ChildrenOfRel, parent)
 				}
-				return out.NextToken != nil
-			})
-			if err != nil {
-				return resources, objects, err
-			}
-			if badResErr != nil {
-				return resources, objects, badResErr
 			}
 		}
 		return resources, objects, nil
 	}
 
 	funcs["container"] = func(ctx context.Context, cache fetch.Cache) ([]*graph.Resource, interface{}, error) {
-		var objects []*ecs.Container
+		var objects []ecstypes.Container
 		var resources []*graph.Resource
 
 		if !conf.getBoolDefaultTrue("aws.infra.container.sync") && !getBoolFromContext(ctx, "force") {
@@ -83,13 +90,13 @@ func addManualInfraFetchFuncs(conf *Config, funcs map[string]fetch.Func) {
 			return resources, objects, nil
 		}
 
-		var tasks []*ecs.Task
+		var tasks []ecstypes.Task
 
 		if val, e := cache.Get("getAllTasks", func() (interface{}, error) {
 			return getAllTasks(ctx, cache, conf.APIs.Ecs)
 		}); e != nil {
 			return resources, objects, e
-		} else if v, ok := val.([]*ecs.Task); ok {
+		} else if v, ok := val.([]ecstypes.Task); ok {
 			tasks = v
 		}
 
@@ -101,30 +108,30 @@ func addManualInfraFetchFuncs(conf *Config, funcs map[string]fetch.Func) {
 					return nil, nil, err
 				}
 				if task.ClusterArn != nil {
-					res.Properties()[properties.Cluster] = awssdk.StringValue(task.ClusterArn)
+					res.Properties()[properties.Cluster] = awssdk.ToString(task.ClusterArn)
 				}
 				if task.ContainerInstanceArn != nil {
-					res.Properties()[properties.ContainerInstance] = awssdk.StringValue(task.ContainerInstanceArn)
+					res.Properties()[properties.ContainerInstance] = awssdk.ToString(task.ContainerInstanceArn)
 				}
 				if task.CreatedAt != nil {
-					res.Properties()[properties.Created] = awssdk.TimeValue(task.CreatedAt)
+					res.Properties()[properties.Created] = awssdk.ToTime(task.CreatedAt)
 				}
 				if task.StartedAt != nil {
-					res.Properties()[properties.Launched] = awssdk.TimeValue(task.StartedAt)
+					res.Properties()[properties.Launched] = awssdk.ToTime(task.StartedAt)
 				}
 				if task.StoppedAt != nil {
-					res.Properties()[properties.Stopped] = awssdk.TimeValue(task.StoppedAt)
+					res.Properties()[properties.Stopped] = awssdk.ToTime(task.StoppedAt)
 				}
 				if task.TaskDefinitionArn != nil {
-					res.Properties()[properties.ContainerTask] = awssdk.StringValue(task.TaskDefinitionArn)
+					res.Properties()[properties.ContainerTask] = awssdk.ToString(task.TaskDefinitionArn)
 				}
 				if task.Group != nil {
-					res.Properties()[properties.DeploymentName] = awssdk.StringValue(task.Group)
+					res.Properties()[properties.DeploymentName] = awssdk.ToString(task.Group)
 				}
 
-				res.AddRelation(rdf.ChildrenOfRel, graph.InitResource(cloud.ContainerCluster, awssdk.StringValue(task.ClusterArn)))
-				res.AddRelation(rdf.DependingOnRel, graph.InitResource(cloud.ContainerTask, awssdk.StringValue(task.TaskDefinitionArn)))
-				res.AddRelation(rdf.DependingOnRel, graph.InitResource(cloud.ContainerInstance, awssdk.StringValue(task.ContainerInstanceArn)))
+				res.AddRelation(rdf.ChildrenOfRel, graph.InitResource(cloud.ContainerCluster, awssdk.ToString(task.ClusterArn)))
+				res.AddRelation(rdf.DependingOnRel, graph.InitResource(cloud.ContainerTask, awssdk.ToString(task.TaskDefinitionArn)))
+				res.AddRelation(rdf.DependingOnRel, graph.InitResource(cloud.ContainerInstance, awssdk.ToString(task.ContainerInstanceArn)))
 
 				resources = append(resources, res)
 			}
@@ -134,7 +141,7 @@ func addManualInfraFetchFuncs(conf *Config, funcs map[string]fetch.Func) {
 	}
 
 	funcs["containertask"] = func(ctx context.Context, cache fetch.Cache) ([]*graph.Resource, interface{}, error) {
-		var objects []*ecs.TaskDefinition
+		var objects []ecstypes.TaskDefinition
 		var resources []*graph.Resource
 
 		if !conf.getBoolDefaultTrue("aws.infra.containertask.sync") && !getBoolFromContext(ctx, "force") {
@@ -143,7 +150,7 @@ func addManualInfraFetchFuncs(conf *Config, funcs map[string]fetch.Func) {
 		}
 
 		type resStruct struct {
-			res *ecs.TaskDefinition
+			res ecstypes.TaskDefinition
 			err error
 		}
 
@@ -155,23 +162,29 @@ func addManualInfraFetchFuncs(conf *Config, funcs map[string]fetch.Func) {
 			fetchDefinitionsInput.FamilyPrefix = &givenFamilyPrefix
 		}
 
-		err := conf.APIs.Ecs.ListTaskDefinitionsPages(fetchDefinitionsInput, func(out *ecs.ListTaskDefinitionsOutput, lastPage bool) (shouldContinue bool) {
+		definitionsPaginator := ecs.NewListTaskDefinitionsPaginator(conf.APIs.Ecs, fetchDefinitionsInput)
+		for definitionsPaginator.HasMorePages() {
+			out, err := definitionsPaginator.NextPage(ctx)
+			if err != nil {
+				return resources, objects, err
+			}
 			for _, arn := range out.TaskDefinitionArns {
 				wg.Add(1)
-				go func(taskDefArn *string) {
+				go func(taskDefArn string) {
 					defer wg.Done()
-					tasksOut, err := conf.APIs.Ecs.DescribeTaskDefinition(&ecs.DescribeTaskDefinitionInput{TaskDefinition: taskDefArn})
+					tasksOut, err := conf.APIs.Ecs.DescribeTaskDefinition(ctx, &ecs.DescribeTaskDefinitionInput{
+						TaskDefinition: awssdk.String(taskDefArn),
+					})
 					if err != nil {
 						resc <- resStruct{err: err}
 						return
 					}
-					resc <- resStruct{res: tasksOut.TaskDefinition}
+					if tasksOut.TaskDefinition == nil {
+						return
+					}
+					resc <- resStruct{res: *tasksOut.TaskDefinition}
 				}(arn)
 			}
-			return out.NextToken != nil
-		})
-		if err != nil {
-			return resources, objects, err
 		}
 
 		go func() {
@@ -179,12 +192,12 @@ func addManualInfraFetchFuncs(conf *Config, funcs map[string]fetch.Func) {
 			close(resc)
 		}()
 
-		var tasks []*ecs.Task
+		var tasks []ecstypes.Task
 		if val, e := cache.Get("getAllTasks", func() (interface{}, error) {
 			return getAllTasks(ctx, cache, conf.APIs.Ecs)
 		}); e != nil {
 			return resources, objects, e
-		} else if v, ok := val.([]*ecs.Task); ok {
+		} else if v, ok := val.([]ecstypes.Task); ok {
 			tasks = v
 		}
 
@@ -197,17 +210,18 @@ func addManualInfraFetchFuncs(conf *Config, funcs map[string]fetch.Func) {
 			}
 			objects = append(objects, res.res)
 			var graphres *graph.Resource
-			if graphres, err = awsconv.NewResource(res.res); err != nil {
-				errors = appendIfNotInSlice(errors, err.Error())
+			graphres, cerr := awsconv.NewResource(res.res)
+			if cerr != nil {
+				errors = appendIfNotInSlice(errors, cerr.Error())
 				continue
 			}
 			var deployments []*graph.KeyValue
 			var runningServicesCount, stoppedServicesCount, runningTasksCount, stoppedTasksCount uint
 			for _, t := range tasks {
-				if awssdk.StringValue(t.TaskDefinitionArn) == awssdk.StringValue(res.res.TaskDefinitionArn) {
-					group := awssdk.StringValue(t.Group)
-					state := strings.ToLower(awssdk.StringValue(t.LastStatus))
-					clusterArn := awssdk.StringValue(t.ClusterArn)
+				if awssdk.ToString(t.TaskDefinitionArn) == awssdk.ToString(res.res.TaskDefinitionArn) {
+					group := awssdk.ToString(t.Group)
+					state := strings.ToLower(awssdk.ToString(t.LastStatus))
+					clusterArn := awssdk.ToString(t.ClusterArn)
 					if strings.HasPrefix(group, "service:") {
 						switch state {
 						case "stopped":
@@ -235,7 +249,7 @@ func addManualInfraFetchFuncs(conf *Config, funcs map[string]fetch.Func) {
 			}
 			switch {
 			case runningServicesCount+stoppedServicesCount+runningTasksCount+stoppedTasksCount == 0:
-				if state := strings.ToLower(awssdk.StringValue(res.res.Status)); state == "active" {
+				if state := strings.ToLower(string(res.res.Status)); state == "active" {
 					graphres.Properties()[properties.State] = "ready"
 				} else {
 					graphres.Properties()[properties.State] = state
@@ -263,15 +277,15 @@ func addManualInfraFetchFuncs(conf *Config, funcs map[string]fetch.Func) {
 		}
 
 		if len(errors) > 0 {
-			err = fmt.Errorf("%s", strings.Join(errors, "; "))
+			return resources, objects, fmt.Errorf("%s", strings.Join(errors, "; "))
 		}
 
-		return resources, objects, err
+		return resources, objects, nil
 	}
 
 	funcs["containercluster"] = func(ctx context.Context, cache fetch.Cache) ([]*graph.Resource, interface{}, error) {
 		var resources []*graph.Resource
-		var objects []*ecs.Cluster
+		var objects []ecstypes.Cluster
 
 		if !conf.getBoolDefaultTrue("aws.infra.containercluster.sync") && !getBoolFromContext(ctx, "force") {
 			conf.Log.Verbose("sync: *disabled* for resource infra[containercluster]")
@@ -284,7 +298,7 @@ func addManualInfraFetchFuncs(conf *Config, funcs map[string]fetch.Func) {
 		}
 
 		for _, clusterArns := range sliceOfSlice(clusterNames, 100) {
-			clustersOut, err := conf.APIs.Ecs.DescribeClusters(&ecs.DescribeClustersInput{Clusters: awssdk.StringSlice(clusterArns)})
+			clustersOut, err := conf.APIs.Ecs.DescribeClusters(ctx, &ecs.DescribeClustersInput{Clusters: clusterArns})
 			if err != nil {
 				return resources, objects, err
 			}
@@ -302,7 +316,7 @@ func addManualInfraFetchFuncs(conf *Config, funcs map[string]fetch.Func) {
 	}
 
 	funcs["listener"] = func(ctx context.Context, cache fetch.Cache) ([]*graph.Resource, interface{}, error) {
-		var objects []*elbv2.Listener
+		var objects []elbv2types.Listener
 		var resources []*graph.Resource
 
 		if !conf.getBoolDefaultTrue("aws.infra.listener.sync") && !getBoolFromContext(ctx, "force") {
@@ -311,31 +325,34 @@ func addManualInfraFetchFuncs(conf *Config, funcs map[string]fetch.Func) {
 		}
 
 		errc := make(chan error)
-		resultc := make(chan *elbv2.Listener)
+		resultc := make(chan elbv2types.Listener)
 		var wg sync.WaitGroup
 
-		err := conf.APIs.Elbv2.DescribeLoadBalancersPages(&elbv2.DescribeLoadBalancersInput{},
-			func(out *elbv2.DescribeLoadBalancersOutput, lastPage bool) (shouldContinue bool) {
-				for _, lb := range out.LoadBalancers {
-					wg.Add(1)
-					go func(lb *elbv2.LoadBalancer) {
-						defer wg.Done()
-						err := conf.APIs.Elbv2.DescribeListenersPages(&elbv2.DescribeListenersInput{LoadBalancerArn: lb.LoadBalancerArn},
-							func(out *elbv2.DescribeListenersOutput, lastPage bool) (shouldContinue bool) {
-								for _, listen := range out.Listeners {
-									resultc <- listen
-								}
-								return out.NextMarker != nil
-							})
+		balancers := elasticloadbalancingv2.NewDescribeLoadBalancersPaginator(conf.APIs.Elbv2,
+			&elasticloadbalancingv2.DescribeLoadBalancersInput{})
+		for balancers.HasMorePages() {
+			out, err := balancers.NextPage(ctx)
+			if err != nil {
+				return resources, objects, err
+			}
+			for _, lb := range out.LoadBalancers {
+				wg.Add(1)
+				go func(arn *string) {
+					defer wg.Done()
+					listeners := elasticloadbalancingv2.NewDescribeListenersPaginator(conf.APIs.Elbv2,
+						&elasticloadbalancingv2.DescribeListenersInput{LoadBalancerArn: arn})
+					for listeners.HasMorePages() {
+						page, err := listeners.NextPage(ctx)
 						if err != nil {
 							errc <- err
+							return
 						}
-					}(lb)
-				}
-				return out.NextMarker != nil
-			})
-		if err != nil {
-			return resources, objects, err
+						for _, listen := range page.Listeners {
+							resultc <- listen
+						}
+					}
+				}(lb.LoadBalancerArn)
+			}
 		}
 
 		go func() {
@@ -367,7 +384,7 @@ func addManualInfraFetchFuncs(conf *Config, funcs map[string]fetch.Func) {
 func addManualAccessFetchFuncs(conf *Config, funcs map[string]fetch.Func) {
 	funcs["user"] = func(ctx context.Context, cache fetch.Cache) ([]*graph.Resource, interface{}, error) {
 		var resources []*graph.Resource
-		var objects []*iam.UserDetail
+		var objects []iamtypes.UserDetail
 
 		if !conf.getBoolDefaultTrue("aws.access.user.sync") && !getBoolFromContext(ctx, "force") {
 			conf.Log.Verbose("sync: *disabled* for resource access[user]")
@@ -376,7 +393,7 @@ func addManualAccessFetchFuncs(conf *Config, funcs map[string]fetch.Func) {
 
 		var wg sync.WaitGroup
 		resourcesC := make(chan *graph.Resource)
-		objectsC := make(chan *iam.UserDetail)
+		objectsC := make(chan iamtypes.UserDetail)
 		errC := make(chan error)
 
 		wg.Add(1)
@@ -401,19 +418,21 @@ func addManualAccessFetchFuncs(conf *Config, funcs map[string]fetch.Func) {
 		wg.Add(1)
 		go func() {
 			defer wg.Done()
-			err := conf.APIs.Iam.ListUsersPages(&iam.ListUsersInput{}, func(page *iam.ListUsersOutput, lastPage bool) bool {
+			paginator := iam.NewListUsersPaginator(conf.APIs.Iam, &iam.ListUsersInput{})
+			for paginator.HasMorePages() {
+				page, err := paginator.NextPage(ctx)
+				if err != nil {
+					errC <- err
+					return
+				}
 				for _, user := range page.Users {
 					res, e := awsconv.NewResource(user)
 					if e != nil {
 						errC <- e
-						return false
+						return
 					}
 					resourcesC <- res
 				}
-				return page.Marker != nil
-			})
-			if err != nil {
-				errC <- err
 			}
 		}()
 
@@ -441,16 +460,14 @@ func addManualAccessFetchFuncs(conf *Config, funcs map[string]fetch.Func) {
 				if !ok {
 					return resources, objects, nil
 				}
-				if o != nil {
-					objects = append(objects, o)
-				}
+				objects = append(objects, o)
 			}
 		}
 	}
 
 	funcs["group"] = func(ctx context.Context, cache fetch.Cache) ([]*graph.Resource, interface{}, error) {
 		var resources []*graph.Resource
-		var objects []*iam.GroupDetail
+		var objects []iamtypes.GroupDetail
 
 		if !conf.getBoolDefaultTrue("aws.access.group.sync") && !getBoolFromContext(ctx, "force") {
 			conf.Log.Verbose("sync: *disabled* for resource access[group]")
@@ -476,7 +493,7 @@ func addManualAccessFetchFuncs(conf *Config, funcs map[string]fetch.Func) {
 
 	funcs["role"] = func(ctx context.Context, cache fetch.Cache) ([]*graph.Resource, interface{}, error) {
 		var resources []*graph.Resource
-		var objects []*iam.RoleDetail
+		var objects []iamtypes.RoleDetail
 
 		if !conf.getBoolDefaultTrue("aws.access.role.sync") && !getBoolFromContext(ctx, "force") {
 			conf.Log.Verbose("sync: *disabled* for resource access[role]")
@@ -502,7 +519,7 @@ func addManualAccessFetchFuncs(conf *Config, funcs map[string]fetch.Func) {
 
 	funcs["policy"] = func(ctx context.Context, cache fetch.Cache) ([]*graph.Resource, interface{}, error) {
 		var resources []*graph.Resource
-		var objects []*iam.Policy
+		var objects []iamtypes.Policy
 
 		if !conf.getBoolDefaultTrue("aws.access.policy.sync") && !getBoolFromContext(ctx, "force") {
 			conf.Log.Verbose("sync: *disabled* for resource access[policy]")
@@ -510,7 +527,7 @@ func addManualAccessFetchFuncs(conf *Config, funcs map[string]fetch.Func) {
 		}
 
 		errC := make(chan error)
-		objectsC := make(chan *iam.Policy)
+		objectsC := make(chan iamtypes.Policy)
 		resourcesC := make(chan *graph.Resource)
 
 		var wg sync.WaitGroup
@@ -530,12 +547,12 @@ func addManualAccessFetchFuncs(conf *Config, funcs map[string]fetch.Func) {
 					errC <- e
 					return
 				}
-				if strings.HasPrefix(awssdk.StringValue(p.Arn), "arn:aws:iam::aws:policy") {
+				if strings.HasPrefix(awssdk.ToString(p.Arn), "arn:aws:iam::aws:policy") {
 					res.Properties()[properties.Type] = "AWS Managed"
 				} else {
 					res.Properties()[properties.Type] = "Customer Managed"
 				}
-				res.Properties()[properties.Attached] = awssdk.Int64Value(p.AttachmentCount) > 0
+				res.Properties()[properties.Attached] = int64(awssdk.ToInt32(p.AttachmentCount)) > 0
 				resourcesC <- res
 			}
 		}()
@@ -569,7 +586,7 @@ func addManualAccessFetchFuncs(conf *Config, funcs map[string]fetch.Func) {
 	}
 	funcs["accesskey"] = func(ctx context.Context, cache fetch.Cache) ([]*graph.Resource, interface{}, error) {
 		var resources []*graph.Resource
-		var objects []*iam.AccessKeyMetadata
+		var objects []iamtypes.AccessKeyMetadata
 
 		if !conf.getBoolDefaultTrue("aws.access.accesskey.sync") && !getBoolFromContext(ctx, "force") {
 			conf.Log.Verbose("sync: *disabled* for resource access[accesskey]")
@@ -578,47 +595,52 @@ func addManualAccessFetchFuncs(conf *Config, funcs map[string]fetch.Func) {
 
 		var wg sync.WaitGroup
 		resourcesC := make(chan *graph.Resource)
-		objectsC := make(chan *iam.AccessKeyMetadata)
+		objectsC := make(chan iamtypes.AccessKeyMetadata)
 		errC := make(chan error)
 		var hasError bool
 
-		conf.APIs.Iam.ListUsersPages(&iam.ListUsersInput{}, func(outUsers *iam.ListUsersOutput, lastPage bool) bool {
+		usersPaginator := iam.NewListUsersPaginator(conf.APIs.Iam, &iam.ListUsersInput{})
+		for usersPaginator.HasMorePages() && !hasError {
+			outUsers, err := usersPaginator.NextPage(ctx)
+			if err != nil {
+				return resources, objects, err
+			}
 
 			for _, user := range outUsers.Users {
 				wg.Add(1)
-				go func(u *iam.User) {
+				go func(u iamtypes.User) {
+					defer wg.Done()
+
 					userRes, err := awsconv.InitResource(u)
 					if err != nil {
 						hasError = true
 						errC <- err
 						return
 					}
-					defer wg.Done()
 
-					err = conf.APIs.Iam.ListAccessKeysPages(&iam.ListAccessKeysInput{UserName: u.UserName},
-						func(out *iam.ListAccessKeysOutput, lastPage bool) (shouldContinue bool) {
-							for _, output := range out.AccessKeyMetadata {
-								objectsC <- output
-								res, e := awsconv.NewResource(output)
-								if e != nil {
-									errC <- e
-									hasError = true
-									return false
-								}
-								res.AddRelation(rdf.ChildrenOfRel, userRes)
-								resourcesC <- res
+					keys := iam.NewListAccessKeysPaginator(conf.APIs.Iam, &iam.ListAccessKeysInput{UserName: u.UserName})
+					for keys.HasMorePages() {
+						out, err := keys.NextPage(ctx)
+						if err != nil {
+							hasError = true
+							errC <- err
+							return
+						}
+						for _, output := range out.AccessKeyMetadata {
+							objectsC <- output
+							res, e := awsconv.NewResource(output)
+							if e != nil {
+								hasError = true
+								errC <- e
+								return
 							}
-							return out.Marker != nil
-						})
-					if err != nil {
-						hasError = true
-						errC <- err
-						return
+							res.AddRelation(rdf.ChildrenOfRel, userRes)
+							resourcesC <- res
+						}
 					}
 				}(user)
 			}
-			return !hasError
-		})
+		}
 
 		go func() {
 			wg.Wait()
@@ -644,9 +666,7 @@ func addManualAccessFetchFuncs(conf *Config, funcs map[string]fetch.Func) {
 				if !ok {
 					return resources, objects, nil
 				}
-				if o != nil {
-					objects = append(objects, o)
-				}
+				objects = append(objects, o)
 			}
 		}
 	}
@@ -654,7 +674,7 @@ func addManualAccessFetchFuncs(conf *Config, funcs map[string]fetch.Func) {
 func addManualStorageFetchFuncs(conf *Config, funcs map[string]fetch.Func) {
 	funcs["bucket"] = func(ctx context.Context, cache fetch.Cache) ([]*graph.Resource, interface{}, error) {
 		var resources []*graph.Resource
-		var objects []*s3.Bucket
+		var objects []s3types.Bucket
 
 		if !conf.getBoolDefaultTrue("aws.storage.bucket.sync") && !getBoolFromContext(ctx, "force") {
 			conf.Log.Verbose("sync: *disabled* for resource storage[bucket]")
@@ -663,17 +683,17 @@ func addManualStorageFetchFuncs(conf *Config, funcs map[string]fetch.Func) {
 
 		bucketM := &sync.Mutex{}
 
-		err := forEachBucketParallel(ctx, cache, conf.APIs.S3, func(b *s3.Bucket) error {
+		err := forEachBucketParallel(ctx, cache, conf.APIs.S3, func(b s3types.Bucket) error {
 			bucketM.Lock()
 			objects = append(objects, b)
 			bucketM.Unlock()
 			res, err := awsconv.NewResource(b)
 			if err != nil {
-				return fmt.Errorf("build resource for bucket `%s`: %s", awssdk.StringValue(b.Name), err)
+				return fmt.Errorf("build resource for bucket `%s`: %s", awssdk.ToString(b.Name), err)
 			}
-			grants, err := fetchAndExtractGrantsFn(ctx, conf.APIs.S3, awssdk.StringValue(b.Name))
+			grants, err := fetchAndExtractGrantsFn(ctx, conf.APIs.S3, awssdk.ToString(b.Name))
 			if err != nil {
-				return fmt.Errorf("fetching grants for bucket %s: %s", awssdk.StringValue(b.Name), err)
+				return fmt.Errorf("fetching grants for bucket %s: %s", awssdk.ToString(b.Name), err)
 			}
 			res.Properties()[properties.Grants] = grants
 			bucketM.Lock()
@@ -685,7 +705,7 @@ func addManualStorageFetchFuncs(conf *Config, funcs map[string]fetch.Func) {
 	}
 
 	funcs["s3object"] = func(ctx context.Context, cache fetch.Cache) ([]*graph.Resource, interface{}, error) {
-		var objects []*s3.Object
+		var objects []s3types.Object
 		var resources []*graph.Resource
 
 		resourcesC := make(chan *graph.Resource)
@@ -704,7 +724,7 @@ func addManualStorageFetchFuncs(conf *Config, funcs map[string]fetch.Func) {
 			}
 		}()
 
-		err := forEachBucketParallel(ctx, cache, conf.APIs.S3, func(b *s3.Bucket) error {
+		err := forEachBucketParallel(ctx, cache, conf.APIs.S3, func(b s3types.Bucket) error {
 			return fetchObjectsForBucket(ctx, conf.APIs.S3, b, resourcesC)
 		})
 
@@ -717,7 +737,7 @@ func addManualStorageFetchFuncs(conf *Config, funcs map[string]fetch.Func) {
 }
 func addManualMessagingFetchFuncs(conf *Config, funcs map[string]fetch.Func) {
 	funcs["queue"] = func(ctx context.Context, cache fetch.Cache) ([]*graph.Resource, interface{}, error) {
-		var objects []*string
+		var objects []string
 		var resources []*graph.Resource
 
 		if !conf.getBoolDefaultTrue("aws.messaging.queue.sync") && !getBoolFromContext(ctx, "force") {
@@ -725,25 +745,37 @@ func addManualMessagingFetchFuncs(conf *Config, funcs map[string]fetch.Func) {
 			return resources, objects, nil
 		}
 
-		out, err := conf.APIs.Sqs.ListQueues(&sqs.ListQueuesInput{})
-		if err != nil {
-			return nil, objects, err
+		var queueUrls []string
+		queuesPaginator := sqs.NewListQueuesPaginator(conf.APIs.Sqs, &sqs.ListQueuesInput{})
+		for queuesPaginator.HasMorePages() {
+			out, err := queuesPaginator.NextPage(ctx)
+			if err != nil {
+				return nil, objects, err
+			}
+			queueUrls = append(queueUrls, out.QueueUrls...)
 		}
 
 		errC := make(chan error)
-		objectsC := make(chan *string)
+		objectsC := make(chan string)
 		resourcesC := make(chan *graph.Resource)
 		var wg sync.WaitGroup
 
-		for _, output := range out.QueueUrls {
+		for _, output := range queueUrls {
 			wg.Add(1)
-			go func(url *string) {
+			go func(url string) {
 				defer wg.Done()
 				objectsC <- url
-				res := graph.InitResource(cloud.Queue, awssdk.StringValue(url))
-				res.Properties()[properties.ID] = awssdk.StringValue(url)
-				attrs, err := conf.APIs.Sqs.GetQueueAttributes(&sqs.GetQueueAttributesInput{AttributeNames: []*string{awssdk.String("All")}, QueueUrl: url})
-				if e, ok := err.(awserr.RequestFailure); ok && (e.Code() == sqs.ErrCodeQueueDoesNotExist || e.Code() == sqs.ErrCodeQueueDeletedRecently) {
+				res := graph.InitResource(cloud.Queue, url)
+				res.Properties()[properties.ID] = url
+				attrs, err := conf.APIs.Sqs.GetQueueAttributes(ctx, &sqs.GetQueueAttributesInput{
+					AttributeNames: []sqstypes.QueueAttributeName{sqstypes.QueueAttributeNameAll},
+					QueueUrl:       awssdk.String(url),
+				})
+				// A queue can disappear between listing and describing it; that
+				// is not a sync failure.
+				var notExist *sqstypes.QueueDoesNotExist
+				var deleted *sqstypes.QueueDeletedRecently
+				if errors.As(err, &notExist) || errors.As(err, &deleted) {
 					return
 				}
 				if err != nil {
@@ -753,13 +785,13 @@ func addManualMessagingFetchFuncs(conf *Config, funcs map[string]fetch.Func) {
 				for k, v := range attrs.Attributes {
 					switch k {
 					case "ApproximateNumberOfMessages":
-						count, err := strconv.Atoi(awssdk.StringValue(v))
+						count, err := strconv.Atoi(v)
 						if err != nil {
 							errC <- err
 						}
 						res.Properties()[properties.ApproximateMessageCount] = count
 					case "CreatedTimestamp":
-						if vv := awssdk.StringValue(v); vv != "" {
+						if vv := v; vv != "" {
 							timestamp, err := strconv.ParseInt(vv, 10, 64)
 							if err != nil {
 								errC <- err
@@ -767,7 +799,7 @@ func addManualMessagingFetchFuncs(conf *Config, funcs map[string]fetch.Func) {
 							res.Properties()[properties.Created] = time.Unix(int64(timestamp), 0)
 						}
 					case "LastModifiedTimestamp":
-						if vv := awssdk.StringValue(v); vv != "" {
+						if vv := v; vv != "" {
 							timestamp, err := strconv.ParseInt(vv, 10, 64)
 							if err != nil {
 								errC <- err
@@ -775,9 +807,9 @@ func addManualMessagingFetchFuncs(conf *Config, funcs map[string]fetch.Func) {
 							res.Properties()[properties.Modified] = time.Unix(int64(timestamp), 0)
 						}
 					case "QueueArn":
-						res.Properties()[properties.Arn] = awssdk.StringValue(v)
+						res.Properties()[properties.Arn] = v
 					case "DelaySeconds":
-						delay, err := strconv.Atoi(awssdk.StringValue(v))
+						delay, err := strconv.Atoi(v)
 						if err != nil {
 							errC <- err
 						}
@@ -820,7 +852,7 @@ func addManualMessagingFetchFuncs(conf *Config, funcs map[string]fetch.Func) {
 }
 func addManualDnsFetchFuncs(conf *Config, funcs map[string]fetch.Func) {
 	funcs["record"] = func(ctx context.Context, cache fetch.Cache) ([]*graph.Resource, interface{}, error) {
-		var objects []*route53.ResourceRecordSet
+		var objects []route53types.ResourceRecordSet
 		var resources []*graph.Resource
 
 		if !conf.getBoolDefaultTrue("aws.dns.record.sync") && !getBoolFromContext(ctx, "force") {
@@ -831,26 +863,24 @@ func addManualDnsFetchFuncs(conf *Config, funcs map[string]fetch.Func) {
 		zoneName, hasZoneFilter := getUserFiltersFromContext(ctx)["zone"]
 
 		errC := make(chan error)
-		zoneC := make(chan *route53.HostedZone)
-		objectsC := make(chan *route53.ResourceRecordSet)
+		zoneC := make(chan route53types.HostedZone)
+		objectsC := make(chan route53types.ResourceRecordSet)
 		resourcesC := make(chan *graph.Resource)
 
 		go func() {
-			err := conf.APIs.Route53.ListHostedZonesPages(&route53.ListHostedZonesInput{},
-				func(out *route53.ListHostedZonesOutput, lastPage bool) (shouldContinue bool) {
-					for _, output := range out.HostedZones {
-						if hasZoneFilter {
-							if strings.Contains(strings.ToLower(*output.Name), strings.ToLower(zoneName)) {
-								zoneC <- output
-							}
-						} else {
-							zoneC <- output
-						}
+			paginator := route53.NewListHostedZonesPaginator(conf.APIs.Route53, &route53.ListHostedZonesInput{})
+			for paginator.HasMorePages() {
+				out, err := paginator.NextPage(ctx)
+				if err != nil {
+					errC <- err
+					break
+				}
+				for _, output := range out.HostedZones {
+					if hasZoneFilter && !strings.Contains(strings.ToLower(awssdk.ToString(output.Name)), strings.ToLower(zoneName)) {
+						continue
 					}
-					return out.NextMarker != nil
-				})
-			if err != nil {
-				errC <- err
+					zoneC <- output
+				}
 			}
 			close(zoneC)
 		}()
@@ -860,29 +890,42 @@ func addManualDnsFetchFuncs(conf *Config, funcs map[string]fetch.Func) {
 
 			for zone := range zoneC {
 				wg.Add(1)
-				go func(z *route53.HostedZone) {
+				go func(z route53types.HostedZone) {
 					defer wg.Done()
-					err := conf.APIs.Route53.ListResourceRecordSetsPages(&route53.ListResourceRecordSetsInput{HostedZoneId: z.Id},
-						func(out *route53.ListResourceRecordSetsOutput, lastPage bool) (shouldContinue bool) {
-							for _, output := range out.ResourceRecordSets {
-								objectsC <- output
-								res, err := awsconv.NewResource(output)
-								if err != nil {
-									errC <- err
-								}
-								res.Properties()[properties.Zone] = *z.Name
 
-								parent, err := awsconv.InitResource(z)
-								if err != nil {
-									errC <- err
-								}
-								res.AddRelation(rdf.ChildrenOfRel, parent)
-								resourcesC <- res
+					// ListResourceRecordSets has no paginator in SDK v2: it pages
+					// on a record name and type pair rather than a single token,
+					// so the loop is written out here.
+					input := &route53.ListResourceRecordSetsInput{HostedZoneId: z.Id}
+					for {
+						out, err := conf.APIs.Route53.ListResourceRecordSets(ctx, input)
+						if err != nil {
+							errC <- err
+							return
+						}
+						for _, output := range out.ResourceRecordSets {
+							objectsC <- output
+							res, err := awsconv.NewResource(output)
+							if err != nil {
+								errC <- err
+								return
 							}
-							return out.NextRecordName != nil
-						})
-					if err != nil {
-						errC <- err
+							res.Properties()[properties.Zone] = awssdk.ToString(z.Name)
+
+							parent, err := awsconv.InitResource(z)
+							if err != nil {
+								errC <- err
+								return
+							}
+							res.AddRelation(rdf.ChildrenOfRel, parent)
+							resourcesC <- res
+						}
+						if !out.IsTruncated {
+							return
+						}
+						input.StartRecordName = out.NextRecordName
+						input.StartRecordType = out.NextRecordType
+						input.StartRecordIdentifier = out.NextRecordIdentifier
 					}
 				}(zone)
 			}

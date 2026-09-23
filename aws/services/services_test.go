@@ -26,22 +26,22 @@ import (
 	"testing"
 	"time"
 
-	awssdk "github.com/aws/aws-sdk-go/aws"
-	"github.com/aws/aws-sdk-go/service/acm"
-	"github.com/aws/aws-sdk-go/service/autoscaling"
-	"github.com/aws/aws-sdk-go/service/cloudformation"
-	"github.com/aws/aws-sdk-go/service/cloudfront"
-	"github.com/aws/aws-sdk-go/service/cloudwatch"
-	"github.com/aws/aws-sdk-go/service/ec2"
-	"github.com/aws/aws-sdk-go/service/ecr"
-	"github.com/aws/aws-sdk-go/service/ecs"
-	"github.com/aws/aws-sdk-go/service/elb"
-	"github.com/aws/aws-sdk-go/service/elbv2"
-	"github.com/aws/aws-sdk-go/service/iam"
-	"github.com/aws/aws-sdk-go/service/lambda"
-	"github.com/aws/aws-sdk-go/service/route53"
-	"github.com/aws/aws-sdk-go/service/s3"
-	"github.com/aws/aws-sdk-go/service/sns"
+	awssdk "github.com/aws/aws-sdk-go-v2/aws"
+	acmtypes "github.com/aws/aws-sdk-go-v2/service/acm/types"
+	autoscalingtypes "github.com/aws/aws-sdk-go-v2/service/autoscaling/types"
+	cloudformationtypes "github.com/aws/aws-sdk-go-v2/service/cloudformation/types"
+	cloudfronttypes "github.com/aws/aws-sdk-go-v2/service/cloudfront/types"
+	cloudwatchtypes "github.com/aws/aws-sdk-go-v2/service/cloudwatch/types"
+	ec2types "github.com/aws/aws-sdk-go-v2/service/ec2/types"
+	ecrtypes "github.com/aws/aws-sdk-go-v2/service/ecr/types"
+	ecstypes "github.com/aws/aws-sdk-go-v2/service/ecs/types"
+	elbtypes "github.com/aws/aws-sdk-go-v2/service/elasticloadbalancing/types"
+	elbv2types "github.com/aws/aws-sdk-go-v2/service/elasticloadbalancingv2/types"
+	iamtypes "github.com/aws/aws-sdk-go-v2/service/iam/types"
+	lambdatypes "github.com/aws/aws-sdk-go-v2/service/lambda/types"
+	route53types "github.com/aws/aws-sdk-go-v2/service/route53/types"
+	s3types "github.com/aws/aws-sdk-go-v2/service/s3/types"
+	snstypes "github.com/aws/aws-sdk-go-v2/service/sns/types"
 	"github.com/theazz/awless-ro/aws/fetch"
 	"github.com/theazz/awless-ro/cloud"
 	p "github.com/theazz/awless-ro/cloud/properties"
@@ -54,77 +54,77 @@ import (
 func TestBuildAccessRdfGraph(t *testing.T) {
 	policyDoc := `{"Version":"2012-10-17","Statement":[{"Sid":"Stmt1486739000000","Effect":"Allow","Action":["ec2:*"],"Resource":["arn:aws:ec2:::vpc/vpc-123456","arn:aws:ec2:::subnet/*","arn:aws:ec2:::instance/*"]}]}`
 	assumeRoleDoc := `{"Version":"2012-10-17","Statement":[{"Effect":"Allow","Principal":{"AWS":"*"},"Action":"sts:AssumeRole","Condition":{"Bool":{"aws:MultiFactorAuthPresent":"true"}}}]}`
-	managedPolicies := []*iam.ManagedPolicyDetail{
-		{PolicyId: awssdk.String("managed_policy_1"), PolicyName: awssdk.String("nmanaged_policy_1"), AttachmentCount: awssdk.Int64(3)},
-		{PolicyId: awssdk.String("managed_policy_2"), PolicyName: awssdk.String("nmanaged_policy_2"), AttachmentCount: awssdk.Int64(0), PolicyVersionList: []*iam.PolicyVersion{
+	managedPolicies := []iamtypes.ManagedPolicyDetail{
+		{PolicyId: awssdk.String("managed_policy_1"), PolicyName: awssdk.String("nmanaged_policy_1"), AttachmentCount: awssdk.Int32(3)},
+		{PolicyId: awssdk.String("managed_policy_2"), PolicyName: awssdk.String("nmanaged_policy_2"), AttachmentCount: awssdk.Int32(0), PolicyVersionList: []iamtypes.PolicyVersion{
 			{Document: awssdk.String("this policy will be ignored")},
-			{IsDefaultVersion: awssdk.Bool(true), Document: awssdk.String(url.QueryEscape(policyDoc))},
+			{IsDefaultVersion: true, Document: awssdk.String(url.QueryEscape(policyDoc))},
 		}},
-		{PolicyId: awssdk.String("managed_policy_3"), PolicyName: awssdk.String("nmanaged_policy_3"), Arn: awssdk.String("arn:aws:iam::aws:policy/managed_policy_3"), AttachmentCount: awssdk.Int64(1)},
+		{PolicyId: awssdk.String("managed_policy_3"), PolicyName: awssdk.String("nmanaged_policy_3"), Arn: awssdk.String("arn:aws:iam::aws:policy/managed_policy_3"), AttachmentCount: awssdk.Int32(1)},
 	}
 
-	groups := []*iam.GroupDetail{
-		{GroupId: awssdk.String("group_1"), GroupName: awssdk.String("ngroup_1"), GroupPolicyList: []*iam.PolicyDetail{{PolicyName: awssdk.String("npolicy_1")}}, AttachedManagedPolicies: []*iam.AttachedPolicy{{PolicyName: awssdk.String("nmanaged_policy_1")}}},
-		{GroupId: awssdk.String("group_2"), GroupName: awssdk.String("ngroup_2"), GroupPolicyList: []*iam.PolicyDetail{{PolicyName: awssdk.String("npolicy_1")}}, AttachedManagedPolicies: []*iam.AttachedPolicy{{PolicyName: awssdk.String("nmanaged_policy_2")}}},
-		{GroupId: awssdk.String("group_3"), GroupName: awssdk.String("ngroup_3"), GroupPolicyList: []*iam.PolicyDetail{{PolicyName: awssdk.String("npolicy_2")}}, AttachedManagedPolicies: []*iam.AttachedPolicy{{PolicyName: awssdk.String("nmanaged_policy_3")}}},
-		{GroupId: awssdk.String("group_4"), GroupName: awssdk.String("ngroup_4"), GroupPolicyList: []*iam.PolicyDetail{{PolicyName: awssdk.String("npolicy_4")}}},
+	groups := []iamtypes.GroupDetail{
+		{GroupId: awssdk.String("group_1"), GroupName: awssdk.String("ngroup_1"), GroupPolicyList: []iamtypes.PolicyDetail{{PolicyName: awssdk.String("npolicy_1")}}, AttachedManagedPolicies: []iamtypes.AttachedPolicy{{PolicyName: awssdk.String("nmanaged_policy_1")}}},
+		{GroupId: awssdk.String("group_2"), GroupName: awssdk.String("ngroup_2"), GroupPolicyList: []iamtypes.PolicyDetail{{PolicyName: awssdk.String("npolicy_1")}}, AttachedManagedPolicies: []iamtypes.AttachedPolicy{{PolicyName: awssdk.String("nmanaged_policy_2")}}},
+		{GroupId: awssdk.String("group_3"), GroupName: awssdk.String("ngroup_3"), GroupPolicyList: []iamtypes.PolicyDetail{{PolicyName: awssdk.String("npolicy_2")}}, AttachedManagedPolicies: []iamtypes.AttachedPolicy{{PolicyName: awssdk.String("nmanaged_policy_3")}}},
+		{GroupId: awssdk.String("group_4"), GroupName: awssdk.String("ngroup_4"), GroupPolicyList: []iamtypes.PolicyDetail{{PolicyName: awssdk.String("npolicy_4")}}},
 	}
 
-	roles := []*iam.RoleDetail{
-		{RoleId: awssdk.String("role_1"), RolePolicyList: []*iam.PolicyDetail{{PolicyName: awssdk.String("npolicy_1")}}, AttachedManagedPolicies: []*iam.AttachedPolicy{{PolicyName: awssdk.String("nmanaged_policy_1")}}, AssumeRolePolicyDocument: awssdk.String(url.QueryEscape(assumeRoleDoc))},
-		{RoleId: awssdk.String("role_2"), RolePolicyList: []*iam.PolicyDetail{{PolicyName: awssdk.String("npolicy_1")}}},
-		{RoleId: awssdk.String("role_3"), RolePolicyList: []*iam.PolicyDetail{{PolicyName: awssdk.String("npolicy_2")}}, AttachedManagedPolicies: []*iam.AttachedPolicy{{PolicyName: awssdk.String("nmanaged_policy_2")}}},
-		{RoleId: awssdk.String("role_4"), RolePolicyList: []*iam.PolicyDetail{{PolicyName: awssdk.String("npolicy_4")}}},
+	roles := []iamtypes.RoleDetail{
+		{RoleId: awssdk.String("role_1"), RolePolicyList: []iamtypes.PolicyDetail{{PolicyName: awssdk.String("npolicy_1")}}, AttachedManagedPolicies: []iamtypes.AttachedPolicy{{PolicyName: awssdk.String("nmanaged_policy_1")}}, AssumeRolePolicyDocument: awssdk.String(url.QueryEscape(assumeRoleDoc))},
+		{RoleId: awssdk.String("role_2"), RolePolicyList: []iamtypes.PolicyDetail{{PolicyName: awssdk.String("npolicy_1")}}},
+		{RoleId: awssdk.String("role_3"), RolePolicyList: []iamtypes.PolicyDetail{{PolicyName: awssdk.String("npolicy_2")}}, AttachedManagedPolicies: []iamtypes.AttachedPolicy{{PolicyName: awssdk.String("nmanaged_policy_2")}}},
+		{RoleId: awssdk.String("role_4"), RolePolicyList: []iamtypes.PolicyDetail{{PolicyName: awssdk.String("npolicy_4")}}},
 	}
 
-	usersDetails := []*iam.UserDetail{
+	usersDetails := []iamtypes.UserDetail{
 		{
 			UserId:                  awssdk.String("usr_1"),
-			GroupList:               []*string{awssdk.String("ngroup_1"), awssdk.String("ngroup_2")},
-			AttachedManagedPolicies: []*iam.AttachedPolicy{{PolicyName: awssdk.String("nmanaged_policy_1")}},
-			UserPolicyList:          []*iam.PolicyDetail{{PolicyName: awssdk.String("npolicy_1")}, {PolicyName: awssdk.String("npolicy_2")}},
+			GroupList:               []string{"ngroup_1", "ngroup_2"},
+			AttachedManagedPolicies: []iamtypes.AttachedPolicy{{PolicyName: awssdk.String("nmanaged_policy_1")}},
+			UserPolicyList:          []iamtypes.PolicyDetail{{PolicyName: awssdk.String("npolicy_1")}, {PolicyName: awssdk.String("npolicy_2")}},
 		},
 		{
 			UserId:         awssdk.String("usr_2"),
-			GroupList:      []*string{awssdk.String("ngroup_1")},
-			UserPolicyList: []*iam.PolicyDetail{{PolicyName: awssdk.String("npolicy_1")}},
+			GroupList:      []string{"ngroup_1"},
+			UserPolicyList: []iamtypes.PolicyDetail{{PolicyName: awssdk.String("npolicy_1")}},
 		},
 		{
 			UserId:                  awssdk.String("usr_3"),
-			GroupList:               []*string{awssdk.String("ngroup_1"), awssdk.String("ngroup_4")},
-			AttachedManagedPolicies: []*iam.AttachedPolicy{{PolicyName: awssdk.String("nmanaged_policy_1")}, {PolicyName: awssdk.String("nmanaged_policy_2")}},
-			UserPolicyList:          []*iam.PolicyDetail{{PolicyName: awssdk.String("npolicy_1")}, {PolicyName: awssdk.String("npolicy_4")}},
+			GroupList:               []string{"ngroup_1", "ngroup_4"},
+			AttachedManagedPolicies: []iamtypes.AttachedPolicy{{PolicyName: awssdk.String("nmanaged_policy_1")}, {PolicyName: awssdk.String("nmanaged_policy_2")}},
+			UserPolicyList:          []iamtypes.PolicyDetail{{PolicyName: awssdk.String("npolicy_1")}, {PolicyName: awssdk.String("npolicy_4")}},
 		},
 		{
 			UserId:         awssdk.String("usr_4"),
-			GroupList:      []*string{awssdk.String("ngroup_2")},
-			UserPolicyList: []*iam.PolicyDetail{{PolicyName: awssdk.String("npolicy_2")}},
+			GroupList:      []string{"ngroup_2"},
+			UserPolicyList: []iamtypes.PolicyDetail{{PolicyName: awssdk.String("npolicy_2")}},
 		},
 		{
 			UserId:         awssdk.String("usr_5"),
-			GroupList:      []*string{awssdk.String("ngroup_2")},
-			UserPolicyList: []*iam.PolicyDetail{{PolicyName: awssdk.String("npolicy_2")}},
+			GroupList:      []string{"ngroup_2"},
+			UserPolicyList: []iamtypes.PolicyDetail{{PolicyName: awssdk.String("npolicy_2")}},
 		},
 		{
 			UserId:                  awssdk.String("usr_6"),
-			GroupList:               []*string{awssdk.String("ngroup_2")},
-			AttachedManagedPolicies: []*iam.AttachedPolicy{{PolicyName: awssdk.String("nmanaged_policy_3")}},
-			UserPolicyList:          []*iam.PolicyDetail{{PolicyName: awssdk.String("npolicy_2")}},
+			GroupList:               []string{"ngroup_2"},
+			AttachedManagedPolicies: []iamtypes.AttachedPolicy{{PolicyName: awssdk.String("nmanaged_policy_3")}},
+			UserPolicyList:          []iamtypes.PolicyDetail{{PolicyName: awssdk.String("npolicy_2")}},
 		},
 		{
 			UserId:         awssdk.String("usr_7"),
-			GroupList:      []*string{awssdk.String("ngroup_2"), awssdk.String("ngroup_4")},
-			UserPolicyList: []*iam.PolicyDetail{{PolicyName: awssdk.String("npolicy_2")}, {PolicyName: awssdk.String("npolicy_4")}},
+			GroupList:      []string{"ngroup_2", "ngroup_4"},
+			UserPolicyList: []iamtypes.PolicyDetail{{PolicyName: awssdk.String("npolicy_2")}, {PolicyName: awssdk.String("npolicy_4")}},
 		},
 		{
 			UserId:         awssdk.String("usr_8"),
-			GroupList:      []*string{awssdk.String("ngroup_4")},
-			UserPolicyList: []*iam.PolicyDetail{{PolicyName: awssdk.String("npolicy_4")}},
+			GroupList:      []string{"ngroup_4"},
+			UserPolicyList: []iamtypes.PolicyDetail{{PolicyName: awssdk.String("npolicy_4")}},
 		},
 		{
 			UserId:         awssdk.String("usr_9"),
-			GroupList:      []*string{awssdk.String("ngroup_4")},
-			UserPolicyList: []*iam.PolicyDetail{{PolicyName: awssdk.String("npolicy_4")}},
+			GroupList:      []string{"ngroup_4"},
+			UserPolicyList: []iamtypes.PolicyDetail{{PolicyName: awssdk.String("npolicy_4")}},
 		},
 		{
 			UserId: awssdk.String("usr_10"), //users not in any groups
@@ -134,7 +134,7 @@ func TestBuildAccessRdfGraph(t *testing.T) {
 		},
 	}
 
-	users := []*iam.User{
+	users := []iamtypes.User{
 		{
 			UserId:           awssdk.String("usr_1"),
 			PasswordLastUsed: awssdk.Time(time.Unix(1486139077, 0).UTC()),
@@ -171,16 +171,19 @@ func TestBuildAccessRdfGraph(t *testing.T) {
 		},
 	}
 	now := time.Now().UTC()
-	mfaDevices := []*iam.VirtualMFADevice{
-		{EnableDate: awssdk.Time(now), SerialNumber: awssdk.String("mfa-device-1"), User: &iam.User{UserId: awssdk.String("usr_1")}},
+	mfaDevices := []iamtypes.VirtualMFADevice{
+		{EnableDate: awssdk.Time(now), SerialNumber: awssdk.String("mfa-device-1"), User: &iamtypes.User{UserId: awssdk.String("usr_1")}},
 		{SerialNumber: awssdk.String("mfa-device-2")},
 	}
 
-	mock := &mockIam{groupdetails: groups, userdetails: usersDetails, roledetails: roles, managedpolicydetails: managedPolicies, users: users, virtualmfadevices: mfaDevices}
+	mock := &mockIam{
+		manualIamMock:     manualIamMock{groupdetails: groups, userdetails: usersDetails, roledetails: roles, managedpolicydetails: managedPolicies, users: users},
+		virtualmfadevices: mfaDevices,
+	}
 	access := Access{
-		IAMAPI:  mock,
+		IamAPI:  mock,
 		region:  "eu-west-1",
-		fetcher: fetch.NewFetcher(awsfetch.BuildAccessFetchFuncs(awsfetch.NewConfig(mock))),
+		fetcher: fetch.NewFetcher(awsfetch.BuildAccessFetchFuncs(awsfetch.NewConfig(&awsfetch.AWSAPI{Iam: mock}))),
 	}
 
 	g, err := access.Fetch(context.Background())
@@ -245,107 +248,107 @@ func TestBuildAccessRdfGraph(t *testing.T) {
 
 func TestBuildInfraRdfGraph(t *testing.T) {
 	now := time.Now().UTC()
-	instances := []*ec2.Instance{
-		{InstanceId: awssdk.String("inst_1"), SubnetId: awssdk.String("sub_1"), VpcId: awssdk.String("vpc_1"), Tags: []*ec2.Tag{{Key: awssdk.String("Name"), Value: awssdk.String("instance1-name")}}},
-		{InstanceId: awssdk.String("inst_2"), SubnetId: awssdk.String("sub_2"), VpcId: awssdk.String("vpc_1"), SecurityGroups: []*ec2.GroupIdentifier{{GroupId: awssdk.String("securitygroup_1")}}},
+	instances := []ec2types.Instance{
+		{InstanceId: awssdk.String("inst_1"), SubnetId: awssdk.String("sub_1"), VpcId: awssdk.String("vpc_1"), Tags: []ec2types.Tag{{Key: awssdk.String("Name"), Value: awssdk.String("instance1-name")}}},
+		{InstanceId: awssdk.String("inst_2"), SubnetId: awssdk.String("sub_2"), VpcId: awssdk.String("vpc_1"), SecurityGroups: []ec2types.GroupIdentifier{{GroupId: awssdk.String("securitygroup_1")}}},
 		{InstanceId: awssdk.String("inst_3"), SubnetId: awssdk.String("sub_3"), VpcId: awssdk.String("vpc_2")},
-		{InstanceId: awssdk.String("inst_4"), SubnetId: awssdk.String("sub_3"), VpcId: awssdk.String("vpc_2"), SecurityGroups: []*ec2.GroupIdentifier{{GroupId: awssdk.String("securitygroup_1")}, {GroupId: awssdk.String("securitygroup_2")}}, KeyName: awssdk.String("my_key")},
+		{InstanceId: awssdk.String("inst_4"), SubnetId: awssdk.String("sub_3"), VpcId: awssdk.String("vpc_2"), SecurityGroups: []ec2types.GroupIdentifier{{GroupId: awssdk.String("securitygroup_1")}, {GroupId: awssdk.String("securitygroup_2")}}, KeyName: awssdk.String("my_key")},
 		{InstanceId: awssdk.String("inst_5"), SubnetId: nil, VpcId: nil, KeyName: awssdk.String("unexisting_key")}, // terminated instance (no vpc, subnet ids)
 		{
 			InstanceId:         awssdk.String("inst_6"),
-			Tags:               []*ec2.Tag{{Key: awssdk.String("Name"), Value: awssdk.String("inst_6_name")}},
-			InstanceType:       awssdk.String("t2.micro"),
+			Tags:               []ec2types.Tag{{Key: awssdk.String("Name"), Value: awssdk.String("inst_6_name")}},
+			InstanceType:       "t2.micro",
 			SubnetId:           awssdk.String("sub_3"),
 			VpcId:              awssdk.String("vpc_2"),
 			PublicIpAddress:    awssdk.String("1.2.3.4"),
 			PrivateIpAddress:   awssdk.String("10.0.0.1"),
 			ImageId:            awssdk.String("ami-1234"),
 			LaunchTime:         awssdk.Time(now),
-			State:              &ec2.InstanceState{Name: awssdk.String("running")},
+			State:              &ec2types.InstanceState{Name: "running"},
 			KeyName:            awssdk.String("my_key"),
-			SecurityGroups:     []*ec2.GroupIdentifier{{GroupId: awssdk.String("securitygroup_1")}},
-			Placement:          &ec2.Placement{Affinity: awssdk.String("inst_affinity"), AvailabilityZone: awssdk.String("inst_az"), GroupName: awssdk.String("inst_group"), HostId: awssdk.String("inst_host")},
-			Architecture:       awssdk.String("x86"),
-			Hypervisor:         awssdk.String("xen"),
-			IamInstanceProfile: &ec2.IamInstanceProfile{Arn: awssdk.String("arn:instance:profile")},
-			InstanceLifecycle:  awssdk.String("lifecycle"),
-			NetworkInterfaces:  []*ec2.InstanceNetworkInterface{{NetworkInterfaceId: awssdk.String("my-network-interface")}},
+			SecurityGroups:     []ec2types.GroupIdentifier{{GroupId: awssdk.String("securitygroup_1")}},
+			Placement:          &ec2types.Placement{Affinity: awssdk.String("inst_affinity"), AvailabilityZone: awssdk.String("inst_az"), GroupName: awssdk.String("inst_group"), HostId: awssdk.String("inst_host")},
+			Architecture:       "x86",
+			Hypervisor:         "xen",
+			IamInstanceProfile: &ec2types.IamInstanceProfile{Arn: awssdk.String("arn:instance:profile")},
+			InstanceLifecycle:  "lifecycle",
+			NetworkInterfaces:  []ec2types.InstanceNetworkInterface{{NetworkInterfaceId: awssdk.String("my-network-interface")}},
 			PublicDnsName:      awssdk.String("my-instance.dns"),
 			RootDeviceName:     awssdk.String("/dev/xvda"),
-			RootDeviceType:     awssdk.String("ebs"),
+			RootDeviceType:     "ebs",
 		},
 	}
 
-	vpcs := []*ec2.Vpc{
+	vpcs := []ec2types.Vpc{
 		{VpcId: awssdk.String("vpc_1")},
 		{VpcId: awssdk.String("vpc_2")},
 	}
 
-	securityGroups := []*ec2.SecurityGroup{
+	securityGroups := []ec2types.SecurityGroup{
 		{
 			GroupId:   awssdk.String("securitygroup_1"),
 			GroupName: awssdk.String("my_securitygroup"),
 			VpcId:     awssdk.String("vpc_1"),
-			IpPermissions: []*ec2.IpPermission{
-				{FromPort: awssdk.Int64(22), ToPort: awssdk.Int64(80), IpProtocol: awssdk.String("tcp"), UserIdGroupPairs: []*ec2.UserIdGroupPair{{GroupId: awssdk.String("group_1")}, {GroupId: awssdk.String("group_2")}}},
+			IpPermissions: []ec2types.IpPermission{
+				{FromPort: awssdk.Int32(22), ToPort: awssdk.Int32(80), IpProtocol: awssdk.String("tcp"), UserIdGroupPairs: []ec2types.UserIdGroupPair{{GroupId: awssdk.String("group_1")}, {GroupId: awssdk.String("group_2")}}},
 			},
-			IpPermissionsEgress: []*ec2.IpPermission{
-				{FromPort: awssdk.Int64(0), ToPort: awssdk.Int64(65535), IpProtocol: awssdk.String("tcp"), IpRanges: []*ec2.IpRange{{CidrIp: awssdk.String("10.20.0.0/16")}}},
+			IpPermissionsEgress: []ec2types.IpPermission{
+				{FromPort: awssdk.Int32(0), ToPort: awssdk.Int32(65535), IpProtocol: awssdk.String("tcp"), IpRanges: []ec2types.IpRange{{CidrIp: awssdk.String("10.20.0.0/16")}}},
 			},
 		},
 		{GroupId: awssdk.String("securitygroup_2"), VpcId: awssdk.String("vpc_1")},
 	}
 
-	subnets := []*ec2.Subnet{
+	subnets := []ec2types.Subnet{
 		{SubnetId: awssdk.String("sub_1"), VpcId: awssdk.String("vpc_1")},
 		{SubnetId: awssdk.String("sub_2"), VpcId: awssdk.String("vpc_1")},
 		{SubnetId: awssdk.String("sub_3"), VpcId: awssdk.String("vpc_2")},
 		{SubnetId: awssdk.String("sub_4"), VpcId: nil}, // edge case subnet with no vpc id
 	}
 
-	keypairs := []*ec2.KeyPairInfo{
+	keypairs := []ec2types.KeyPairInfo{
 		{KeyName: awssdk.String("my_key")},
 	}
 
-	igws := []*ec2.InternetGateway{
-		{InternetGatewayId: awssdk.String("igw_1"), Attachments: []*ec2.InternetGatewayAttachment{{VpcId: awssdk.String("vpc_2")}}},
+	igws := []ec2types.InternetGateway{
+		{InternetGatewayId: awssdk.String("igw_1"), Attachments: []ec2types.InternetGatewayAttachment{{VpcId: awssdk.String("vpc_2")}}},
 	}
 
-	natgws := []*ec2.NatGateway{
+	natgws := []ec2types.NatGateway{
 		{NatGatewayId: awssdk.String("natgw_1"), VpcId: awssdk.String("vpc_1"), SubnetId: awssdk.String("sub_1")},
 	}
 
-	routeTables := []*ec2.RouteTable{
+	routeTables := []ec2types.RouteTable{
 		{
 			RouteTableId: awssdk.String("rt_1"),
 			VpcId:        awssdk.String("vpc_1"),
-			Associations: []*ec2.RouteTableAssociation{
+			Associations: []ec2types.RouteTableAssociation{
 				{RouteTableId: awssdk.String("rt_1"), SubnetId: awssdk.String("sub_1"), RouteTableAssociationId: awssdk.String("assoc_1")},
 				{RouteTableId: awssdk.String("rt_1"), SubnetId: awssdk.String("sub_2"), RouteTableAssociationId: awssdk.String("assoc_2"), Main: awssdk.Bool(true)},
 			},
 		},
 	}
 
-	images := []*ec2.Image{
+	images := []ec2types.Image{
 		{ImageId: awssdk.String("img_1")},
-		{ImageId: awssdk.String("img_2"), Name: awssdk.String("img_2_name"), Architecture: awssdk.String("img_2_arch"), Hypervisor: awssdk.String("img_2_hyper"), CreationDate: awssdk.String("2010-04-01T12:05:01.000Z")},
+		{ImageId: awssdk.String("img_2"), Name: awssdk.String("img_2_name"), Architecture: "img_2_arch", Hypervisor: "img_2_hyper", CreationDate: awssdk.String("2010-04-01T12:05:01.000Z")},
 	}
 
-	networkInterfaces := []*ec2.NetworkInterface{
+	networkInterfaces := []ec2types.NetworkInterface{
 		{
-			Association:        &ec2.NetworkInterfaceAssociation{PublicIp: awssdk.String("1.2.3.4"), PublicDnsName: awssdk.String("my.ip.dns.name")},
-			Attachment:         &ec2.NetworkInterfaceAttachment{AttachmentId: awssdk.String("eni-attach-12345"), InstanceId: awssdk.String("inst_1"), InstanceOwnerId: awssdk.String("12345678")},
+			Association:        &ec2types.NetworkInterfaceAssociation{PublicIp: awssdk.String("1.2.3.4"), PublicDnsName: awssdk.String("my.ip.dns.name")},
+			Attachment:         &ec2types.NetworkInterfaceAttachment{AttachmentId: awssdk.String("eni-attach-12345"), InstanceId: awssdk.String("inst_1"), InstanceOwnerId: awssdk.String("12345678")},
 			AvailabilityZone:   awssdk.String("us-west-1b"),
 			Description:        awssdk.String("my network interface description"),
-			Groups:             []*ec2.GroupIdentifier{{GroupId: awssdk.String("securitygroup_1")}, {GroupId: awssdk.String("securitygroup_2")}},
-			InterfaceType:      awssdk.String("type"),
-			Ipv6Addresses:      []*ec2.NetworkInterfaceIpv6Address{{Ipv6Address: awssdk.String("ab:cd:ef::")}, {Ipv6Address: awssdk.String("cd:ef:ab::")}},
+			Groups:             []ec2types.GroupIdentifier{{GroupId: awssdk.String("securitygroup_1")}, {GroupId: awssdk.String("securitygroup_2")}},
+			InterfaceType:      "type",
+			Ipv6Addresses:      []ec2types.NetworkInterfaceIpv6Address{{Ipv6Address: awssdk.String("ab:cd:ef::")}, {Ipv6Address: awssdk.String("cd:ef:ab::")}},
 			MacAddress:         awssdk.String("01:23:34:56:78:9a"),
 			NetworkInterfaceId: awssdk.String("eni-1"),
 			OwnerId:            awssdk.String("12345678"),
 			PrivateDnsName:     awssdk.String("my.private.dns.name"),
 			PrivateIpAddress:   awssdk.String("10.10.20.12"),
-			Status:             awssdk.String("in-use"),
+			Status:             "in-use",
 			SubnetId:           awssdk.String("sub_1"),
 			VpcId:              awssdk.String("vpc_1"),
 		},
@@ -355,107 +358,108 @@ func TestBuildInfraRdfGraph(t *testing.T) {
 			VpcId:              awssdk.String("vpc_2")},
 	}
 
-	availabilityZones := []*ec2.AvailabilityZone{
-		{ZoneName: awssdk.String("us-west-1a"), State: awssdk.String("available"), RegionName: awssdk.String("us-west-1"), Messages: []*ec2.AvailabilityZoneMessage{{Message: awssdk.String("msg 1")}, {Message: awssdk.String("msg 2")}}},
+	availabilityZones := []ec2types.AvailabilityZone{
+		{ZoneName: awssdk.String("us-west-1a"), State: "available", RegionName: awssdk.String("us-west-1"), Messages: []ec2types.AvailabilityZoneMessage{{Message: awssdk.String("msg 1")}, {Message: awssdk.String("msg 2")}}},
 		{ZoneName: awssdk.String("us-west-1b")},
 	}
 	//ELBV2
-	lbPages := []*elbv2.LoadBalancer{
+	lbPages := []elbv2types.LoadBalancer{
 		{LoadBalancerArn: awssdk.String("lb_1"), LoadBalancerName: awssdk.String("my_loadbalancer"), VpcId: awssdk.String("vpc_1")},
 		{LoadBalancerArn: awssdk.String("lb_2"), VpcId: awssdk.String("vpc_2")},
-		{LoadBalancerArn: awssdk.String("lb_3"), VpcId: awssdk.String("vpc_1"), SecurityGroups: []*string{awssdk.String("securitygroup_1"), awssdk.String("securitygroup_2")}},
+		{LoadBalancerArn: awssdk.String("lb_3"), VpcId: awssdk.String("vpc_1"), SecurityGroups: []string{"securitygroup_1", "securitygroup_2"}},
 	}
 	//ELB
-	classicLbPages := []*elb.LoadBalancerDescription{
-		{LoadBalancerName: awssdk.String("my_classic_loadbalancer_1"), VPCId: awssdk.String("vpc_1"), ListenerDescriptions: []*elb.ListenerDescription{{Listener: &elb.Listener{LoadBalancerPort: awssdk.Int64(443), Protocol: awssdk.String("HTTPS"), InstancePort: awssdk.Int64(8080), InstanceProtocol: awssdk.String("HTTP")}}}},
+	classicLbPages := []elbtypes.LoadBalancerDescription{
+		{LoadBalancerName: awssdk.String("my_classic_loadbalancer_1"), VPCId: awssdk.String("vpc_1"), ListenerDescriptions: []elbtypes.ListenerDescription{{Listener: &elbtypes.Listener{LoadBalancerPort: 443, Protocol: awssdk.String("HTTPS"), InstancePort: awssdk.Int32(8080), InstanceProtocol: awssdk.String("HTTP")}}}},
 		{LoadBalancerName: awssdk.String("my_classic_loadbalancer_2"), VPCId: awssdk.String("vpc_2")},
-		{LoadBalancerName: awssdk.String("my_classic_loadbalancer_3"), VPCId: awssdk.String("vpc_1"), SecurityGroups: []*string{awssdk.String("securitygroup_1"), awssdk.String("securitygroup_2")}},
+		{LoadBalancerName: awssdk.String("my_classic_loadbalancer_3"), VPCId: awssdk.String("vpc_1"), SecurityGroups: []string{"securitygroup_1", "securitygroup_2"}},
 	}
 
-	targetGroups := []*elbv2.TargetGroup{
-		{TargetGroupArn: awssdk.String("tg_1"), VpcId: awssdk.String("vpc_1"), LoadBalancerArns: []*string{awssdk.String("lb_1"), awssdk.String("lb_3")}},
-		{TargetGroupArn: awssdk.String("tg_2"), VpcId: awssdk.String("vpc_2"), LoadBalancerArns: []*string{awssdk.String("lb_2")}},
+	targetGroups := []elbv2types.TargetGroup{
+		{TargetGroupArn: awssdk.String("tg_1"), VpcId: awssdk.String("vpc_1"), LoadBalancerArns: []string{"lb_1", "lb_3"}},
+		{TargetGroupArn: awssdk.String("tg_2"), VpcId: awssdk.String("vpc_2"), LoadBalancerArns: []string{"lb_2"}},
 	}
-	listeners := []*elbv2.Listener{
+	listeners := []elbv2types.Listener{
 		{ListenerArn: awssdk.String("list_1"), LoadBalancerArn: awssdk.String("lb_1")}, {ListenerArn: awssdk.String("list_1.2"), LoadBalancerArn: awssdk.String("lb_1")},
 		{ListenerArn: awssdk.String("list_2"), LoadBalancerArn: awssdk.String("lb_2")},
 		{ListenerArn: awssdk.String("list_3"), LoadBalancerArn: awssdk.String("lb_3")},
 	}
-	targetHealths := map[string][]*elbv2.TargetHealthDescription{
-		"tg_1": {{HealthCheckPort: awssdk.String("80"), Target: &elbv2.TargetDescription{Id: awssdk.String("inst_1"), Port: awssdk.Int64(443)}}},
-		"tg_2": {{Target: &elbv2.TargetDescription{Id: awssdk.String("inst_2"), Port: awssdk.Int64(80)}}, {Target: &elbv2.TargetDescription{Id: awssdk.String("inst_3"), Port: awssdk.Int64(80)}}},
+	targetHealths := map[string][]elbv2types.TargetHealthDescription{
+		"tg_1": {{HealthCheckPort: awssdk.String("80"), Target: &elbv2types.TargetDescription{Id: awssdk.String("inst_1"), Port: awssdk.Int32(443)}}},
+		"tg_2": {{Target: &elbv2types.TargetDescription{Id: awssdk.String("inst_2"), Port: awssdk.Int32(80)}}, {Target: &elbv2types.TargetDescription{Id: awssdk.String("inst_3"), Port: awssdk.Int32(80)}}},
 	}
 
 	//Autoscaling
-	launchConfigs := []*autoscaling.LaunchConfiguration{
+	launchConfigs := []autoscalingtypes.LaunchConfiguration{
 		{LaunchConfigurationARN: awssdk.String("launchconfig_arn"), LaunchConfigurationName: awssdk.String("launchconfig_name"), KeyName: awssdk.String("my_key")},
 	}
-	scalingGroups := []*autoscaling.Group{
-		{AutoScalingGroupARN: awssdk.String("asg_arn_1"), AutoScalingGroupName: awssdk.String("asg_name_1"), Instances: []*autoscaling.Instance{{InstanceId: awssdk.String("inst_1")}, {InstanceId: awssdk.String("inst_3")}}, VPCZoneIdentifier: awssdk.String("sub_1,sub_2"), LaunchConfigurationName: awssdk.String("launchconfig_name")},
-		{AutoScalingGroupARN: awssdk.String("asg_arn_2"), AutoScalingGroupName: awssdk.String("asg_name_2"), LaunchConfigurationName: awssdk.String("launchconfig_name"), TargetGroupARNs: []*string{awssdk.String("tg_1"), awssdk.String("tg_2")}},
+	scalingGroups := []autoscalingtypes.AutoScalingGroup{
+		{AutoScalingGroupARN: awssdk.String("asg_arn_1"), AutoScalingGroupName: awssdk.String("asg_name_1"), Instances: []autoscalingtypes.Instance{{InstanceId: awssdk.String("inst_1")}, {InstanceId: awssdk.String("inst_3")}}, VPCZoneIdentifier: awssdk.String("sub_1,sub_2"), LaunchConfigurationName: awssdk.String("launchconfig_name")},
+		{AutoScalingGroupARN: awssdk.String("asg_arn_2"), AutoScalingGroupName: awssdk.String("asg_name_2"), LaunchConfigurationName: awssdk.String("launchconfig_name"), TargetGroupARNs: []string{"tg_1", "tg_2"}},
 	}
 
 	//ECR
-	repositories := []*ecr.Repository{
+	repositories := []ecrtypes.Repository{
 		{CreatedAt: awssdk.Time(now), RegistryId: awssdk.String("account_id"), RepositoryArn: awssdk.String("repo_1"), RepositoryName: awssdk.String("repo_name_1"), RepositoryUri: awssdk.String("http://my.repository.url")},
 		{RepositoryArn: awssdk.String("repo_2")},
 		{RepositoryArn: awssdk.String("repo_3")},
 	}
 
 	//ECS
-	clusterNames := []*string{awssdk.String("clust_1"), awssdk.String("clust_2"), awssdk.String("clust_3")}
-	clusters := []*ecs.Cluster{
-		{ActiveServicesCount: awssdk.Int64(3), ClusterArn: awssdk.String("clust_1"), ClusterName: awssdk.String("my_cust_1"), PendingTasksCount: awssdk.Int64(1), RegisteredContainerInstancesCount: awssdk.Int64(3), RunningTasksCount: awssdk.Int64(2), Status: awssdk.String("ACTIVE")},
+	// Every cluster and task definition below is discoverable through the list
+	// calls, which the mock answers from these same fixtures.
+	clusters := []ecstypes.Cluster{
+		{ActiveServicesCount: 3, ClusterArn: awssdk.String("clust_1"), ClusterName: awssdk.String("my_cust_1"), PendingTasksCount: 1, RegisteredContainerInstancesCount: 3, RunningTasksCount: 2, Status: awssdk.String("ACTIVE")},
 		{ClusterArn: awssdk.String("clust_2")},
 		{ClusterArn: awssdk.String("clust_3"), ClusterName: awssdk.String("my_cust_3")},
 	}
-	defNames := []*string{awssdk.String("cs_1:1"), awssdk.String("cs_2:1"), awssdk.String("cs_2:2"), awssdk.String("cs_3:1")}
-	tasksDef := []*ecs.TaskDefinition{
+
+	tasksDef := []ecstypes.TaskDefinition{
 		{
-			ContainerDefinitions: []*ecs.ContainerDefinition{
+			ContainerDefinitions: []ecstypes.ContainerDefinition{
 				{Name: awssdk.String("cont_name_1"), Image: awssdk.String("image_1")},
 				{Name: awssdk.String("cont_name_2"), Image: awssdk.String("image_2")},
 				{Name: awssdk.String("cont_name_3"), Image: awssdk.String("image_3")},
 			},
 			Family:            awssdk.String("cs_1"),
-			Revision:          awssdk.Int64(1),
-			Status:            awssdk.String("ENABLED"),
+			Revision:          1,
+			Status:            "ENABLED",
 			TaskDefinitionArn: awssdk.String("cs_1:1"),
 			TaskRoleArn:       awssdk.String("role:arn"),
 		},
 		{
-			ContainerDefinitions: []*ecs.ContainerDefinition{},
+			ContainerDefinitions: []ecstypes.ContainerDefinition{},
 			Family:               awssdk.String("cs_2"),
-			Revision:             awssdk.Int64(1),
+			Revision:             1,
 			TaskDefinitionArn:    awssdk.String("cs_2:1"),
 		},
 		{
-			ContainerDefinitions: []*ecs.ContainerDefinition{},
+			ContainerDefinitions: []ecstypes.ContainerDefinition{},
 			Family:               awssdk.String("cs_2"),
-			Revision:             awssdk.Int64(2),
+			Revision:             2,
 			TaskDefinitionArn:    awssdk.String("cs_2:2"),
 		},
 		{
-			ContainerDefinitions: []*ecs.ContainerDefinition{},
+			ContainerDefinitions: []ecstypes.ContainerDefinition{},
 			Family:               awssdk.String("cs_3"),
 			TaskDefinitionArn:    awssdk.String("cs_3:1"),
-			Status:               awssdk.String("ACTIVE"),
+			Status:               "ACTIVE",
 		},
 	}
-	tasksNames := map[string][]*string{
-		"clust_1": {awssdk.String("task_1")},
-		"clust_2": {awssdk.String("task_2"), awssdk.String("task_3")},
+	tasksNames := map[string][]string{
+		"clust_1": {"task_1"},
+		"clust_2": {"task_2", "task_3"},
 	}
-	tasks := map[string][]*ecs.Task{
+	tasks := map[string][]ecstypes.Task{
 		"clust_1": {
 			{
 				ClusterArn:           awssdk.String("clust_1"),
 				ContainerInstanceArn: awssdk.String("cont_inst_1"),
 				LastStatus:           awssdk.String("running"),
-				Containers: []*ecs.Container{
+				Containers: []ecstypes.Container{
 					{
 						ContainerArn: awssdk.String("container_1"),
-						ExitCode:     awssdk.Int64(-1),
+						ExitCode:     awssdk.Int32(-1),
 						LastStatus:   awssdk.String("running"),
 						Name:         awssdk.String("my_container_1"),
 						Reason:       awssdk.String("no reason"),
@@ -479,10 +483,10 @@ func TestBuildInfraRdfGraph(t *testing.T) {
 				ClusterArn:           awssdk.String("clust_2"),
 				ContainerInstanceArn: awssdk.String("cont_inst_2"),
 				LastStatus:           awssdk.String("stopped"),
-				Containers: []*ecs.Container{
+				Containers: []ecstypes.Container{
 					{
 						ContainerArn: awssdk.String("container_4"),
-						ExitCode:     awssdk.Int64(0),
+						ExitCode:     awssdk.Int32(0),
 						LastStatus:   awssdk.String("stopped"),
 						Name:         awssdk.String("my_container_4"),
 					},
@@ -495,7 +499,7 @@ func TestBuildInfraRdfGraph(t *testing.T) {
 				ClusterArn:           awssdk.String("clust_2"),
 				ContainerInstanceArn: awssdk.String("cont_inst_3"),
 				Group:                awssdk.String("family:cs_1"),
-				Containers: []*ecs.Container{
+				Containers: []ecstypes.Container{
 					{
 						ContainerArn: awssdk.String("container_5"),
 						Name:         awssdk.String("my_container_5"),
@@ -508,16 +512,16 @@ func TestBuildInfraRdfGraph(t *testing.T) {
 		},
 	}
 
-	containerInstancesNames := map[string][]*string{
-		"clust_1": {awssdk.String("cont_inst_1"), awssdk.String("cont_inst_2")},
-		"clust_2": {awssdk.String("cont_inst_3")},
+	containerInstancesNames := map[string][]string{
+		"clust_1": {"cont_inst_1", "cont_inst_2"},
+		"clust_2": {"cont_inst_3"},
 	}
-	containerInstances := map[string][]*ecs.ContainerInstance{
+	containerInstances := map[string][]ecstypes.ContainerInstance{
 		"clust_1": {
 			{
-				AgentConnected:    awssdk.Bool(true),
-				AgentUpdateStatus: awssdk.String("AgentRunning"),
-				Attributes: []*ecs.Attribute{
+				AgentConnected:    true,
+				AgentUpdateStatus: "AgentRunning",
+				Attributes: []ecstypes.Attribute{
 					{
 						Name:  awssdk.String("attr_1"),
 						Value: awssdk.String("val1"),
@@ -529,12 +533,12 @@ func TestBuildInfraRdfGraph(t *testing.T) {
 				},
 				ContainerInstanceArn: awssdk.String("cont_inst_1"),
 				Ec2InstanceId:        awssdk.String("inst_2"),
-				PendingTasksCount:    awssdk.Int64(4),
+				PendingTasksCount:    4,
 				RegisteredAt:         awssdk.Time(now.Add(-2 * time.Hour)),
-				RunningTasksCount:    awssdk.Int64(2),
+				RunningTasksCount:    2,
 				Status:               awssdk.String("ACTIVE"),
-				Version:              awssdk.Int64(2),
-				VersionInfo:          &ecs.VersionInfo{AgentVersion: awssdk.String("0.0.5"), DockerVersion: awssdk.String("v1.0.12")},
+				Version:              2,
+				VersionInfo:          &ecstypes.VersionInfo{AgentVersion: awssdk.String("0.0.5"), DockerVersion: awssdk.String("v1.0.12")},
 			},
 			{
 				ContainerInstanceArn: awssdk.String("cont_inst_2"),
@@ -550,31 +554,48 @@ func TestBuildInfraRdfGraph(t *testing.T) {
 	}
 
 	//ACM
-	certificates := []*acm.CertificateSummary{
+	certificates := []acmtypes.CertificateSummary{
 		{CertificateArn: awssdk.String("arn:certif_1234"), DomainName: awssdk.String("domain-name.1")},
 		{CertificateArn: awssdk.String("arn:certif_2345"), DomainName: awssdk.String("domain-name.2")},
 		{CertificateArn: awssdk.String("arn:certif_3456"), DomainName: awssdk.String("domain-name.3")},
 	}
 
 	mock := &mockEc2{vpcs: vpcs, securitygroups: securityGroups, subnets: subnets, instances: instances, keypairinfos: keypairs, internetgateways: igws, routetables: routeTables, images: images, availabilityzones: availabilityZones, natgateways: natgws, networkinterfaces: networkInterfaces}
-	mockLb := &mockElbv2{loadbalancers: lbPages, targetgroups: targetGroups, listeners: listeners, targethealthdescriptions: targetHealths}
+	mockLb := &mockElbv2{
+		loadbalancers: lbPages,
+		targetgroups:  targetGroups,
+		manualElbv2Mock: manualElbv2Mock{
+			listeners:                listeners,
+			targethealthdescriptions: targetHealths,
+		},
+	}
 	mockClassicLb := &mockElb{loadbalancerdescriptions: classicLbPages}
 	mockEcr := &mockEcr{repositorys: repositories}
-	mockEcs := &mockEcs{clusterNames: clusterNames, clusters: clusters, taskdefinitionNames: defNames, taskdefinitions: tasksDef, tasksNames: tasksNames, tasks: tasks, containerinstancesNames: containerInstancesNames, containerinstances: containerInstances}
+	// The cluster and task-definition name lists the v1 mock carried are gone:
+	// the mock now derives them from the clusters and definitions themselves, so
+	// a fixture cannot describe a name that has no object behind it.
+	mockEcs := &mockEcs{manualEcsMock: manualEcsMock{
+		clusters:                clusters,
+		taskdefinitions:         tasksDef,
+		tasksNames:              tasksNames,
+		tasks:                   tasks,
+		containerinstancesNames: containerInstancesNames,
+		containerinstances:      containerInstances,
+	}}
 	mockRds := &mockRds{}
 	mockAcm := &mockAcm{certificatesummarys: certificates}
-	mockAutoscaling := &mockAutoscaling{launchconfigurations: launchConfigs, groups: scalingGroups}
+	mockAutoscaling := &mockAutoscaling{launchconfigurations: launchConfigs, autoscalinggroups: scalingGroups}
 	InfraService = &Infra{
-		EC2API:         mock,
-		ECRAPI:         mockEcr,
-		ECSAPI:         mockEcs,
-		ELBAPI:         mockClassicLb,
-		ELBV2API:       mockLb,
-		RDSAPI:         mockRds,
-		ACMAPI:         mockAcm,
-		AutoScalingAPI: mockAutoscaling,
+		Ec2API:         mock,
+		EcrAPI:         mockEcr,
+		EcsAPI:         mockEcs,
+		ElbAPI:         mockClassicLb,
+		Elbv2API:       mockLb,
+		RdsAPI:         mockRds,
+		AcmAPI:         mockAcm,
+		AutoscalingAPI: mockAutoscaling,
 		region:         "eu-west-1",
-		fetcher:        fetch.NewFetcher(awsfetch.BuildInfraFetchFuncs(awsfetch.NewConfig(mock, mockEcr, mockEcs, mockClassicLb, mockLb, mockRds, mockAutoscaling, mockAcm))),
+		fetcher:        fetch.NewFetcher(awsfetch.BuildInfraFetchFuncs(awsfetch.NewConfig(&awsfetch.AWSAPI{Ec2: mock, Ecr: mockEcr, Ecs: mockEcs, Elb: mockClassicLb, Elbv2: mockLb, Rds: mockRds, Autoscaling: mockAutoscaling, Acm: mockAcm}))),
 	}
 	g, err := InfraService.Fetch(context.Background())
 	if err != nil {
@@ -748,7 +769,7 @@ func TestBuildInfraRdfGraph(t *testing.T) {
 }
 
 func TestBuildStorageRdfGraph(t *testing.T) {
-	buckets := map[string][]*s3.Bucket{
+	buckets := map[string][]s3types.Bucket{
 		"us-west-1": {
 			{Name: awssdk.String("bucket_us_1")},
 			{Name: awssdk.String("bucket_us_2")},
@@ -759,7 +780,7 @@ func TestBuildStorageRdfGraph(t *testing.T) {
 			{Name: awssdk.String("bucket_eu_2")},
 		},
 	}
-	objects := map[string][]*s3.Object{
+	objects := map[string][]s3types.Object{
 		"bucket_us_1": {
 			{Key: awssdk.String("obj_1")},
 			{Key: awssdk.String("obj_2")},
@@ -776,27 +797,27 @@ func TestBuildStorageRdfGraph(t *testing.T) {
 			{Key: awssdk.String("obj_6")},
 		},
 	}
-	bucketsACL := map[string][]*s3.Grant{
+	bucketsACL := map[string][]s3types.Grant{
 		"bucket_us_1": {
-			{Permission: awssdk.String("Read"), Grantee: &s3.Grantee{ID: awssdk.String("usr_1")}},
+			{Permission: "Read", Grantee: &s3types.Grantee{ID: awssdk.String("usr_1")}},
 		},
 		"bucket_us_3": {
-			{Permission: awssdk.String("Write"), Grantee: &s3.Grantee{ID: awssdk.String("usr_2")}},
+			{Permission: "Write", Grantee: &s3types.Grantee{ID: awssdk.String("usr_2")}},
 		},
 		"bucket_eu_1": {
-			{Permission: awssdk.String("Write"), Grantee: &s3.Grantee{ID: awssdk.String("usr_2")}},
+			{Permission: "Write", Grantee: &s3types.Grantee{ID: awssdk.String("usr_2")}},
 		},
 		"bucket_eu_2": {
-			{Permission: awssdk.String("Write"), Grantee: &s3.Grantee{ID: awssdk.String("usr_1")}},
+			{Permission: "Write", Grantee: &s3types.Grantee{ID: awssdk.String("usr_1")}},
 		},
 	}
 
-	mocks3 := &mockS3{buckets: buckets, objects: objects, grants: bucketsACL}
+	mocks3 := &mockS3{manualS3Mock: manualS3Mock{buckets: buckets, objects: objects, grants: bucketsACL}}
 	StorageService = mocks3
 	storage := Storage{
 		S3API:   mocks3,
 		region:  "eu-west-1",
-		fetcher: fetch.NewFetcher(awsfetch.BuildStorageFetchFuncs(awsfetch.NewConfig(mocks3))),
+		fetcher: fetch.NewFetcher(awsfetch.BuildStorageFetchFuncs(awsfetch.NewConfig(&awsfetch.AWSAPI{S3: mocks3}))),
 	}
 
 	g, err := storage.Fetch(context.Background())
@@ -824,27 +845,30 @@ func TestBuildStorageRdfGraph(t *testing.T) {
 }
 
 func TestBuildDnsRdfGraph(t *testing.T) {
-	zonePages := []*route53.HostedZone{
+	zonePages := []route53types.HostedZone{
 		{Id: awssdk.String("/hostedzone/12345"), Name: awssdk.String("my.first.domain")},
 		{Id: awssdk.String("/hostedzone/23456"), Name: awssdk.String("my.second.domain")},
 		{Id: awssdk.String("/hostedzone/34567"), Name: awssdk.String("my.third.domain")},
 	}
-	recordPages := map[string][]*route53.ResourceRecordSet{
+	recordPages := map[string][]route53types.ResourceRecordSet{
 		"/hostedzone/12345": {
-			{Type: awssdk.String("A"), TTL: awssdk.Int64(10), Name: awssdk.String("subdomain1.my.first.domain"), ResourceRecords: []*route53.ResourceRecord{{Value: awssdk.String("1.2.3.4")}, {Value: awssdk.String("2.3.4.5")}}},
-			{Type: awssdk.String("A"), TTL: awssdk.Int64(10), Name: awssdk.String("subdomain2.my.first.domain"), ResourceRecords: []*route53.ResourceRecord{{Value: awssdk.String("3.4.5.6")}}},
-			{Type: awssdk.String("CNAME"), TTL: awssdk.Int64(60), Name: awssdk.String("subdomain3.my.first.domain"), ResourceRecords: []*route53.ResourceRecord{{Value: awssdk.String("4.5.6.7")}}},
+			{Type: "A", TTL: awssdk.Int64(10), Name: awssdk.String("subdomain1.my.first.domain"), ResourceRecords: []route53types.ResourceRecord{{Value: awssdk.String("1.2.3.4")}, {Value: awssdk.String("2.3.4.5")}}},
+			{Type: "A", TTL: awssdk.Int64(10), Name: awssdk.String("subdomain2.my.first.domain"), ResourceRecords: []route53types.ResourceRecord{{Value: awssdk.String("3.4.5.6")}}},
+			{Type: "CNAME", TTL: awssdk.Int64(60), Name: awssdk.String("subdomain3.my.first.domain"), ResourceRecords: []route53types.ResourceRecord{{Value: awssdk.String("4.5.6.7")}}},
 		},
 		"/hostedzone/23456": {
-			{Type: awssdk.String("A"), TTL: awssdk.Int64(30), Name: awssdk.String("subdomain1.my.second.domain"), ResourceRecords: []*route53.ResourceRecord{{Value: awssdk.String("5.6.7.8")}}},
-			{Type: awssdk.String("CNAME"), TTL: awssdk.Int64(10), Name: awssdk.String("subdomain3.my.second.domain"), ResourceRecords: []*route53.ResourceRecord{{Value: awssdk.String("6.7.8.9")}}},
+			{Type: "A", TTL: awssdk.Int64(30), Name: awssdk.String("subdomain1.my.second.domain"), ResourceRecords: []route53types.ResourceRecord{{Value: awssdk.String("5.6.7.8")}}},
+			{Type: "CNAME", TTL: awssdk.Int64(10), Name: awssdk.String("subdomain3.my.second.domain"), ResourceRecords: []route53types.ResourceRecord{{Value: awssdk.String("6.7.8.9")}}},
 		},
 	}
-	mockRoute53 := &mockRoute53{hostedzones: zonePages, resourcerecordsets: recordPages}
+	mockRoute53 := &mockRoute53{
+		hostedzones:       zonePages,
+		manualRoute53Mock: manualRoute53Mock{resourcerecordsets: recordPages},
+	}
 
 	dns := Dns{
 		Route53API: mockRoute53, region: "eu-west-1",
-		fetcher: fetch.NewFetcher(awsfetch.BuildDnsFetchFuncs(awsfetch.NewConfig(mockRoute53))),
+		fetcher: fetch.NewFetcher(awsfetch.BuildDnsFetchFuncs(awsfetch.NewConfig(&awsfetch.AWSAPI{Route53: mockRoute53}))),
 	}
 
 	g, err := dns.Fetch(context.Background())
@@ -883,37 +907,37 @@ func TestBuildDnsRdfGraph(t *testing.T) {
 }
 
 func TestBuildNotificationGraph(t *testing.T) {
-	topics := []*sns.Topic{
+	topics := []snstypes.Topic{
 		{TopicArn: awssdk.String("topic_arn_1")},
 		{TopicArn: awssdk.String("topic_arn_2")},
 		{TopicArn: awssdk.String("topic_arn_3")},
 	}
 
-	subscriptions := []*sns.Subscription{
+	subscriptions := []snstypes.Subscription{
 		{Endpoint: awssdk.String("endpoint_1")},
 		{Endpoint: awssdk.String("endpoint_2"), Owner: awssdk.String("subscr_owner"), Protocol: awssdk.String("subscr_prot"), SubscriptionArn: awssdk.String("subscr_arn"), TopicArn: awssdk.String("topic_arn_2")},
 		{Endpoint: awssdk.String("endpoint_3"), TopicArn: awssdk.String("topic_arn_2")},
 	}
-	queues := []*string{awssdk.String("queue_1"), awssdk.String("queue_2"), awssdk.String("queue_3")}
-	attributes := map[string]map[string]*string{
+	queues := []string{"queue_1", "queue_2", "queue_3"}
+	attributes := map[string]map[string]string{
 		"queue_2": {
-			"ApproximateNumberOfMessages": awssdk.String("4"),
-			"CreatedTimestamp":            awssdk.String("1494419259"),
-			"LastModifiedTimestamp":       awssdk.String("1494332859"),
-			"QueueArn":                    awssdk.String("queue_2_arn"),
-			"DelaySeconds":                awssdk.String("15"),
+			"ApproximateNumberOfMessages": "4",
+			"CreatedTimestamp":            "1494419259",
+			"LastModifiedTimestamp":       "1494332859",
+			"QueueArn":                    "queue_2_arn",
+			"DelaySeconds":                "15",
 		},
 		"queue_3": {
-			"ApproximateNumberOfMessages": awssdk.String("12"),
+			"ApproximateNumberOfMessages": "12",
 		},
 	}
 
-	sqs := &mockSqs{strings: queues, attributes: attributes}
+	sqs := &mockSqs{manualSqsMock: manualSqsMock{queues: queues, attributes: attributes}}
 	sns := &mockSns{subscriptions: subscriptions, topics: topics}
 
 	service := Messaging{
-		SNSAPI: sns, SQSAPI: sqs, region: "eu-west-1",
-		fetcher: fetch.NewFetcher(awsfetch.BuildMessagingFetchFuncs(awsfetch.NewConfig(sqs, sns))),
+		SnsAPI: sns, SqsAPI: sqs, region: "eu-west-1",
+		fetcher: fetch.NewFetcher(awsfetch.BuildMessagingFetchFuncs(awsfetch.NewConfig(&awsfetch.AWSAPI{Sqs: sqs, Sns: sns}))),
 	}
 
 	g, err := service.Fetch(context.Background())
@@ -960,20 +984,20 @@ func TestBuildNotificationGraph(t *testing.T) {
 }
 
 func TestBuildLambdaGraph(t *testing.T) {
-	functions := []*lambda.FunctionConfiguration{
+	functions := []lambdatypes.FunctionConfiguration{
 		{FunctionArn: awssdk.String("func_1_arn")},
 		{
 			FunctionArn:  awssdk.String("func_2_arn"),
 			FunctionName: awssdk.String("func_2_name"),
 			CodeSha256:   awssdk.String("abcdef123456789"),
-			CodeSize:     awssdk.Int64(1234),
+			CodeSize:     1234,
 			Description:  awssdk.String("my function desc"),
 			Handler:      awssdk.String("handl"),
 			LastModified: awssdk.String("2006-01-02T15:04:05.000+0000"),
-			MemorySize:   awssdk.Int64(1234),
+			MemorySize:   awssdk.Int32(1234),
 			Role:         awssdk.String("role"),
-			Runtime:      awssdk.String("runtime"),
-			Timeout:      awssdk.Int64(60),
+			Runtime:      "runtime",
+			Timeout:      awssdk.Int32(60),
 			Version:      awssdk.String("v2"),
 		},
 		{FunctionArn: awssdk.String("func_3_arn")},
@@ -983,7 +1007,7 @@ func TestBuildLambdaGraph(t *testing.T) {
 
 	service := Lambda{
 		LambdaAPI: mock, region: "eu-west-1",
-		fetcher: fetch.NewFetcher(awsfetch.BuildLambdaFetchFuncs(awsfetch.NewConfig(mock))),
+		fetcher: fetch.NewFetcher(awsfetch.BuildLambdaFetchFuncs(awsfetch.NewConfig(&awsfetch.AWSAPI{Lambda: mock}))),
 	}
 
 	g, err := service.Fetch(context.Background())
@@ -1014,36 +1038,36 @@ func TestBuildLambdaGraph(t *testing.T) {
 
 func TestBuildMonitoringGraph(t *testing.T) {
 	now := time.Now().UTC()
-	metrics := []*cloudwatch.Metric{
+	metrics := []cloudwatchtypes.Metric{
 		{Namespace: awssdk.String("namespace_1"), MetricName: awssdk.String("metric_1")},
-		{Namespace: awssdk.String("namespace_1"), MetricName: awssdk.String("metric_2"), Dimensions: []*cloudwatch.Dimension{{Name: awssdk.String("first"), Value: awssdk.String("dimension")}, {Name: awssdk.String("second"), Value: awssdk.String("dimension")}}},
+		{Namespace: awssdk.String("namespace_1"), MetricName: awssdk.String("metric_2"), Dimensions: []cloudwatchtypes.Dimension{{Name: awssdk.String("first"), Value: awssdk.String("dimension")}, {Name: awssdk.String("second"), Value: awssdk.String("dimension")}}},
 		{Namespace: awssdk.String("namespace_2"), MetricName: awssdk.String("metric_1")},
 		{Namespace: awssdk.String("namespace_2"), MetricName: awssdk.String("metric_2")},
 	}
-	alarms := []*cloudwatch.MetricAlarm{
+	alarms := []cloudwatchtypes.MetricAlarm{
 		{AlarmArn: awssdk.String("alarm_1")},
 		{AlarmArn: awssdk.String("alarm_2")},
 		{
 			AlarmArn:                awssdk.String("alarm_3"),
 			AlarmName:               awssdk.String("my_alarm"),
 			ActionsEnabled:          awssdk.Bool(true),
-			AlarmActions:            []*string{awssdk.String("action_arn_1"), awssdk.String("action_arn_2"), awssdk.String("action_arn_3")},
-			InsufficientDataActions: []*string{awssdk.String("action_arn_1"), awssdk.String("action_arn_3")},
-			OKActions:               []*string{awssdk.String("action_arn_2")},
+			AlarmActions:            []string{"action_arn_1", "action_arn_2", "action_arn_3"},
+			InsufficientDataActions: []string{"action_arn_1", "action_arn_3"},
+			OKActions:               []string{"action_arn_2"},
 			AlarmDescription:        awssdk.String("my alarm description"),
-			Dimensions:              []*cloudwatch.Dimension{{Name: awssdk.String("first"), Value: awssdk.String("dimension")}, {Name: awssdk.String("second"), Value: awssdk.String("dimension")}},
+			Dimensions:              []cloudwatchtypes.Dimension{{Name: awssdk.String("first"), Value: awssdk.String("dimension")}, {Name: awssdk.String("second"), Value: awssdk.String("dimension")}},
 			MetricName:              awssdk.String("metric_2"),
 			Namespace:               awssdk.String("namespace_2"),
 			StateUpdatedTimestamp:   awssdk.Time(now),
-			StateValue:              awssdk.String("OK"),
+			StateValue:              "OK",
 		},
 	}
 
 	mock := &mockCloudwatch{metrics: metrics, metricalarms: alarms}
 
 	service := Monitoring{
-		CloudWatchAPI: mock, region: "eu-west-1",
-		fetcher: fetch.NewFetcher(awsfetch.BuildMonitoringFetchFuncs(awsfetch.NewConfig(mock))),
+		CloudwatchAPI: mock, region: "eu-west-1",
+		fetcher: fetch.NewFetcher(awsfetch.BuildMonitoringFetchFuncs(awsfetch.NewConfig(&awsfetch.AWSAPI{Cloudwatch: mock}))),
 	}
 
 	g, err := service.Fetch(context.Background())
@@ -1100,25 +1124,25 @@ func TestBuildMonitoringGraph(t *testing.T) {
 
 func TestBuildCdnGraph(t *testing.T) {
 	now := time.Now().UTC()
-	distributions := []*cloudfront.DistributionSummary{
+	distributions := []cloudfronttypes.DistributionSummary{
 		{
 			ARN:              awssdk.String("ds_1_arn"),
-			Aliases:          &cloudfront.Aliases{Items: []*string{awssdk.String("cname1.domain.name"), awssdk.String("cname2.domain.name")}, Quantity: awssdk.Int64(2)},
+			Aliases:          &cloudfronttypes.Aliases{Items: []string{"cname1.domain.name", "cname2.domain.name"}, Quantity: awssdk.Int32(2)},
 			Comment:          awssdk.String("my cdn distribution"),
 			DomainName:       awssdk.String("domain.name"),
 			Enabled:          awssdk.Bool(true),
-			HttpVersion:      awssdk.String("http/2"),
+			HttpVersion:      "http/2",
 			Id:               awssdk.String("ds_1"),
 			IsIPV6Enabled:    awssdk.Bool(true),
 			LastModifiedTime: awssdk.Time(now),
-			Origins: &cloudfront.Origins{
-				Quantity: awssdk.Int64(2),
-				Items: []*cloudfront.Origin{
+			Origins: &cloudfronttypes.Origins{
+				Quantity: awssdk.Int32(2),
+				Items: []cloudfronttypes.Origin{
 					{
 						DomainName:     awssdk.String("domain.name"),
 						Id:             awssdk.String("origin_1"),
 						OriginPath:     awssdk.String("my/s3/path"),
-						S3OriginConfig: &cloudfront.S3OriginConfig{OriginAccessIdentity: awssdk.String("origin-access-identity/CloudFront/ID-of-origin-access-identity")},
+						S3OriginConfig: &cloudfronttypes.S3OriginConfig{OriginAccessIdentity: awssdk.String("origin-access-identity/CloudFront/ID-of-origin-access-identity")},
 					},
 					{
 						DomainName: awssdk.String("domain2.name"),
@@ -1127,14 +1151,14 @@ func TestBuildCdnGraph(t *testing.T) {
 					},
 				},
 			},
-			PriceClass: awssdk.String("expensive"),
+			PriceClass: "expensive",
 			Status:     awssdk.String("running"),
-			ViewerCertificate: &cloudfront.ViewerCertificate{
+			ViewerCertificate: &cloudfronttypes.ViewerCertificate{
 				ACMCertificateArn: awssdk.String("acm-certificate"),
 				Certificate:       awssdk.String("<ViewerProtocolPolicy>https-only<ViewerProtocolPolicy>"),
 				//IAMCertificateId:             awssdk.String("iam-certificate"),
-				MinimumProtocolVersion: awssdk.String("TLSv1"),
-				SSLSupportMethod:       awssdk.String("sni-only"),
+				MinimumProtocolVersion: "TLSv1",
+				SSLSupportMethod:       "sni-only",
 			},
 			WebACLId: awssdk.String("id"),
 		},
@@ -1151,8 +1175,8 @@ func TestBuildCdnGraph(t *testing.T) {
 	mock := &mockCloudfront{distributionsummarys: distributions}
 
 	service := Cdn{
-		CloudFrontAPI: mock, region: "eu-west-1",
-		fetcher: fetch.NewFetcher(awsfetch.BuildCdnFetchFuncs(awsfetch.NewConfig(mock))),
+		CloudfrontAPI: mock, region: "eu-west-1",
+		fetcher: fetch.NewFetcher(awsfetch.BuildCdnFetchFuncs(awsfetch.NewConfig(&awsfetch.AWSAPI{Cloudfront: mock}))),
 	}
 
 	g, err := service.Fetch(context.Background())
@@ -1211,21 +1235,21 @@ func TestBuildCdnGraph(t *testing.T) {
 
 func TestBuildCloudFormationGraph(t *testing.T) {
 	now := time.Now().UTC()
-	stacks := []*cloudformation.Stack{
+	stacks := []cloudformationtypes.Stack{
 		{
-			Capabilities:      []*string{awssdk.String("cap_1"), awssdk.String("cap_2"), awssdk.String("cap_3")},
+			Capabilities:      []cloudformationtypes.Capability{"cap_1", "cap_2", "cap_3"},
 			ChangeSetId:       awssdk.String("changeset"),
 			CreationTime:      awssdk.Time(now.Add(-2 * time.Hour)),
 			Description:       awssdk.String("my cf stack"),
 			DisableRollback:   awssdk.Bool(true),
 			LastUpdatedTime:   awssdk.Time(now),
-			NotificationARNs:  []*string{awssdk.String("notif_1"), awssdk.String("notif_2")},
-			Outputs:           []*cloudformation.Output{{OutputKey: awssdk.String("output1"), OutputValue: awssdk.String("myoutput1")}, {OutputKey: awssdk.String("output2"), OutputValue: awssdk.String("myoutput2")}},
-			Parameters:        []*cloudformation.Parameter{{ParameterKey: awssdk.String("key1"), ParameterValue: awssdk.String("val1")}, {ParameterKey: awssdk.String("key2"), ParameterValue: awssdk.String("val2")}},
+			NotificationARNs:  []string{"notif_1", "notif_2"},
+			Outputs:           []cloudformationtypes.Output{{OutputKey: awssdk.String("output1"), OutputValue: awssdk.String("myoutput1")}, {OutputKey: awssdk.String("output2"), OutputValue: awssdk.String("myoutput2")}},
+			Parameters:        []cloudformationtypes.Parameter{{ParameterKey: awssdk.String("key1"), ParameterValue: awssdk.String("val1")}, {ParameterKey: awssdk.String("key2"), ParameterValue: awssdk.String("val2")}},
 			RoleARN:           awssdk.String("role_arn"),
 			StackId:           awssdk.String("id_1"),
 			StackName:         awssdk.String("name_1"),
-			StackStatus:       awssdk.String("deployed"),
+			StackStatus:       "deployed",
 			StackStatusReason: awssdk.String("evrything ok"),
 		},
 		{
@@ -1240,8 +1264,8 @@ func TestBuildCloudFormationGraph(t *testing.T) {
 	mock := &mockCloudformation{stacks: stacks}
 
 	service := Cloudformation{
-		CloudFormationAPI: mock, region: "eu-west-1",
-		fetcher: fetch.NewFetcher(awsfetch.BuildCloudformationFetchFuncs(awsfetch.NewConfig(mock))),
+		CloudformationAPI: mock, region: "eu-west-1",
+		fetcher: fetch.NewFetcher(awsfetch.BuildCloudformationFetchFuncs(awsfetch.NewConfig(&awsfetch.AWSAPI{Cloudformation: mock}))),
 	}
 
 	g, err := service.Fetch(context.Background())
@@ -1314,8 +1338,8 @@ func TestBuildEmptyRdfGraphWhenNoData(t *testing.T) {
 	mock := &mockIam{}
 
 	access := Access{
-		IAMAPI: mock, region: "eu-west-1",
-		fetcher: fetch.NewFetcher(awsfetch.BuildAccessFetchFuncs(awsfetch.NewConfig(mock))),
+		IamAPI: mock, region: "eu-west-1",
+		fetcher: fetch.NewFetcher(awsfetch.BuildAccessFetchFuncs(awsfetch.NewConfig(&awsfetch.AWSAPI{Iam: mock}))),
 	}
 
 	g, err := access.Fetch(context.Background())
@@ -1335,18 +1359,25 @@ func TestBuildEmptyRdfGraphWhenNoData(t *testing.T) {
 	compareResources(t, g, resources, expected, expectedChildren, expectedAppliedOn)
 
 	infra := Infra{
-		EC2API:         &mockEc2{},
-		ELBAPI:         &mockElb{},
-		ELBV2API:       &mockElbv2{},
-		RDSAPI:         &mockRds{},
-		AutoScalingAPI: &mockAutoscaling{},
-		ECRAPI:         &mockEcr{},
-		ECSAPI:         &mockEcs{},
-		ACMAPI:         &mockAcm{},
+		Ec2API:         &mockEc2{},
+		ElbAPI:         &mockElb{},
+		Elbv2API:       &mockElbv2{},
+		RdsAPI:         &mockRds{},
+		AutoscalingAPI: &mockAutoscaling{},
+		EcrAPI:         &mockEcr{},
+		EcsAPI:         &mockEcs{},
+		AcmAPI:         &mockAcm{},
 		region:         "eu-west-1",
-		fetcher: fetch.NewFetcher(awsfetch.BuildInfraFetchFuncs(awsfetch.NewConfig(
-			&mockEc2{}, &mockElb{}, &mockElbv2{}, &mockRds{}, &mockEcr{}, &mockEcs{}, &mockAutoscaling{}, &mockAcm{},
-		))),
+		fetcher: fetch.NewFetcher(awsfetch.BuildInfraFetchFuncs(awsfetch.NewConfig(&awsfetch.AWSAPI{
+			Ec2:         &mockEc2{},
+			Elb:         &mockElb{},
+			Elbv2:       &mockElbv2{},
+			Rds:         &mockRds{},
+			Ecr:         &mockEcr{},
+			Ecs:         &mockEcs{},
+			Autoscaling: &mockAutoscaling{},
+			Acm:         &mockAcm{},
+		}))),
 	}
 
 	g, err = infra.Fetch(context.Background())
@@ -1412,44 +1443,4 @@ func compareResources(t *testing.T, g cloud.GraphAPI, resources []cloud.Resource
 			t.Errorf("'%s' appliedOn: got %v, want %v", got.Id(), g, w)
 		}
 	}
-}
-
-func TestSliceOfSlice(t *testing.T) {
-	var empty [][]*string
-	tcases := []struct {
-		in        []*string
-		maxlength int
-		out       [][]*string
-	}{
-		{in: []*string{awssdk.String("1"), awssdk.String("2"), awssdk.String("3")}, maxlength: 2, out: [][]*string{{awssdk.String("1"), awssdk.String("2")}, {awssdk.String("3")}}},
-		{in: []*string{awssdk.String("1"), awssdk.String("2"), awssdk.String("3")}, maxlength: 1, out: [][]*string{{awssdk.String("1")}, {awssdk.String("2")}, {awssdk.String("3")}}},
-		{in: []*string{awssdk.String("1"), awssdk.String("2"), awssdk.String("3")}, maxlength: 3, out: [][]*string{{awssdk.String("1"), awssdk.String("2"), awssdk.String("3")}}},
-		{in: []*string{awssdk.String("1"), awssdk.String("2"), awssdk.String("3")}, maxlength: 5, out: [][]*string{{awssdk.String("1"), awssdk.String("2"), awssdk.String("3")}}},
-		{in: []*string{awssdk.String("1"), awssdk.String("2"), awssdk.String("3")}, maxlength: 0, out: empty},
-		{in: []*string{}, maxlength: 2, out: empty},
-		{in: []*string{awssdk.String("1"), awssdk.String("2"), awssdk.String("3"), awssdk.String("4")}, maxlength: 2, out: [][]*string{{awssdk.String("1"), awssdk.String("2")}, {awssdk.String("3"), awssdk.String("4")}}},
-	}
-	for i, tcase := range tcases {
-		if got, want := sliceOfSlice(tcase.in, tcase.maxlength), tcase.out; !reflect.DeepEqual(got, want) {
-			t.Fatalf("%d: got %+v, want %+v", i+1, got, want)
-		}
-	}
-}
-
-func sliceOfSlice(in []*string, maxLength int) (res [][]*string) {
-	if maxLength <= 0 {
-		return
-	}
-	if len(in) == 0 {
-		return
-	}
-	for i := 0; i < len(in); i += maxLength {
-		if i+maxLength < len(in) {
-			res = append(res, in[i:i+maxLength])
-		} else {
-			res = append(res, in[i:])
-		}
-	}
-
-	return
 }

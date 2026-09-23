@@ -1,51 +1,31 @@
 package awsfetch
 
 import (
-	"reflect"
-
-	"github.com/aws/aws-sdk-go/service/acm/acmiface"
-	"github.com/aws/aws-sdk-go/service/applicationautoscaling/applicationautoscalingiface"
-	"github.com/aws/aws-sdk-go/service/autoscaling/autoscalingiface"
-	"github.com/aws/aws-sdk-go/service/cloudformation/cloudformationiface"
-	"github.com/aws/aws-sdk-go/service/cloudfront/cloudfrontiface"
-	"github.com/aws/aws-sdk-go/service/cloudwatch/cloudwatchiface"
-	"github.com/aws/aws-sdk-go/service/ec2/ec2iface"
-	"github.com/aws/aws-sdk-go/service/ecr/ecriface"
-	"github.com/aws/aws-sdk-go/service/ecs/ecsiface"
-	"github.com/aws/aws-sdk-go/service/elb/elbiface"
-	"github.com/aws/aws-sdk-go/service/elbv2/elbv2iface"
-	"github.com/aws/aws-sdk-go/service/iam/iamiface"
-	"github.com/aws/aws-sdk-go/service/lambda/lambdaiface"
-	"github.com/aws/aws-sdk-go/service/rds/rdsiface"
-	"github.com/aws/aws-sdk-go/service/route53/route53iface"
-	"github.com/aws/aws-sdk-go/service/s3/s3iface"
-	"github.com/aws/aws-sdk-go/service/sns/snsiface"
-	"github.com/aws/aws-sdk-go/service/sqs/sqsiface"
-	"github.com/aws/aws-sdk-go/service/sts/stsiface"
-
 	"github.com/theazz/awless-ro/logger"
 )
 
+// AWSAPI holds one client per AWS service, typed by the narrow interfaces in
+// gen_apis.go and manual_apis.go rather than by the concrete SDK clients, so
+// that tests can substitute them.
 type AWSAPI struct {
-	Iam                    iamiface.IAMAPI
-	Ec2                    ec2iface.EC2API
-	Elbv2                  elbv2iface.ELBV2API
-	Elb                    elbiface.ELBAPI
-	Rds                    rdsiface.RDSAPI
-	Autoscaling            autoscalingiface.AutoScalingAPI
-	Ecr                    ecriface.ECRAPI
-	Ecs                    ecsiface.ECSAPI
-	Applicationautoscaling applicationautoscalingiface.ApplicationAutoScalingAPI
-	Sts                    stsiface.STSAPI
-	S3                     s3iface.S3API
-	Sns                    snsiface.SNSAPI
-	Sqs                    sqsiface.SQSAPI
-	Route53                route53iface.Route53API
-	Lambda                 lambdaiface.LambdaAPI
-	Cloudwatch             cloudwatchiface.CloudWatchAPI
-	Cloudfront             cloudfrontiface.CloudFrontAPI
-	Cloudformation         cloudformationiface.CloudFormationAPI
-	Acm                    acmiface.ACMAPI
+	Iam            IamAPI
+	Ec2            Ec2API
+	Elbv2          Elbv2API
+	Elb            ElbAPI
+	Rds            RdsAPI
+	Autoscaling    AutoscalingAPI
+	Ecr            EcrAPI
+	Ecs            EcsAPI
+	Sts            StsAPI
+	S3             S3API
+	Sns            SnsAPI
+	Sqs            SqsAPI
+	Route53        Route53API
+	Lambda         LambdaAPI
+	Cloudwatch     CloudwatchAPI
+	Cloudfront     CloudfrontAPI
+	Cloudformation CloudformationAPI
+	Acm            AcmAPI
 }
 
 type Config struct {
@@ -54,13 +34,24 @@ type Config struct {
 	APIs  *AWSAPI
 }
 
-func NewConfig(apis ...interface{}) *Config {
-	c := &Config{
+// NewConfig takes the clients by name.
+//
+// Upstream passed them as an unordered bag and let reflection drop each one into
+// the first field it was assignable to. That worked while the fields were typed
+// by the SDK's own per-service interfaces, which never overlap. It does not work
+// here: a service awless-ro calls no operations on would get an empty interface,
+// which every client satisfies, so the first client offered would be filed under
+// the wrong name and the right field left nil. Naming the fields removes the
+// ambiguity instead of relying on no interface ever being empty.
+func NewConfig(apis *AWSAPI) *Config {
+	if apis == nil {
+		apis = new(AWSAPI)
+	}
+	return &Config{
 		Extra: make(map[string]interface{}),
 		Log:   logger.DiscardLogger,
+		APIs:  apis,
 	}
-	assignAPIs(c, apis...)
-	return c
 }
 
 func (c *Config) getBoolDefaultTrue(key string) bool {
@@ -73,25 +64,4 @@ func (c *Config) getBoolDefaultTrue(key string) bool {
 	}
 
 	return true
-}
-
-func assignAPIs(c *Config, apis ...interface{}) {
-	c.APIs = new(AWSAPI)
-	val := reflect.ValueOf(c.APIs).Elem()
-	stru := val.Type()
-
-	for _, api := range apis {
-		if !reflect.ValueOf(api).IsValid() {
-			continue
-		}
-
-		apiType := reflect.TypeOf(api)
-		for i := 0; i < stru.NumField(); i++ {
-			fieldType := stru.Field(i).Type
-			if apiType.AssignableTo(fieldType) {
-				val.Field(i).Set(reflect.ValueOf(api))
-				break
-			}
-		}
-	}
 }

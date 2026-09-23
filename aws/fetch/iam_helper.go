@@ -4,46 +4,48 @@ import (
 	"context"
 	"fmt"
 
-	awssdk "github.com/aws/aws-sdk-go/aws"
-	"github.com/aws/aws-sdk-go/service/iam"
-	"github.com/aws/aws-sdk-go/service/iam/iamiface"
+	"github.com/aws/aws-sdk-go-v2/service/iam"
+	iamtypes "github.com/aws/aws-sdk-go-v2/service/iam/types"
+
 	"github.com/theazz/awless-ro/fetch"
 )
 
+// AccountAuthorizationDetails is the one account-wide IAM call that backs the
+// user, group, role and policy fetchers.
 type AccountAuthorizationDetails struct {
-	Groups   []*iam.GroupDetail
-	Policies []*iam.ManagedPolicyDetail
-	Roles    []*iam.RoleDetail
-	Users    []*iam.UserDetail
+	Groups   []iamtypes.GroupDetail
+	Policies []iamtypes.ManagedPolicyDetail
+	Roles    []iamtypes.RoleDetail
+	Users    []iamtypes.UserDetail
 }
 
-func getAccountAuthorizationDetails(ctx context.Context, cache fetch.Cache, api iamiface.IAMAPI) (*AccountAuthorizationDetails, error) {
-	var entities []*string
+func getAccountAuthorizationDetails(ctx context.Context, cache fetch.Cache, api IamAPI) (*AccountAuthorizationDetails, error) {
+	var entities []iamtypes.EntityType
 	var cacheKey string
 	resourceType, ok := fetch.IsFetchingByType(ctx)
 	if ok {
 		switch resourceType {
 		case "user":
 			cacheKey = "usersDetails"
-			entities = append(entities, awssdk.String(iam.EntityTypeUser))
+			entities = append(entities, iamtypes.EntityTypeUser)
 		case "group":
 			cacheKey = "groupsDetails"
-			entities = append(entities, awssdk.String(iam.EntityTypeGroup))
+			entities = append(entities, iamtypes.EntityTypeGroup)
 		case "role":
 			cacheKey = "rolesDetails"
-			entities = append(entities, awssdk.String(iam.EntityTypeRole))
+			entities = append(entities, iamtypes.EntityTypeRole)
 		case "policy":
 			cacheKey = "policiesDetails"
-			entities = append(entities, awssdk.String(iam.EntityTypeLocalManagedPolicy), awssdk.String(iam.EntityTypeAwsmanagedPolicy))
+			entities = append(entities, iamtypes.EntityTypeLocalManagedPolicy, iamtypes.EntityTypeAWSManagedPolicy)
 		}
 	} else {
 		cacheKey = "accountDetails"
-		entities = append(entities, awssdk.String(iam.EntityTypeUser), awssdk.String(iam.EntityTypeGroup), awssdk.String(iam.EntityTypeRole))
-		entities = append(entities, awssdk.String(iam.EntityTypeLocalManagedPolicy), awssdk.String(iam.EntityTypeAwsmanagedPolicy))
+		entities = append(entities, iamtypes.EntityTypeUser, iamtypes.EntityTypeGroup, iamtypes.EntityTypeRole)
+		entities = append(entities, iamtypes.EntityTypeLocalManagedPolicy, iamtypes.EntityTypeAWSManagedPolicy)
 	}
 
 	if val, err := cache.Get(cacheKey, func() (interface{}, error) {
-		return fetchAccountAuthorizationDetails(entities, api)
+		return fetchAccountAuthorizationDetails(ctx, entities, api)
 	}); err != nil {
 		return nil, err
 	} else if v, ok := val.(*AccountAuthorizationDetails); ok {
@@ -53,25 +55,22 @@ func getAccountAuthorizationDetails(ctx context.Context, cache fetch.Cache, api 
 	}
 }
 
-func fetchAccountAuthorizationDetails(entities []*string, api iamiface.IAMAPI) (*AccountAuthorizationDetails, error) {
+func fetchAccountAuthorizationDetails(ctx context.Context, entities []iamtypes.EntityType, api IamAPI) (*AccountAuthorizationDetails, error) {
 	details := new(AccountAuthorizationDetails)
-	err := api.GetAccountAuthorizationDetailsPages(&iam.GetAccountAuthorizationDetailsInput{
-		Filter: entities,
-	}, func(out *iam.GetAccountAuthorizationDetailsOutput, lastPage bool) (shouldContinue bool) {
-		for _, u := range out.UserDetailList {
-			details.Users = append(details.Users, u)
-		}
-		for _, g := range out.GroupDetailList {
-			details.Groups = append(details.Groups, g)
-		}
-		for _, r := range out.RoleDetailList {
-			details.Roles = append(details.Roles, r)
-		}
-		for _, p := range out.Policies {
-			details.Policies = append(details.Policies, p)
-		}
-		return out.Marker != nil
-	})
 
-	return details, err
+	paginator := iam.NewGetAccountAuthorizationDetailsPaginator(api, &iam.GetAccountAuthorizationDetailsInput{
+		Filter: entities,
+	})
+	for paginator.HasMorePages() {
+		out, err := paginator.NextPage(ctx)
+		if err != nil {
+			return details, err
+		}
+		details.Users = append(details.Users, out.UserDetailList...)
+		details.Groups = append(details.Groups, out.GroupDetailList...)
+		details.Roles = append(details.Roles, out.RoleDetailList...)
+		details.Policies = append(details.Policies, out.Policies...)
+	}
+
+	return details, nil
 }

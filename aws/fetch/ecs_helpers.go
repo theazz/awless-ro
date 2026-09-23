@@ -4,119 +4,136 @@ import (
 	"context"
 	"sync"
 
-	awssdk "github.com/aws/aws-sdk-go/aws"
-	"github.com/aws/aws-sdk-go/service/ecs"
-	"github.com/aws/aws-sdk-go/service/ecs/ecsiface"
+	"github.com/aws/aws-sdk-go-v2/aws"
+	"github.com/aws/aws-sdk-go-v2/service/ecs"
+	ecstypes "github.com/aws/aws-sdk-go-v2/service/ecs/types"
+
 	"github.com/theazz/awless-ro/fetch"
 )
 
-func getClusterArns(ctx context.Context, cache fetch.Cache, api ecsiface.ECSAPI) ([]string, error) {
+func getClusterArns(ctx context.Context, cache fetch.Cache, api EcsAPI) ([]string, error) {
 	var arns []string
 	if clusterName, hasFilter := getUserFiltersFromContext(ctx)["cluster"]; hasFilter {
-		out, err := api.DescribeClusters(&ecs.DescribeClustersInput{Clusters: []*string{&clusterName}})
+		out, err := api.DescribeClusters(ctx, &ecs.DescribeClustersInput{Clusters: []string{clusterName}})
 		if err != nil {
 			return arns, err
 		}
 		for _, c := range out.Clusters {
-			arns = append(arns, awssdk.StringValue(c.ClusterArn))
+			arns = append(arns, aws.ToString(c.ClusterArn))
 		}
-	} else {
-		if val, cerr := cache.Get("getClustersNames", func() (interface{}, error) {
-			err := api.ListClustersPages(&ecs.ListClustersInput{}, func(out *ecs.ListClustersOutput, lastPage bool) (shouldContinue bool) {
-				arns = append(arns, awssdk.StringValueSlice(out.ClusterArns)...)
-				return out.NextToken != nil
-			})
-			return arns, err
-		}); cerr != nil {
-			return arns, cerr
-		} else if v, ok := val.([]string); ok {
-			arns = v
-		}
+		return arns, nil
 	}
+
+	if val, cerr := cache.Get("getClustersNames", func() (interface{}, error) {
+		var all []string
+		paginator := ecs.NewListClustersPaginator(api, &ecs.ListClustersInput{})
+		for paginator.HasMorePages() {
+			out, err := paginator.NextPage(ctx)
+			if err != nil {
+				return all, err
+			}
+			all = append(all, out.ClusterArns...)
+		}
+		return all, nil
+	}); cerr != nil {
+		return arns, cerr
+	} else if v, ok := val.([]string); ok {
+		arns = v
+	}
+
 	return arns, nil
 }
 
-func getAllTasks(ctx context.Context, cache fetch.Cache, api ecsiface.ECSAPI) (res []*ecs.Task, err error) {
-	clusterArns, cerr := getClusterArns(ctx, cache, api)
-	if cerr != nil {
-		return res, cerr
+// getAllTasks lists the running and the stopped tasks of every cluster, then
+// describes them in batches. DescribeTasks only accepts task ARNs of a single
+// cluster at a time, which is why the cluster travels alongside the ARNs.
+func getAllTasks(ctx context.Context, cache fetch.Cache, api EcsAPI) ([]ecstypes.Task, error) {
+	var res []ecstypes.Task
+
+	clusterArns, err := getClusterArns(ctx, cache, api)
+	if err != nil {
+		return res, err
 	}
 
-	type listTasksOutput struct {
+	type taskArns struct {
 		err     error
-		output  *ecs.ListTasksOutput
-		cluster *string
+		arns    []string
+		cluster string
 	}
-	tasksNamesc := make(chan listTasksOutput)
-	var wg sync.WaitGroup
+	arnsc := make(chan taskArns)
+	var listWG sync.WaitGroup
 
-	addTaskContainersFunc := func(cl string) func(*ecs.ListTasksOutput, bool) bool {
-		return func(out *ecs.ListTasksOutput, lastPage bool) (shouldContinue bool) {
-			tasksNamesc <- listTasksOutput{output: out, cluster: awssdk.String(cl)}
-			return out.NextToken != nil
+	listTasks := func(cluster string, status ecstypes.DesiredStatus) {
+		defer listWG.Done()
+		paginator := ecs.NewListTasksPaginator(api, &ecs.ListTasksInput{
+			Cluster:       aws.String(cluster),
+			DesiredStatus: status,
+		})
+		for paginator.HasMorePages() {
+			out, e := paginator.NextPage(ctx)
+			if e != nil {
+				arnsc <- taskArns{err: e}
+				return
+			}
+			arnsc <- taskArns{arns: out.TaskArns, cluster: cluster}
 		}
 	}
 
 	for _, cluster := range clusterArns {
-		wg.Add(1)
-		go func(cl string) {
-			defer wg.Done()
-			if er := api.ListTasksPages(&ecs.ListTasksInput{Cluster: &cl, DesiredStatus: awssdk.String("RUNNING")}, addTaskContainersFunc(cl)); er != nil {
-				tasksNamesc <- listTasksOutput{err: er}
-			}
-		}(cluster)
-
-		wg.Add(1)
-		go func(cl string) {
-			defer wg.Done()
-			if er := api.ListTasksPages(&ecs.ListTasksInput{Cluster: &cl, DesiredStatus: awssdk.String("STOPPED")}, addTaskContainersFunc(cl)); er != nil {
-				tasksNamesc <- listTasksOutput{err: er}
-			}
-		}(cluster)
+		listWG.Add(1)
+		go listTasks(cluster, ecstypes.DesiredStatusRunning)
+		listWG.Add(1)
+		go listTasks(cluster, ecstypes.DesiredStatusStopped)
 	}
 
-	type describeTasksOutput struct {
-		err    error
-		output *ecs.DescribeTasksOutput
+	type describedTasks struct {
+		err   error
+		tasks []ecstypes.Task
 	}
+	tasksc := make(chan describedTasks)
+	var describeWG sync.WaitGroup
 
-	tasksc := make(chan describeTasksOutput)
-	var tasksWG sync.WaitGroup
-
-	tasksWG.Add(1)
+	describeWG.Add(1)
 	go func() {
-		defer tasksWG.Done()
-		for r := range tasksNamesc {
+		defer describeWG.Done()
+		for r := range arnsc {
 			if r.err != nil {
-				tasksc <- describeTasksOutput{err: r.err}
+				tasksc <- describedTasks{err: r.err}
 				return
 			}
-			if len(r.output.TaskArns) == 0 {
+			if len(r.arns) == 0 {
 				continue
 			}
 
-			tasksWG.Add(1)
-			go func(arns []*string, cluster *string) {
-				defer tasksWG.Done()
-				tasksOut, er := api.DescribeTasks(&ecs.DescribeTasksInput{Cluster: cluster, Tasks: arns})
-				tasksc <- describeTasksOutput{err: er, output: tasksOut}
-			}(r.output.TaskArns, r.cluster)
+			describeWG.Add(1)
+			go func(arns []string, cluster string) {
+				defer describeWG.Done()
+				out, e := api.DescribeTasks(ctx, &ecs.DescribeTasksInput{
+					Cluster: aws.String(cluster),
+					Tasks:   arns,
+				})
+				if e != nil {
+					tasksc <- describedTasks{err: e}
+					return
+				}
+				tasksc <- describedTasks{tasks: out.Tasks}
+			}(r.arns, r.cluster)
 		}
 	}()
 
 	go func() {
-		wg.Wait()
-		close(tasksNamesc)
-		tasksWG.Wait()
+		listWG.Wait()
+		close(arnsc)
+		describeWG.Wait()
 		close(tasksc)
 	}()
 
 	for r := range tasksc {
-		if err = r.err; err != nil {
-			return
+		if r.err != nil {
+			return res, r.err
 		}
-		res = append(res, r.output.Tasks...)
+		res = append(res, r.tasks...)
 	}
 
-	return
+	return res, nil
 }

@@ -39,23 +39,23 @@ import (
 	"testing"
 	"time"
 
-	awssdk "github.com/aws/aws-sdk-go/aws"
-	"github.com/aws/aws-sdk-go/service/acm"
-	"github.com/aws/aws-sdk-go/service/autoscaling"
-	"github.com/aws/aws-sdk-go/service/cloudformation"
-	"github.com/aws/aws-sdk-go/service/cloudfront"
-	"github.com/aws/aws-sdk-go/service/cloudwatch"
-	"github.com/aws/aws-sdk-go/service/ec2"
-	"github.com/aws/aws-sdk-go/service/ecr"
-	"github.com/aws/aws-sdk-go/service/ecs"
-	"github.com/aws/aws-sdk-go/service/elb"
-	"github.com/aws/aws-sdk-go/service/elbv2"
-	"github.com/aws/aws-sdk-go/service/iam"
-	"github.com/aws/aws-sdk-go/service/lambda"
-	"github.com/aws/aws-sdk-go/service/rds"
-	"github.com/aws/aws-sdk-go/service/route53"
-	"github.com/aws/aws-sdk-go/service/s3"
-	"github.com/aws/aws-sdk-go/service/sns"
+	awssdk "github.com/aws/aws-sdk-go-v2/aws"
+	acmtypes "github.com/aws/aws-sdk-go-v2/service/acm/types"
+	autoscalingtypes "github.com/aws/aws-sdk-go-v2/service/autoscaling/types"
+	cloudformationtypes "github.com/aws/aws-sdk-go-v2/service/cloudformation/types"
+	cloudfronttypes "github.com/aws/aws-sdk-go-v2/service/cloudfront/types"
+	cloudwatchtypes "github.com/aws/aws-sdk-go-v2/service/cloudwatch/types"
+	ec2types "github.com/aws/aws-sdk-go-v2/service/ec2/types"
+	ecrtypes "github.com/aws/aws-sdk-go-v2/service/ecr/types"
+	ecstypes "github.com/aws/aws-sdk-go-v2/service/ecs/types"
+	elbtypes "github.com/aws/aws-sdk-go-v2/service/elasticloadbalancing/types"
+	elbv2types "github.com/aws/aws-sdk-go-v2/service/elasticloadbalancingv2/types"
+	iamtypes "github.com/aws/aws-sdk-go-v2/service/iam/types"
+	lambdatypes "github.com/aws/aws-sdk-go-v2/service/lambda/types"
+	rdstypes "github.com/aws/aws-sdk-go-v2/service/rds/types"
+	route53types "github.com/aws/aws-sdk-go-v2/service/route53/types"
+	s3types "github.com/aws/aws-sdk-go-v2/service/s3/types"
+	snstypes "github.com/aws/aws-sdk-go-v2/service/sns/types"
 
 	"github.com/theazz/awless-ro/cloud"
 )
@@ -70,67 +70,69 @@ import (
 // has to be extracted by at least one shape, not by every shape.
 var sdkPrototypes = map[string][]func() interface{}{
 	// EC2
-	cloud.Instance:         {func() interface{} { return &ec2.Instance{InstanceId: awssdk.String("i-1234")} }},
-	cloud.Vpc:              {func() interface{} { return &ec2.Vpc{VpcId: awssdk.String("vpc-1234")} }},
-	cloud.Subnet:           {func() interface{} { return &ec2.Subnet{SubnetId: awssdk.String("subnet-1234")} }},
-	cloud.SecurityGroup:    {func() interface{} { return &ec2.SecurityGroup{GroupId: awssdk.String("sg-1234")} }},
-	cloud.Keypair:          {func() interface{} { return &ec2.KeyPairInfo{KeyName: awssdk.String("my-key")} }},
-	cloud.Volume:           {func() interface{} { return &ec2.Volume{VolumeId: awssdk.String("vol-1234")} }},
-	cloud.Snapshot:         {func() interface{} { return &ec2.Snapshot{SnapshotId: awssdk.String("snap-1234")} }},
-	cloud.Image:            {func() interface{} { return &ec2.Image{ImageId: awssdk.String("ami-1234")} }},
-	cloud.ImportImageTask:  {func() interface{} { return &ec2.ImportImageTask{ImportTaskId: awssdk.String("import-1234")} }},
-	cloud.InternetGateway:  {func() interface{} { return &ec2.InternetGateway{InternetGatewayId: awssdk.String("igw-1234")} }},
-	cloud.NatGateway:       {func() interface{} { return &ec2.NatGateway{NatGatewayId: awssdk.String("nat-1234")} }},
-	cloud.RouteTable:       {func() interface{} { return &ec2.RouteTable{RouteTableId: awssdk.String("rtb-1234")} }},
-	cloud.AvailabilityZone: {func() interface{} { return &ec2.AvailabilityZone{ZoneName: awssdk.String("eu-west-1a")} }},
-	cloud.ElasticIP:        {func() interface{} { return &ec2.Address{AllocationId: awssdk.String("eipalloc-1234")} }},
+	cloud.Instance:         {func() interface{} { return ec2types.Instance{InstanceId: awssdk.String("i-1234")} }},
+	cloud.Vpc:              {func() interface{} { return ec2types.Vpc{VpcId: awssdk.String("vpc-1234")} }},
+	cloud.Subnet:           {func() interface{} { return ec2types.Subnet{SubnetId: awssdk.String("subnet-1234")} }},
+	cloud.SecurityGroup:    {func() interface{} { return ec2types.SecurityGroup{GroupId: awssdk.String("sg-1234")} }},
+	cloud.Keypair:          {func() interface{} { return ec2types.KeyPairInfo{KeyName: awssdk.String("my-key")} }},
+	cloud.Volume:           {func() interface{} { return ec2types.Volume{VolumeId: awssdk.String("vol-1234")} }},
+	cloud.Snapshot:         {func() interface{} { return ec2types.Snapshot{SnapshotId: awssdk.String("snap-1234")} }},
+	cloud.Image:            {func() interface{} { return ec2types.Image{ImageId: awssdk.String("ami-1234")} }},
+	cloud.ImportImageTask:  {func() interface{} { return ec2types.ImportImageTask{ImportTaskId: awssdk.String("import-1234")} }},
+	cloud.InternetGateway:  {func() interface{} { return ec2types.InternetGateway{InternetGatewayId: awssdk.String("igw-1234")} }},
+	cloud.NatGateway:       {func() interface{} { return ec2types.NatGateway{NatGatewayId: awssdk.String("nat-1234")} }},
+	cloud.RouteTable:       {func() interface{} { return ec2types.RouteTable{RouteTableId: awssdk.String("rtb-1234")} }},
+	cloud.AvailabilityZone: {func() interface{} { return ec2types.AvailabilityZone{ZoneName: awssdk.String("eu-west-1a")} }},
+	cloud.ElasticIP:        {func() interface{} { return ec2types.Address{AllocationId: awssdk.String("eipalloc-1234")} }},
 	cloud.NetworkInterface: {func() interface{} {
-		return &ec2.NetworkInterface{NetworkInterfaceId: awssdk.String("eni-1234")}
+		return ec2types.NetworkInterface{NetworkInterfaceId: awssdk.String("eni-1234")}
 	}},
 
 	// Load balancing
 	cloud.ClassicLoadBalancer: {func() interface{} {
-		return &elb.LoadBalancerDescription{LoadBalancerName: awssdk.String("my-classic-lb")}
+		return elbtypes.LoadBalancerDescription{LoadBalancerName: awssdk.String("my-classic-lb")}
 	}},
 	cloud.LoadBalancer: {func() interface{} {
-		return &elbv2.LoadBalancer{LoadBalancerArn: awssdk.String("arn:aws:elasticloadbalancing:lb/1")}
+		return elbv2types.LoadBalancer{LoadBalancerArn: awssdk.String("arn:aws:elasticloadbalancing:lb/1")}
 	}},
 	cloud.TargetGroup: {func() interface{} {
-		return &elbv2.TargetGroup{TargetGroupArn: awssdk.String("arn:aws:elasticloadbalancing:tg/1")}
+		return elbv2types.TargetGroup{TargetGroupArn: awssdk.String("arn:aws:elasticloadbalancing:tg/1")}
 	}},
 	cloud.Listener: {func() interface{} {
-		return &elbv2.Listener{ListenerArn: awssdk.String("arn:aws:elasticloadbalancing:listener/1")}
+		return elbv2types.Listener{ListenerArn: awssdk.String("arn:aws:elasticloadbalancing:listener/1")}
 	}},
 
 	// RDS
-	cloud.Database:      {func() interface{} { return &rds.DBInstance{DBInstanceIdentifier: awssdk.String("my-db")} }},
-	cloud.DbSubnetGroup: {func() interface{} { return &rds.DBSubnetGroup{DBSubnetGroupArn: awssdk.String("arn:aws:rds:subgrp/1")} }},
+	cloud.Database: {func() interface{} { return rdstypes.DBInstance{DBInstanceIdentifier: awssdk.String("my-db")} }},
+	cloud.DbSubnetGroup: {func() interface{} {
+		return rdstypes.DBSubnetGroup{DBSubnetGroupArn: awssdk.String("arn:aws:rds:subgrp/1")}
+	}},
 
 	// Autoscaling
 	cloud.LaunchConfiguration: {func() interface{} {
-		return &autoscaling.LaunchConfiguration{LaunchConfigurationARN: awssdk.String("arn:aws:autoscaling:lc/1")}
+		return autoscalingtypes.LaunchConfiguration{LaunchConfigurationARN: awssdk.String("arn:aws:autoscaling:lc/1")}
 	}},
 	cloud.ScalingGroup: {func() interface{} {
-		return &autoscaling.Group{AutoScalingGroupARN: awssdk.String("arn:aws:autoscaling:asg/1")}
+		return autoscalingtypes.AutoScalingGroup{AutoScalingGroupARN: awssdk.String("arn:aws:autoscaling:asg/1")}
 	}},
 	cloud.ScalingPolicy: {func() interface{} {
-		return &autoscaling.ScalingPolicy{PolicyARN: awssdk.String("arn:aws:autoscaling:policy/1")}
+		return autoscalingtypes.ScalingPolicy{PolicyARN: awssdk.String("arn:aws:autoscaling:policy/1")}
 	}},
 
 	// Containers
-	cloud.Repository:       {func() interface{} { return &ecr.Repository{RepositoryArn: awssdk.String("arn:aws:ecr:repo/1")} }},
-	cloud.ContainerCluster: {func() interface{} { return &ecs.Cluster{ClusterArn: awssdk.String("arn:aws:ecs:cluster/1")} }},
+	cloud.Repository:       {func() interface{} { return ecrtypes.Repository{RepositoryArn: awssdk.String("arn:aws:ecr:repo/1")} }},
+	cloud.ContainerCluster: {func() interface{} { return ecstypes.Cluster{ClusterArn: awssdk.String("arn:aws:ecs:cluster/1")} }},
 	cloud.ContainerTask: {func() interface{} {
-		return &ecs.TaskDefinition{TaskDefinitionArn: awssdk.String("arn:aws:ecs:task-definition/1")}
+		return ecstypes.TaskDefinition{TaskDefinitionArn: awssdk.String("arn:aws:ecs:task-definition/1")}
 	}},
-	cloud.Container: {func() interface{} { return &ecs.Container{ContainerArn: awssdk.String("arn:aws:ecs:container/1")} }},
+	cloud.Container: {func() interface{} { return ecstypes.Container{ContainerArn: awssdk.String("arn:aws:ecs:container/1")} }},
 	cloud.ContainerInstance: {func() interface{} {
-		return &ecs.ContainerInstance{ContainerInstanceArn: awssdk.String("arn:aws:ecs:container-instance/1")}
+		return ecstypes.ContainerInstance{ContainerInstanceArn: awssdk.String("arn:aws:ecs:container-instance/1")}
 	}},
 
 	// ACM
 	cloud.Certificate: {func() interface{} {
-		return &acm.CertificateSummary{CertificateArn: awssdk.String("arn:aws:acm:certificate/1")}
+		return acmtypes.CertificateSummary{CertificateArn: awssdk.String("arn:aws:acm:certificate/1")}
 	}},
 
 	// IAM
@@ -139,59 +141,59 @@ var sdkPrototypes = map[string][]func() interface{}{
 	// GetAccountAuthorizationDetails has the inline policies, User from
 	// ListUsers has PasswordLastUsed.
 	cloud.User: {
-		func() interface{} { return &iam.UserDetail{UserId: awssdk.String("AIDUSER1")} },
-		func() interface{} { return &iam.User{UserId: awssdk.String("AIDUSER1")} },
+		func() interface{} { return iamtypes.UserDetail{UserId: awssdk.String("AIDUSER1")} },
+		func() interface{} { return iamtypes.User{UserId: awssdk.String("AIDUSER1")} },
 	},
-	cloud.Role:  {func() interface{} { return &iam.RoleDetail{RoleId: awssdk.String("AROLE1")} }},
-	cloud.Group: {func() interface{} { return &iam.GroupDetail{GroupId: awssdk.String("AGROUP1")} }},
+	cloud.Role:  {func() interface{} { return iamtypes.RoleDetail{RoleId: awssdk.String("AROLE1")} }},
+	cloud.Group: {func() interface{} { return iamtypes.GroupDetail{GroupId: awssdk.String("AGROUP1")} }},
 	cloud.Policy: {func() interface{} {
-		return &iam.ManagedPolicyDetail{PolicyId: awssdk.String("APOLICY1")}
+		return iamtypes.ManagedPolicyDetail{PolicyId: awssdk.String("APOLICY1")}
 	}},
 	cloud.AccessKey: {func() interface{} {
-		return &iam.AccessKeyMetadata{AccessKeyId: awssdk.String("AKIAEXAMPLE1")}
+		return iamtypes.AccessKeyMetadata{AccessKeyId: awssdk.String("AKIAEXAMPLE1")}
 	}},
 	cloud.InstanceProfile: {func() interface{} {
-		return &iam.InstanceProfile{InstanceProfileId: awssdk.String("AIPROFILE1")}
+		return iamtypes.InstanceProfile{InstanceProfileId: awssdk.String("AIPROFILE1")}
 	}},
 	cloud.MFADevice: {func() interface{} {
-		return &iam.VirtualMFADevice{SerialNumber: awssdk.String("arn:aws:iam::mfa/user")}
+		return iamtypes.VirtualMFADevice{SerialNumber: awssdk.String("arn:aws:iam::mfa/user")}
 	}},
 
 	// S3
-	cloud.Bucket:   {func() interface{} { return &s3.Bucket{Name: awssdk.String("my-bucket")} }},
-	cloud.S3Object: {func() interface{} { return &s3.Object{Key: awssdk.String("my/object")} }},
+	cloud.Bucket:   {func() interface{} { return s3types.Bucket{Name: awssdk.String("my-bucket")} }},
+	cloud.S3Object: {func() interface{} { return s3types.Object{Key: awssdk.String("my/object")} }},
 
 	// Messaging
-	cloud.Subscription: {func() interface{} { return &sns.Subscription{Endpoint: awssdk.String("me@example.com")} }},
-	cloud.Topic:        {func() interface{} { return &sns.Topic{TopicArn: awssdk.String("arn:aws:sns:topic/1")} }},
+	cloud.Subscription: {func() interface{} { return snstypes.Subscription{Endpoint: awssdk.String("me@example.com")} }},
+	cloud.Topic:        {func() interface{} { return snstypes.Topic{TopicArn: awssdk.String("arn:aws:sns:topic/1")} }},
 
 	// DNS
-	cloud.Zone: {func() interface{} { return &route53.HostedZone{Id: awssdk.String("/hostedzone/Z1")} }},
+	cloud.Zone: {func() interface{} { return route53types.HostedZone{Id: awssdk.String("/hostedzone/Z1")} }},
 	cloud.Record: {func() interface{} {
-		return &route53.ResourceRecordSet{Name: awssdk.String("example.com."), Type: awssdk.String("A")}
+		return route53types.ResourceRecordSet{Name: awssdk.String("example.com."), Type: route53types.RRTypeA}
 	}},
 
 	// Lambda
 	cloud.Function: {func() interface{} {
-		return &lambda.FunctionConfiguration{FunctionArn: awssdk.String("arn:aws:lambda:function/1")}
+		return lambdatypes.FunctionConfiguration{FunctionArn: awssdk.String("arn:aws:lambda:function/1")}
 	}},
 
 	// Monitoring
 	cloud.Metric: {func() interface{} {
-		return &cloudwatch.Metric{Namespace: awssdk.String("AWS/EC2"), MetricName: awssdk.String("CPUUtilization")}
+		return cloudwatchtypes.Metric{Namespace: awssdk.String("AWS/EC2"), MetricName: awssdk.String("CPUUtilization")}
 	}},
 	cloud.Alarm: {func() interface{} {
-		return &cloudwatch.MetricAlarm{AlarmArn: awssdk.String("arn:aws:cloudwatch:alarm/1")}
+		return cloudwatchtypes.MetricAlarm{AlarmArn: awssdk.String("arn:aws:cloudwatch:alarm/1")}
 	}},
 
 	// CDN
 	cloud.Distribution: {func() interface{} {
-		return &cloudfront.DistributionSummary{Id: awssdk.String("E1DISTRIBUTION")}
+		return cloudfronttypes.DistributionSummary{Id: awssdk.String("E1DISTRIBUTION")}
 	}},
 
 	// CloudFormation
 	cloud.Stack: {func() interface{} {
-		return &cloudformation.Stack{StackId: awssdk.String("arn:aws:cloudformation:stack/1")}
+		return cloudformationtypes.Stack{StackId: awssdk.String("arn:aws:cloudformation:stack/1")}
 	}},
 }
 
@@ -210,71 +212,71 @@ var (
 	// typeSynths covers shapes whose transform inspects the contents, so a
 	// zero-valued element would either error or yield nothing.
 	typeSynths = map[reflect.Type]func() interface{}{
-		reflect.TypeOf([]*ec2.Tag{}): func() interface{} {
-			return []*ec2.Tag{{Key: awssdk.String("Name"), Value: awssdk.String("a-name")}}
+		reflect.TypeOf([]ec2types.Tag{}): func() interface{} {
+			return []ec2types.Tag{{Key: awssdk.String("Name"), Value: awssdk.String("a-name")}}
 		},
-		reflect.TypeOf([]*autoscaling.TagDescription{}): func() interface{} {
-			return []*autoscaling.TagDescription{{Key: awssdk.String("Name"), Value: awssdk.String("a-name")}}
+		reflect.TypeOf([]autoscalingtypes.TagDescription{}): func() interface{} {
+			return []autoscalingtypes.TagDescription{{Key: awssdk.String("Name"), Value: awssdk.String("a-name")}}
 		},
-		reflect.TypeOf([]*ec2.IpPermission{}): func() interface{} {
-			return []*ec2.IpPermission{{
+		reflect.TypeOf([]ec2types.IpPermission{}): func() interface{} {
+			return []ec2types.IpPermission{{
 				IpProtocol: awssdk.String("tcp"),
-				FromPort:   awssdk.Int64(22),
-				ToPort:     awssdk.Int64(22),
-				IpRanges:   []*ec2.IpRange{{CidrIp: awssdk.String("10.0.0.0/24")}},
+				FromPort:   awssdk.Int32(22),
+				ToPort:     awssdk.Int32(22),
+				IpRanges:   []ec2types.IpRange{{CidrIp: awssdk.String("10.0.0.0/24")}},
 			}}
 		},
-		reflect.TypeOf([]*ec2.Route{}): func() interface{} {
-			return []*ec2.Route{{
+		reflect.TypeOf([]ec2types.Route{}): func() interface{} {
+			return []ec2types.Route{{
 				DestinationCidrBlock: awssdk.String("0.0.0.0/0"),
 				GatewayId:            awssdk.String("igw-1234"),
 			}}
 		},
-		reflect.TypeOf([]*ec2.RouteTableAssociation{}): func() interface{} {
-			return []*ec2.RouteTableAssociation{{
+		reflect.TypeOf([]ec2types.RouteTableAssociation{}): func() interface{} {
+			return []ec2types.RouteTableAssociation{{
 				Main:                    awssdk.Bool(true),
 				RouteTableAssociationId: awssdk.String("rtbassoc-1234"),
 				SubnetId:                awssdk.String("subnet-1234"),
 			}}
 		},
-		reflect.TypeOf([]*elb.ListenerDescription{}): func() interface{} {
-			return []*elb.ListenerDescription{{Listener: &elb.Listener{
+		reflect.TypeOf([]elbtypes.ListenerDescription{}): func() interface{} {
+			return []elbtypes.ListenerDescription{{Listener: &elbtypes.Listener{
 				Protocol:         awssdk.String("HTTPS"),
-				LoadBalancerPort: awssdk.Int64(443),
+				LoadBalancerPort: 443,
 				InstanceProtocol: awssdk.String("HTTP"),
-				InstancePort:     awssdk.Int64(8080),
+				InstancePort:     awssdk.Int32(8080),
 			}}}
 		},
-		reflect.TypeOf([]*cloudwatch.Dimension{}): func() interface{} {
-			return []*cloudwatch.Dimension{{Name: awssdk.String("InstanceId"), Value: awssdk.String("i-1234")}}
+		reflect.TypeOf([]cloudwatchtypes.Dimension{}): func() interface{} {
+			return []cloudwatchtypes.Dimension{{Name: awssdk.String("InstanceId"), Value: awssdk.String("i-1234")}}
 		},
-		reflect.TypeOf([]*ecs.Attribute{}): func() interface{} {
-			return []*ecs.Attribute{{Name: awssdk.String("ecs.os-type"), Value: awssdk.String("linux")}}
+		reflect.TypeOf([]ecstypes.Attribute{}): func() interface{} {
+			return []ecstypes.Attribute{{Name: awssdk.String("ecs.os-type"), Value: awssdk.String("linux")}}
 		},
-		reflect.TypeOf([]*ecs.ContainerDefinition{}): func() interface{} {
-			return []*ecs.ContainerDefinition{{Name: awssdk.String("web"), Image: awssdk.String("nginx:latest")}}
+		reflect.TypeOf([]ecstypes.ContainerDefinition{}): func() interface{} {
+			return []ecstypes.ContainerDefinition{{Name: awssdk.String("web"), Image: awssdk.String("nginx:latest")}}
 		},
-		reflect.TypeOf([]*iam.PolicyVersion{}): func() interface{} {
-			return []*iam.PolicyVersion{{
-				IsDefaultVersion: awssdk.Bool(true),
+		reflect.TypeOf([]iamtypes.PolicyVersion{}): func() interface{} {
+			return []iamtypes.PolicyVersion{{
+				IsDefaultVersion: true,
 				Document:         awssdk.String(url.QueryEscape(`{"Version": "2012-10-17"}`)),
 			}}
 		},
-		reflect.TypeOf([]*cloudformation.Output{}): func() interface{} {
-			return []*cloudformation.Output{{OutputKey: awssdk.String("Url"), OutputValue: awssdk.String("https://example.com")}}
+		reflect.TypeOf([]cloudformationtypes.Output{}): func() interface{} {
+			return []cloudformationtypes.Output{{OutputKey: awssdk.String("Url"), OutputValue: awssdk.String("https://example.com")}}
 		},
-		reflect.TypeOf([]*cloudformation.Parameter{}): func() interface{} {
-			return []*cloudformation.Parameter{{ParameterKey: awssdk.String("Env"), ParameterValue: awssdk.String("prod")}}
+		reflect.TypeOf([]cloudformationtypes.Parameter{}): func() interface{} {
+			return []cloudformationtypes.Parameter{{ParameterKey: awssdk.String("Env"), ParameterValue: awssdk.String("prod")}}
 		},
-		reflect.TypeOf(&cloudfront.Origins{}): func() interface{} {
-			return &cloudfront.Origins{Items: []*cloudfront.Origin{{
+		reflect.TypeOf(cloudfronttypes.Origins{}): func() interface{} {
+			return cloudfronttypes.Origins{Items: []cloudfronttypes.Origin{{
 				Id:         awssdk.String("origin-1"),
 				DomainName: awssdk.String("origin.example.com"),
 				OriginPath: awssdk.String("/assets"),
 			}}}
 		},
-		reflect.TypeOf(&cloudfront.Aliases{}): func() interface{} {
-			return &cloudfront.Aliases{Items: awssdk.StringSlice([]string{"cdn.example.com"})}
+		reflect.TypeOf(cloudfronttypes.Aliases{}): func() interface{} {
+			return cloudfronttypes.Aliases{Items: []string{"cdn.example.com"}}
 		},
 	}
 )
@@ -283,10 +285,20 @@ var (
 // given resource type, so that a missing property can only mean the extraction
 // itself failed. Fields the shape does not have are skipped and reported back,
 // since a resource type may be built from several shapes.
-func populateMappedFields(t *testing.T, rtype string, source interface{}) (absent []string) {
+// fillPrototype copies a prototype into addressable storage, populates it and
+// hands back the filled value. SDK v2 shapes reach NewResource by value, so the
+// prototypes are values too and have to be boxed before they can be written to.
+func fillPrototype(t *testing.T, rtype string, proto interface{}) (interface{}, []string) {
 	t.Helper()
 
-	elem := reflect.ValueOf(source).Elem()
+	box := reflect.New(reflect.TypeOf(proto))
+	box.Elem().Set(reflect.ValueOf(proto))
+	absent := populateMappedFields(t, rtype, box.Elem())
+	return box.Elem().Interface(), absent
+}
+
+func populateMappedFields(t *testing.T, rtype string, elem reflect.Value) (absent []string) {
+	t.Helper()
 
 	for prop, trans := range awsResourcesDef[rtype] {
 		if trans.transform == nil {
@@ -299,7 +311,7 @@ func populateMappedFields(t *testing.T, rtype string, source interface{}) (absen
 			continue
 		}
 		if !field.CanSet() {
-			t.Errorf("%s: source field %q is not settable", rtype, trans.name)
+			t.Errorf("%s: source field %q of %s is not settable", rtype, trans.name, elem.Type())
 			continue
 		}
 		if !field.IsZero() {
@@ -427,8 +439,7 @@ func TestNewResourceExtractsEveryMappedProperty(t *testing.T) {
 			extracted := make(map[string]bool)
 
 			for _, proto := range protos {
-				source := proto()
-				absent := populateMappedFields(t, rtype, source)
+				source, absent := fillPrototype(t, rtype, proto())
 
 				res, err := NewResource(source)
 				if err != nil {
@@ -510,9 +521,9 @@ func TestMappedPropertiesWithoutTransform(t *testing.T) {
 // the failure it exists for. Without this, a refactor that quietly stops
 // extracting properties could leave the suite green.
 func TestSafetyNetDetectsABrokenMapping(t *testing.T) {
-	source := &ec2.Instance{InstanceId: awssdk.String("i-1234")}
-	if absent := populateMappedFields(t, cloud.Instance, source); len(absent) > 0 {
-		t.Fatalf("ec2.Instance is missing source fields for %v", absent)
+	source, absent := fillPrototype(t, cloud.Instance, ec2types.Instance{InstanceId: awssdk.String("i-1234")})
+	if len(absent) > 0 {
+		t.Fatalf("ec2types.Instance is missing source fields for %v", absent)
 	}
 
 	res, err := NewResource(source)
@@ -532,7 +543,7 @@ func TestSafetyNetDetectsABrokenMapping(t *testing.T) {
 	}
 	defer func() { awsResourcesDef[cloud.Instance]["Type"] = original }()
 
-	broken, err := NewResource(&ec2.Instance{InstanceId: awssdk.String("i-1234")})
+	broken, err := NewResource(ec2types.Instance{InstanceId: awssdk.String("i-1234")})
 	if err != nil {
 		t.Fatalf("NewResource with a broken mapping: %s", err)
 	}

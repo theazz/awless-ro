@@ -1,13 +1,15 @@
 package awstailers
 
 import (
+	"context"
 	"fmt"
 	"io"
 	"sort"
 	"time"
 
-	awssdk "github.com/aws/aws-sdk-go/aws"
-	"github.com/aws/aws-sdk-go/service/autoscaling"
+	awssdk "github.com/aws/aws-sdk-go-v2/aws"
+	"github.com/aws/aws-sdk-go-v2/service/autoscaling"
+	autoscalingtypes "github.com/aws/aws-sdk-go-v2/service/autoscaling/types"
 	"github.com/theazz/awless-ro/aws/services"
 )
 
@@ -59,7 +61,7 @@ func (t *scalingActivitiesTailer) Tail(w io.Writer) error {
 }
 
 func (t *scalingActivitiesTailer) displayLastEvents(infra *awsservices.Infra, w io.Writer) error {
-	out, err := infra.AutoScalingAPI.DescribeScalingActivities(&autoscaling.DescribeScalingActivitiesInput{MaxRecords: awssdk.Int64(int64(t.nbEvents))})
+	out, err := infra.AutoscalingAPI.DescribeScalingActivities(context.Background(), &autoscaling.DescribeScalingActivitiesInput{MaxRecords: awssdk.Int32(int32(t.nbEvents))})
 	if err != nil {
 		return err
 	}
@@ -84,7 +86,14 @@ func (t *scalingActivitiesTailer) displayNewEvents(infra *awsservices.Infra, w i
 	var eventFound bool
 	var newEvents []*event
 	lastEventTime := t.lastEventTime
-	err := infra.AutoScalingAPI.DescribeScalingActivitiesPages(&autoscaling.DescribeScalingActivitiesInput{}, func(page *autoscaling.DescribeScalingActivitiesOutput, lastPage bool) bool {
+	ctx := context.Background()
+	paginator := autoscaling.NewDescribeScalingActivitiesPaginator(infra.AutoscalingAPI,
+		&autoscaling.DescribeScalingActivitiesInput{})
+	for paginator.HasMorePages() && !eventFound {
+		page, err := paginator.NextPage(ctx)
+		if err != nil {
+			return err
+		}
 		for _, act := range page.Activities {
 			evt := newEventFromScalingActivity(act)
 			if t.lastEventTime.Before(evt.stamp) {
@@ -96,10 +105,6 @@ func (t *scalingActivitiesTailer) displayNewEvents(infra *awsservices.Infra, w i
 			}
 			newEvents = append(newEvents, evt)
 		}
-		return !eventFound
-	})
-	if err != nil {
-		return err
 	}
 	sort.Slice(newEvents, func(i int, j int) bool { return newEvents[i].stamp.Before(newEvents[j].stamp) })
 	for _, e := range newEvents {
@@ -117,12 +122,12 @@ type event struct {
 	message string
 }
 
-func newEventFromScalingActivity(s *autoscaling.Activity) *event {
+func newEventFromScalingActivity(s autoscalingtypes.Activity) *event {
 	return &event{
-		id:      awssdk.StringValue(s.ActivityId),
-		stamp:   awssdk.TimeValue(s.StartTime),
-		message: fmt.Sprintf("%s: %s", awssdk.StringValue(s.StatusCode), awssdk.StringValue(s.Description)),
-		element: awssdk.StringValue(s.AutoScalingGroupName),
+		id:      awssdk.ToString(s.ActivityId),
+		stamp:   awssdk.ToTime(s.StartTime),
+		message: fmt.Sprintf("%s: %s", string(s.StatusCode), awssdk.ToString(s.Description)),
+		element: awssdk.ToString(s.AutoScalingGroupName),
 	}
 }
 

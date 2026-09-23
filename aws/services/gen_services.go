@@ -25,47 +25,42 @@ import (
 	"errors"
 	"sync"
 
-	awssdk "github.com/aws/aws-sdk-go/aws"
-	"github.com/aws/aws-sdk-go/aws/awserr"
-	"github.com/aws/aws-sdk-go/aws/session"
-	"github.com/aws/aws-sdk-go/service/acm"
-	"github.com/aws/aws-sdk-go/service/acm/acmiface"
-	"github.com/aws/aws-sdk-go/service/applicationautoscaling"
-	"github.com/aws/aws-sdk-go/service/applicationautoscaling/applicationautoscalingiface"
-	"github.com/aws/aws-sdk-go/service/autoscaling"
-	"github.com/aws/aws-sdk-go/service/autoscaling/autoscalingiface"
-	"github.com/aws/aws-sdk-go/service/cloudformation"
-	"github.com/aws/aws-sdk-go/service/cloudformation/cloudformationiface"
-	"github.com/aws/aws-sdk-go/service/cloudfront"
-	"github.com/aws/aws-sdk-go/service/cloudfront/cloudfrontiface"
-	"github.com/aws/aws-sdk-go/service/cloudwatch"
-	"github.com/aws/aws-sdk-go/service/cloudwatch/cloudwatchiface"
-	"github.com/aws/aws-sdk-go/service/ec2"
-	"github.com/aws/aws-sdk-go/service/ec2/ec2iface"
-	"github.com/aws/aws-sdk-go/service/ecr"
-	"github.com/aws/aws-sdk-go/service/ecr/ecriface"
-	"github.com/aws/aws-sdk-go/service/ecs"
-	"github.com/aws/aws-sdk-go/service/ecs/ecsiface"
-	"github.com/aws/aws-sdk-go/service/elb"
-	"github.com/aws/aws-sdk-go/service/elb/elbiface"
-	"github.com/aws/aws-sdk-go/service/elbv2"
-	"github.com/aws/aws-sdk-go/service/elbv2/elbv2iface"
-	"github.com/aws/aws-sdk-go/service/iam"
-	"github.com/aws/aws-sdk-go/service/iam/iamiface"
-	"github.com/aws/aws-sdk-go/service/lambda"
-	"github.com/aws/aws-sdk-go/service/lambda/lambdaiface"
-	"github.com/aws/aws-sdk-go/service/rds"
-	"github.com/aws/aws-sdk-go/service/rds/rdsiface"
-	"github.com/aws/aws-sdk-go/service/route53"
-	"github.com/aws/aws-sdk-go/service/route53/route53iface"
-	"github.com/aws/aws-sdk-go/service/s3"
-	"github.com/aws/aws-sdk-go/service/s3/s3iface"
-	"github.com/aws/aws-sdk-go/service/sns"
-	"github.com/aws/aws-sdk-go/service/sns/snsiface"
-	"github.com/aws/aws-sdk-go/service/sqs"
-	"github.com/aws/aws-sdk-go/service/sqs/sqsiface"
-	"github.com/aws/aws-sdk-go/service/sts"
-	"github.com/aws/aws-sdk-go/service/sts/stsiface"
+	awssdk "github.com/aws/aws-sdk-go-v2/aws"
+	"github.com/aws/aws-sdk-go-v2/service/acm"
+	acmtypes "github.com/aws/aws-sdk-go-v2/service/acm/types"
+	"github.com/aws/aws-sdk-go-v2/service/autoscaling"
+	autoscalingtypes "github.com/aws/aws-sdk-go-v2/service/autoscaling/types"
+	"github.com/aws/aws-sdk-go-v2/service/cloudformation"
+	cloudformationtypes "github.com/aws/aws-sdk-go-v2/service/cloudformation/types"
+	"github.com/aws/aws-sdk-go-v2/service/cloudfront"
+	cloudfronttypes "github.com/aws/aws-sdk-go-v2/service/cloudfront/types"
+	"github.com/aws/aws-sdk-go-v2/service/cloudwatch"
+	cloudwatchtypes "github.com/aws/aws-sdk-go-v2/service/cloudwatch/types"
+	"github.com/aws/aws-sdk-go-v2/service/ec2"
+	ec2types "github.com/aws/aws-sdk-go-v2/service/ec2/types"
+	"github.com/aws/aws-sdk-go-v2/service/ecr"
+	ecrtypes "github.com/aws/aws-sdk-go-v2/service/ecr/types"
+	"github.com/aws/aws-sdk-go-v2/service/ecs"
+	ecstypes "github.com/aws/aws-sdk-go-v2/service/ecs/types"
+	"github.com/aws/aws-sdk-go-v2/service/elasticloadbalancing"
+	elbtypes "github.com/aws/aws-sdk-go-v2/service/elasticloadbalancing/types"
+	"github.com/aws/aws-sdk-go-v2/service/elasticloadbalancingv2"
+	elbv2types "github.com/aws/aws-sdk-go-v2/service/elasticloadbalancingv2/types"
+	"github.com/aws/aws-sdk-go-v2/service/iam"
+	iamtypes "github.com/aws/aws-sdk-go-v2/service/iam/types"
+	"github.com/aws/aws-sdk-go-v2/service/lambda"
+	lambdatypes "github.com/aws/aws-sdk-go-v2/service/lambda/types"
+	"github.com/aws/aws-sdk-go-v2/service/rds"
+	rdstypes "github.com/aws/aws-sdk-go-v2/service/rds/types"
+	"github.com/aws/aws-sdk-go-v2/service/route53"
+	route53types "github.com/aws/aws-sdk-go-v2/service/route53/types"
+	"github.com/aws/aws-sdk-go-v2/service/s3"
+	s3types "github.com/aws/aws-sdk-go-v2/service/s3/types"
+	"github.com/aws/aws-sdk-go-v2/service/sns"
+	snstypes "github.com/aws/aws-sdk-go-v2/service/sns/types"
+	"github.com/aws/aws-sdk-go-v2/service/sqs"
+	"github.com/aws/aws-sdk-go-v2/service/sts"
+
 	"github.com/theazz/awless-ro/aws/fetch"
 	"github.com/theazz/awless-ro/cloud"
 	"github.com/theazz/awless-ro/fetch"
@@ -73,8 +68,6 @@ import (
 	"github.com/theazz/awless-ro/logger"
 	tstore "github.com/wallix/triplestore"
 )
-
-const accessDenied = "Access Denied"
 
 var ServiceNames = []string{
 	"infra",
@@ -141,25 +134,24 @@ var ResourceTypes = []string{
 }
 
 var ServicePerAPI = map[string]string{
-	"ec2":                    "infra",
-	"elbv2":                  "infra",
-	"elb":                    "infra",
-	"rds":                    "infra",
-	"autoscaling":            "infra",
-	"ecr":                    "infra",
-	"ecs":                    "infra",
-	"applicationautoscaling": "infra",
-	"acm":                    "infra",
-	"iam":                    "access",
-	"sts":                    "access",
-	"s3":                     "storage",
-	"sns":                    "messaging",
-	"sqs":                    "messaging",
-	"route53":                "dns",
-	"lambda":                 "lambda",
-	"cloudwatch":             "monitoring",
-	"cloudfront":             "cdn",
-	"cloudformation":         "cloudformation",
+	"ec2":            "infra",
+	"elbv2":          "infra",
+	"elb":            "infra",
+	"rds":            "infra",
+	"autoscaling":    "infra",
+	"ecr":            "infra",
+	"ecs":            "infra",
+	"acm":            "infra",
+	"iam":            "access",
+	"sts":            "access",
+	"s3":             "storage",
+	"sns":            "messaging",
+	"sqs":            "messaging",
+	"route53":        "dns",
+	"lambda":         "lambda",
+	"cloudwatch":     "monitoring",
+	"cloudfront":     "cdn",
+	"cloudformation": "cloudformation",
 }
 
 var ServicePerResourceType = map[string]string{
@@ -271,58 +263,54 @@ type Infra struct {
 	region, profile string
 	config          map[string]interface{}
 	log             *logger.Logger
-	ec2iface.EC2API
-	elbv2iface.ELBV2API
-	elbiface.ELBAPI
-	rdsiface.RDSAPI
-	autoscalingiface.AutoScalingAPI
-	ecriface.ECRAPI
-	ecsiface.ECSAPI
-	applicationautoscalingiface.ApplicationAutoScalingAPI
-	acmiface.ACMAPI
+	awsfetch.Ec2API
+	awsfetch.Elbv2API
+	awsfetch.ElbAPI
+	awsfetch.RdsAPI
+	awsfetch.AutoscalingAPI
+	awsfetch.EcrAPI
+	awsfetch.EcsAPI
+	awsfetch.AcmAPI
 }
 
-func NewInfra(sess *session.Session, profile string, extraConf map[string]interface{}, log *logger.Logger) cloud.Service {
-	region := awssdk.StringValue(sess.Config.Region)
-	ec2API := ec2.New(sess)
-	elbv2API := elbv2.New(sess)
-	elbAPI := elb.New(sess)
-	rdsAPI := rds.New(sess)
-	autoscalingAPI := autoscaling.New(sess)
-	ecrAPI := ecr.New(sess)
-	ecsAPI := ecs.New(sess)
-	applicationautoscalingAPI := applicationautoscaling.New(sess)
-	acmAPI := acm.New(sess)
+func NewInfra(cfg awssdk.Config, profile string, extraConf map[string]interface{}, log *logger.Logger) cloud.Service {
+	region := cfg.Region
+	ec2API := ec2.NewFromConfig(cfg)
+	elbv2API := elasticloadbalancingv2.NewFromConfig(cfg)
+	elbAPI := elasticloadbalancing.NewFromConfig(cfg)
+	rdsAPI := rds.NewFromConfig(cfg)
+	autoscalingAPI := autoscaling.NewFromConfig(cfg)
+	ecrAPI := ecr.NewFromConfig(cfg)
+	ecsAPI := ecs.NewFromConfig(cfg)
+	acmAPI := acm.NewFromConfig(cfg)
 
-	fetchConfig := awsfetch.NewConfig(
-		ec2API,
-		elbv2API,
-		elbAPI,
-		rdsAPI,
-		autoscalingAPI,
-		ecrAPI,
-		ecsAPI,
-		applicationautoscalingAPI,
-		acmAPI,
-	)
+	fetchConfig := awsfetch.NewConfig(&awsfetch.AWSAPI{
+		Ec2:         ec2API,
+		Elbv2:       elbv2API,
+		Elb:         elbAPI,
+		Rds:         rdsAPI,
+		Autoscaling: autoscalingAPI,
+		Ecr:         ecrAPI,
+		Ecs:         ecsAPI,
+		Acm:         acmAPI,
+	})
 	fetchConfig.Extra = extraConf
 	fetchConfig.Log = log
 
 	return &Infra{
-		EC2API:                    ec2API,
-		ELBV2API:                  elbv2API,
-		ELBAPI:                    elbAPI,
-		RDSAPI:                    rdsAPI,
-		AutoScalingAPI:            autoscalingAPI,
-		ECRAPI:                    ecrAPI,
-		ECSAPI:                    ecsAPI,
-		ApplicationAutoScalingAPI: applicationautoscalingAPI,
-		ACMAPI:                    acmAPI,
-		fetcher:                   fetch.NewFetcher(awsfetch.BuildInfraFetchFuncs(fetchConfig)),
-		config:                    extraConf,
-		region:                    region,
-		profile:                   profile,
-		log:                       log,
+		Ec2API:         ec2API,
+		Elbv2API:       elbv2API,
+		ElbAPI:         elbAPI,
+		RdsAPI:         rdsAPI,
+		AutoscalingAPI: autoscalingAPI,
+		EcrAPI:         ecrAPI,
+		EcsAPI:         ecsAPI,
+		AcmAPI:         acmAPI,
+		fetcher:        fetch.NewFetcher(awsfetch.BuildInfraFetchFuncs(fetchConfig)),
+		config:         extraConf,
+		region:         region,
+		profile:        profile,
+		log:            log,
 	}
 }
 
@@ -384,18 +372,13 @@ func (s *Infra) Fetch(ctx context.Context) (cloud.GraphAPI, error) {
 	defer s.fetcher.Reset()
 
 	for _, e := range *fetch.WrapError(err) {
-		switch ee := e.(type) {
-		case awserr.RequestFailure:
-			switch ee.Message() {
-			case accessDenied:
-				allErrors.Add(cloud.ErrFetchAccessDenied)
-			default:
-				allErrors.Add(ee)
-			}
-		case nil:
+		switch {
+		case e == nil:
 			continue
+		case awsfetch.IsAccessDenied(e):
+			allErrors.Add(cloud.ErrFetchAccessDenied)
 		default:
-			allErrors.Add(ee)
+			allErrors.Add(e)
 		}
 	}
 
@@ -412,18 +395,17 @@ func (s *Infra) Fetch(ctx context.Context) (cloud.GraphAPI, error) {
 		if err != nil {
 			return gph, err
 		}
-		if _, ok := list.([]*ec2.Instance); !ok {
-			return gph, errors.New("cannot cast to '[]*ec2.Instance' type from fetch context")
+		objects, ok := list.([]ec2types.Instance)
+		if !ok {
+			return gph, errors.New("cannot cast to '[]ec2types.Instance' type from fetch context")
 		}
-		for _, r := range list.([]*ec2.Instance) {
+		for _, r := range objects {
 			for _, fn := range addParentsFns["instance"] {
 				wg.Add(1)
-				go func(f addParentFn, snap tstore.RDFGraph, region string, res *ec2.Instance) {
+				go func(f addParentFn, snap tstore.RDFGraph, region string, res ec2types.Instance) {
 					defer wg.Done()
-					err := f(gph, snap, region, res)
-					if err != nil {
+					if err := f(gph, snap, region, res); err != nil {
 						errc <- err
-						return
 					}
 				}(fn, snap, s.region, r)
 			}
@@ -434,18 +416,17 @@ func (s *Infra) Fetch(ctx context.Context) (cloud.GraphAPI, error) {
 		if err != nil {
 			return gph, err
 		}
-		if _, ok := list.([]*ec2.Subnet); !ok {
-			return gph, errors.New("cannot cast to '[]*ec2.Subnet' type from fetch context")
+		objects, ok := list.([]ec2types.Subnet)
+		if !ok {
+			return gph, errors.New("cannot cast to '[]ec2types.Subnet' type from fetch context")
 		}
-		for _, r := range list.([]*ec2.Subnet) {
+		for _, r := range objects {
 			for _, fn := range addParentsFns["subnet"] {
 				wg.Add(1)
-				go func(f addParentFn, snap tstore.RDFGraph, region string, res *ec2.Subnet) {
+				go func(f addParentFn, snap tstore.RDFGraph, region string, res ec2types.Subnet) {
 					defer wg.Done()
-					err := f(gph, snap, region, res)
-					if err != nil {
+					if err := f(gph, snap, region, res); err != nil {
 						errc <- err
-						return
 					}
 				}(fn, snap, s.region, r)
 			}
@@ -456,18 +437,17 @@ func (s *Infra) Fetch(ctx context.Context) (cloud.GraphAPI, error) {
 		if err != nil {
 			return gph, err
 		}
-		if _, ok := list.([]*ec2.Vpc); !ok {
-			return gph, errors.New("cannot cast to '[]*ec2.Vpc' type from fetch context")
+		objects, ok := list.([]ec2types.Vpc)
+		if !ok {
+			return gph, errors.New("cannot cast to '[]ec2types.Vpc' type from fetch context")
 		}
-		for _, r := range list.([]*ec2.Vpc) {
+		for _, r := range objects {
 			for _, fn := range addParentsFns["vpc"] {
 				wg.Add(1)
-				go func(f addParentFn, snap tstore.RDFGraph, region string, res *ec2.Vpc) {
+				go func(f addParentFn, snap tstore.RDFGraph, region string, res ec2types.Vpc) {
 					defer wg.Done()
-					err := f(gph, snap, region, res)
-					if err != nil {
+					if err := f(gph, snap, region, res); err != nil {
 						errc <- err
-						return
 					}
 				}(fn, snap, s.region, r)
 			}
@@ -478,18 +458,17 @@ func (s *Infra) Fetch(ctx context.Context) (cloud.GraphAPI, error) {
 		if err != nil {
 			return gph, err
 		}
-		if _, ok := list.([]*ec2.KeyPairInfo); !ok {
-			return gph, errors.New("cannot cast to '[]*ec2.KeyPairInfo' type from fetch context")
+		objects, ok := list.([]ec2types.KeyPairInfo)
+		if !ok {
+			return gph, errors.New("cannot cast to '[]ec2types.KeyPairInfo' type from fetch context")
 		}
-		for _, r := range list.([]*ec2.KeyPairInfo) {
+		for _, r := range objects {
 			for _, fn := range addParentsFns["keypair"] {
 				wg.Add(1)
-				go func(f addParentFn, snap tstore.RDFGraph, region string, res *ec2.KeyPairInfo) {
+				go func(f addParentFn, snap tstore.RDFGraph, region string, res ec2types.KeyPairInfo) {
 					defer wg.Done()
-					err := f(gph, snap, region, res)
-					if err != nil {
+					if err := f(gph, snap, region, res); err != nil {
 						errc <- err
-						return
 					}
 				}(fn, snap, s.region, r)
 			}
@@ -500,18 +479,17 @@ func (s *Infra) Fetch(ctx context.Context) (cloud.GraphAPI, error) {
 		if err != nil {
 			return gph, err
 		}
-		if _, ok := list.([]*ec2.SecurityGroup); !ok {
-			return gph, errors.New("cannot cast to '[]*ec2.SecurityGroup' type from fetch context")
+		objects, ok := list.([]ec2types.SecurityGroup)
+		if !ok {
+			return gph, errors.New("cannot cast to '[]ec2types.SecurityGroup' type from fetch context")
 		}
-		for _, r := range list.([]*ec2.SecurityGroup) {
+		for _, r := range objects {
 			for _, fn := range addParentsFns["securitygroup"] {
 				wg.Add(1)
-				go func(f addParentFn, snap tstore.RDFGraph, region string, res *ec2.SecurityGroup) {
+				go func(f addParentFn, snap tstore.RDFGraph, region string, res ec2types.SecurityGroup) {
 					defer wg.Done()
-					err := f(gph, snap, region, res)
-					if err != nil {
+					if err := f(gph, snap, region, res); err != nil {
 						errc <- err
-						return
 					}
 				}(fn, snap, s.region, r)
 			}
@@ -522,18 +500,17 @@ func (s *Infra) Fetch(ctx context.Context) (cloud.GraphAPI, error) {
 		if err != nil {
 			return gph, err
 		}
-		if _, ok := list.([]*ec2.Volume); !ok {
-			return gph, errors.New("cannot cast to '[]*ec2.Volume' type from fetch context")
+		objects, ok := list.([]ec2types.Volume)
+		if !ok {
+			return gph, errors.New("cannot cast to '[]ec2types.Volume' type from fetch context")
 		}
-		for _, r := range list.([]*ec2.Volume) {
+		for _, r := range objects {
 			for _, fn := range addParentsFns["volume"] {
 				wg.Add(1)
-				go func(f addParentFn, snap tstore.RDFGraph, region string, res *ec2.Volume) {
+				go func(f addParentFn, snap tstore.RDFGraph, region string, res ec2types.Volume) {
 					defer wg.Done()
-					err := f(gph, snap, region, res)
-					if err != nil {
+					if err := f(gph, snap, region, res); err != nil {
 						errc <- err
-						return
 					}
 				}(fn, snap, s.region, r)
 			}
@@ -544,18 +521,17 @@ func (s *Infra) Fetch(ctx context.Context) (cloud.GraphAPI, error) {
 		if err != nil {
 			return gph, err
 		}
-		if _, ok := list.([]*ec2.InternetGateway); !ok {
-			return gph, errors.New("cannot cast to '[]*ec2.InternetGateway' type from fetch context")
+		objects, ok := list.([]ec2types.InternetGateway)
+		if !ok {
+			return gph, errors.New("cannot cast to '[]ec2types.InternetGateway' type from fetch context")
 		}
-		for _, r := range list.([]*ec2.InternetGateway) {
+		for _, r := range objects {
 			for _, fn := range addParentsFns["internetgateway"] {
 				wg.Add(1)
-				go func(f addParentFn, snap tstore.RDFGraph, region string, res *ec2.InternetGateway) {
+				go func(f addParentFn, snap tstore.RDFGraph, region string, res ec2types.InternetGateway) {
 					defer wg.Done()
-					err := f(gph, snap, region, res)
-					if err != nil {
+					if err := f(gph, snap, region, res); err != nil {
 						errc <- err
-						return
 					}
 				}(fn, snap, s.region, r)
 			}
@@ -566,18 +542,17 @@ func (s *Infra) Fetch(ctx context.Context) (cloud.GraphAPI, error) {
 		if err != nil {
 			return gph, err
 		}
-		if _, ok := list.([]*ec2.NatGateway); !ok {
-			return gph, errors.New("cannot cast to '[]*ec2.NatGateway' type from fetch context")
+		objects, ok := list.([]ec2types.NatGateway)
+		if !ok {
+			return gph, errors.New("cannot cast to '[]ec2types.NatGateway' type from fetch context")
 		}
-		for _, r := range list.([]*ec2.NatGateway) {
+		for _, r := range objects {
 			for _, fn := range addParentsFns["natgateway"] {
 				wg.Add(1)
-				go func(f addParentFn, snap tstore.RDFGraph, region string, res *ec2.NatGateway) {
+				go func(f addParentFn, snap tstore.RDFGraph, region string, res ec2types.NatGateway) {
 					defer wg.Done()
-					err := f(gph, snap, region, res)
-					if err != nil {
+					if err := f(gph, snap, region, res); err != nil {
 						errc <- err
-						return
 					}
 				}(fn, snap, s.region, r)
 			}
@@ -588,18 +563,17 @@ func (s *Infra) Fetch(ctx context.Context) (cloud.GraphAPI, error) {
 		if err != nil {
 			return gph, err
 		}
-		if _, ok := list.([]*ec2.RouteTable); !ok {
-			return gph, errors.New("cannot cast to '[]*ec2.RouteTable' type from fetch context")
+		objects, ok := list.([]ec2types.RouteTable)
+		if !ok {
+			return gph, errors.New("cannot cast to '[]ec2types.RouteTable' type from fetch context")
 		}
-		for _, r := range list.([]*ec2.RouteTable) {
+		for _, r := range objects {
 			for _, fn := range addParentsFns["routetable"] {
 				wg.Add(1)
-				go func(f addParentFn, snap tstore.RDFGraph, region string, res *ec2.RouteTable) {
+				go func(f addParentFn, snap tstore.RDFGraph, region string, res ec2types.RouteTable) {
 					defer wg.Done()
-					err := f(gph, snap, region, res)
-					if err != nil {
+					if err := f(gph, snap, region, res); err != nil {
 						errc <- err
-						return
 					}
 				}(fn, snap, s.region, r)
 			}
@@ -610,18 +584,17 @@ func (s *Infra) Fetch(ctx context.Context) (cloud.GraphAPI, error) {
 		if err != nil {
 			return gph, err
 		}
-		if _, ok := list.([]*ec2.AvailabilityZone); !ok {
-			return gph, errors.New("cannot cast to '[]*ec2.AvailabilityZone' type from fetch context")
+		objects, ok := list.([]ec2types.AvailabilityZone)
+		if !ok {
+			return gph, errors.New("cannot cast to '[]ec2types.AvailabilityZone' type from fetch context")
 		}
-		for _, r := range list.([]*ec2.AvailabilityZone) {
+		for _, r := range objects {
 			for _, fn := range addParentsFns["availabilityzone"] {
 				wg.Add(1)
-				go func(f addParentFn, snap tstore.RDFGraph, region string, res *ec2.AvailabilityZone) {
+				go func(f addParentFn, snap tstore.RDFGraph, region string, res ec2types.AvailabilityZone) {
 					defer wg.Done()
-					err := f(gph, snap, region, res)
-					if err != nil {
+					if err := f(gph, snap, region, res); err != nil {
 						errc <- err
-						return
 					}
 				}(fn, snap, s.region, r)
 			}
@@ -632,18 +605,17 @@ func (s *Infra) Fetch(ctx context.Context) (cloud.GraphAPI, error) {
 		if err != nil {
 			return gph, err
 		}
-		if _, ok := list.([]*ec2.Image); !ok {
-			return gph, errors.New("cannot cast to '[]*ec2.Image' type from fetch context")
+		objects, ok := list.([]ec2types.Image)
+		if !ok {
+			return gph, errors.New("cannot cast to '[]ec2types.Image' type from fetch context")
 		}
-		for _, r := range list.([]*ec2.Image) {
+		for _, r := range objects {
 			for _, fn := range addParentsFns["image"] {
 				wg.Add(1)
-				go func(f addParentFn, snap tstore.RDFGraph, region string, res *ec2.Image) {
+				go func(f addParentFn, snap tstore.RDFGraph, region string, res ec2types.Image) {
 					defer wg.Done()
-					err := f(gph, snap, region, res)
-					if err != nil {
+					if err := f(gph, snap, region, res); err != nil {
 						errc <- err
-						return
 					}
 				}(fn, snap, s.region, r)
 			}
@@ -654,18 +626,17 @@ func (s *Infra) Fetch(ctx context.Context) (cloud.GraphAPI, error) {
 		if err != nil {
 			return gph, err
 		}
-		if _, ok := list.([]*ec2.ImportImageTask); !ok {
-			return gph, errors.New("cannot cast to '[]*ec2.ImportImageTask' type from fetch context")
+		objects, ok := list.([]ec2types.ImportImageTask)
+		if !ok {
+			return gph, errors.New("cannot cast to '[]ec2types.ImportImageTask' type from fetch context")
 		}
-		for _, r := range list.([]*ec2.ImportImageTask) {
+		for _, r := range objects {
 			for _, fn := range addParentsFns["importimagetask"] {
 				wg.Add(1)
-				go func(f addParentFn, snap tstore.RDFGraph, region string, res *ec2.ImportImageTask) {
+				go func(f addParentFn, snap tstore.RDFGraph, region string, res ec2types.ImportImageTask) {
 					defer wg.Done()
-					err := f(gph, snap, region, res)
-					if err != nil {
+					if err := f(gph, snap, region, res); err != nil {
 						errc <- err
-						return
 					}
 				}(fn, snap, s.region, r)
 			}
@@ -676,18 +647,17 @@ func (s *Infra) Fetch(ctx context.Context) (cloud.GraphAPI, error) {
 		if err != nil {
 			return gph, err
 		}
-		if _, ok := list.([]*ec2.Address); !ok {
-			return gph, errors.New("cannot cast to '[]*ec2.Address' type from fetch context")
+		objects, ok := list.([]ec2types.Address)
+		if !ok {
+			return gph, errors.New("cannot cast to '[]ec2types.Address' type from fetch context")
 		}
-		for _, r := range list.([]*ec2.Address) {
+		for _, r := range objects {
 			for _, fn := range addParentsFns["elasticip"] {
 				wg.Add(1)
-				go func(f addParentFn, snap tstore.RDFGraph, region string, res *ec2.Address) {
+				go func(f addParentFn, snap tstore.RDFGraph, region string, res ec2types.Address) {
 					defer wg.Done()
-					err := f(gph, snap, region, res)
-					if err != nil {
+					if err := f(gph, snap, region, res); err != nil {
 						errc <- err
-						return
 					}
 				}(fn, snap, s.region, r)
 			}
@@ -698,18 +668,17 @@ func (s *Infra) Fetch(ctx context.Context) (cloud.GraphAPI, error) {
 		if err != nil {
 			return gph, err
 		}
-		if _, ok := list.([]*ec2.Snapshot); !ok {
-			return gph, errors.New("cannot cast to '[]*ec2.Snapshot' type from fetch context")
+		objects, ok := list.([]ec2types.Snapshot)
+		if !ok {
+			return gph, errors.New("cannot cast to '[]ec2types.Snapshot' type from fetch context")
 		}
-		for _, r := range list.([]*ec2.Snapshot) {
+		for _, r := range objects {
 			for _, fn := range addParentsFns["snapshot"] {
 				wg.Add(1)
-				go func(f addParentFn, snap tstore.RDFGraph, region string, res *ec2.Snapshot) {
+				go func(f addParentFn, snap tstore.RDFGraph, region string, res ec2types.Snapshot) {
 					defer wg.Done()
-					err := f(gph, snap, region, res)
-					if err != nil {
+					if err := f(gph, snap, region, res); err != nil {
 						errc <- err
-						return
 					}
 				}(fn, snap, s.region, r)
 			}
@@ -720,18 +689,17 @@ func (s *Infra) Fetch(ctx context.Context) (cloud.GraphAPI, error) {
 		if err != nil {
 			return gph, err
 		}
-		if _, ok := list.([]*ec2.NetworkInterface); !ok {
-			return gph, errors.New("cannot cast to '[]*ec2.NetworkInterface' type from fetch context")
+		objects, ok := list.([]ec2types.NetworkInterface)
+		if !ok {
+			return gph, errors.New("cannot cast to '[]ec2types.NetworkInterface' type from fetch context")
 		}
-		for _, r := range list.([]*ec2.NetworkInterface) {
+		for _, r := range objects {
 			for _, fn := range addParentsFns["networkinterface"] {
 				wg.Add(1)
-				go func(f addParentFn, snap tstore.RDFGraph, region string, res *ec2.NetworkInterface) {
+				go func(f addParentFn, snap tstore.RDFGraph, region string, res ec2types.NetworkInterface) {
 					defer wg.Done()
-					err := f(gph, snap, region, res)
-					if err != nil {
+					if err := f(gph, snap, region, res); err != nil {
 						errc <- err
-						return
 					}
 				}(fn, snap, s.region, r)
 			}
@@ -742,18 +710,17 @@ func (s *Infra) Fetch(ctx context.Context) (cloud.GraphAPI, error) {
 		if err != nil {
 			return gph, err
 		}
-		if _, ok := list.([]*elb.LoadBalancerDescription); !ok {
-			return gph, errors.New("cannot cast to '[]*elb.LoadBalancerDescription' type from fetch context")
+		objects, ok := list.([]elbtypes.LoadBalancerDescription)
+		if !ok {
+			return gph, errors.New("cannot cast to '[]elbtypes.LoadBalancerDescription' type from fetch context")
 		}
-		for _, r := range list.([]*elb.LoadBalancerDescription) {
+		for _, r := range objects {
 			for _, fn := range addParentsFns["classicloadbalancer"] {
 				wg.Add(1)
-				go func(f addParentFn, snap tstore.RDFGraph, region string, res *elb.LoadBalancerDescription) {
+				go func(f addParentFn, snap tstore.RDFGraph, region string, res elbtypes.LoadBalancerDescription) {
 					defer wg.Done()
-					err := f(gph, snap, region, res)
-					if err != nil {
+					if err := f(gph, snap, region, res); err != nil {
 						errc <- err
-						return
 					}
 				}(fn, snap, s.region, r)
 			}
@@ -764,18 +731,17 @@ func (s *Infra) Fetch(ctx context.Context) (cloud.GraphAPI, error) {
 		if err != nil {
 			return gph, err
 		}
-		if _, ok := list.([]*elbv2.LoadBalancer); !ok {
-			return gph, errors.New("cannot cast to '[]*elbv2.LoadBalancer' type from fetch context")
+		objects, ok := list.([]elbv2types.LoadBalancer)
+		if !ok {
+			return gph, errors.New("cannot cast to '[]elbv2types.LoadBalancer' type from fetch context")
 		}
-		for _, r := range list.([]*elbv2.LoadBalancer) {
+		for _, r := range objects {
 			for _, fn := range addParentsFns["loadbalancer"] {
 				wg.Add(1)
-				go func(f addParentFn, snap tstore.RDFGraph, region string, res *elbv2.LoadBalancer) {
+				go func(f addParentFn, snap tstore.RDFGraph, region string, res elbv2types.LoadBalancer) {
 					defer wg.Done()
-					err := f(gph, snap, region, res)
-					if err != nil {
+					if err := f(gph, snap, region, res); err != nil {
 						errc <- err
-						return
 					}
 				}(fn, snap, s.region, r)
 			}
@@ -786,18 +752,17 @@ func (s *Infra) Fetch(ctx context.Context) (cloud.GraphAPI, error) {
 		if err != nil {
 			return gph, err
 		}
-		if _, ok := list.([]*elbv2.TargetGroup); !ok {
-			return gph, errors.New("cannot cast to '[]*elbv2.TargetGroup' type from fetch context")
+		objects, ok := list.([]elbv2types.TargetGroup)
+		if !ok {
+			return gph, errors.New("cannot cast to '[]elbv2types.TargetGroup' type from fetch context")
 		}
-		for _, r := range list.([]*elbv2.TargetGroup) {
+		for _, r := range objects {
 			for _, fn := range addParentsFns["targetgroup"] {
 				wg.Add(1)
-				go func(f addParentFn, snap tstore.RDFGraph, region string, res *elbv2.TargetGroup) {
+				go func(f addParentFn, snap tstore.RDFGraph, region string, res elbv2types.TargetGroup) {
 					defer wg.Done()
-					err := f(gph, snap, region, res)
-					if err != nil {
+					if err := f(gph, snap, region, res); err != nil {
 						errc <- err
-						return
 					}
 				}(fn, snap, s.region, r)
 			}
@@ -808,18 +773,17 @@ func (s *Infra) Fetch(ctx context.Context) (cloud.GraphAPI, error) {
 		if err != nil {
 			return gph, err
 		}
-		if _, ok := list.([]*elbv2.Listener); !ok {
-			return gph, errors.New("cannot cast to '[]*elbv2.Listener' type from fetch context")
+		objects, ok := list.([]elbv2types.Listener)
+		if !ok {
+			return gph, errors.New("cannot cast to '[]elbv2types.Listener' type from fetch context")
 		}
-		for _, r := range list.([]*elbv2.Listener) {
+		for _, r := range objects {
 			for _, fn := range addParentsFns["listener"] {
 				wg.Add(1)
-				go func(f addParentFn, snap tstore.RDFGraph, region string, res *elbv2.Listener) {
+				go func(f addParentFn, snap tstore.RDFGraph, region string, res elbv2types.Listener) {
 					defer wg.Done()
-					err := f(gph, snap, region, res)
-					if err != nil {
+					if err := f(gph, snap, region, res); err != nil {
 						errc <- err
-						return
 					}
 				}(fn, snap, s.region, r)
 			}
@@ -830,18 +794,17 @@ func (s *Infra) Fetch(ctx context.Context) (cloud.GraphAPI, error) {
 		if err != nil {
 			return gph, err
 		}
-		if _, ok := list.([]*rds.DBInstance); !ok {
-			return gph, errors.New("cannot cast to '[]*rds.DBInstance' type from fetch context")
+		objects, ok := list.([]rdstypes.DBInstance)
+		if !ok {
+			return gph, errors.New("cannot cast to '[]rdstypes.DBInstance' type from fetch context")
 		}
-		for _, r := range list.([]*rds.DBInstance) {
+		for _, r := range objects {
 			for _, fn := range addParentsFns["database"] {
 				wg.Add(1)
-				go func(f addParentFn, snap tstore.RDFGraph, region string, res *rds.DBInstance) {
+				go func(f addParentFn, snap tstore.RDFGraph, region string, res rdstypes.DBInstance) {
 					defer wg.Done()
-					err := f(gph, snap, region, res)
-					if err != nil {
+					if err := f(gph, snap, region, res); err != nil {
 						errc <- err
-						return
 					}
 				}(fn, snap, s.region, r)
 			}
@@ -852,18 +815,17 @@ func (s *Infra) Fetch(ctx context.Context) (cloud.GraphAPI, error) {
 		if err != nil {
 			return gph, err
 		}
-		if _, ok := list.([]*rds.DBSubnetGroup); !ok {
-			return gph, errors.New("cannot cast to '[]*rds.DBSubnetGroup' type from fetch context")
+		objects, ok := list.([]rdstypes.DBSubnetGroup)
+		if !ok {
+			return gph, errors.New("cannot cast to '[]rdstypes.DBSubnetGroup' type from fetch context")
 		}
-		for _, r := range list.([]*rds.DBSubnetGroup) {
+		for _, r := range objects {
 			for _, fn := range addParentsFns["dbsubnetgroup"] {
 				wg.Add(1)
-				go func(f addParentFn, snap tstore.RDFGraph, region string, res *rds.DBSubnetGroup) {
+				go func(f addParentFn, snap tstore.RDFGraph, region string, res rdstypes.DBSubnetGroup) {
 					defer wg.Done()
-					err := f(gph, snap, region, res)
-					if err != nil {
+					if err := f(gph, snap, region, res); err != nil {
 						errc <- err
-						return
 					}
 				}(fn, snap, s.region, r)
 			}
@@ -874,18 +836,17 @@ func (s *Infra) Fetch(ctx context.Context) (cloud.GraphAPI, error) {
 		if err != nil {
 			return gph, err
 		}
-		if _, ok := list.([]*autoscaling.LaunchConfiguration); !ok {
-			return gph, errors.New("cannot cast to '[]*autoscaling.LaunchConfiguration' type from fetch context")
+		objects, ok := list.([]autoscalingtypes.LaunchConfiguration)
+		if !ok {
+			return gph, errors.New("cannot cast to '[]autoscalingtypes.LaunchConfiguration' type from fetch context")
 		}
-		for _, r := range list.([]*autoscaling.LaunchConfiguration) {
+		for _, r := range objects {
 			for _, fn := range addParentsFns["launchconfiguration"] {
 				wg.Add(1)
-				go func(f addParentFn, snap tstore.RDFGraph, region string, res *autoscaling.LaunchConfiguration) {
+				go func(f addParentFn, snap tstore.RDFGraph, region string, res autoscalingtypes.LaunchConfiguration) {
 					defer wg.Done()
-					err := f(gph, snap, region, res)
-					if err != nil {
+					if err := f(gph, snap, region, res); err != nil {
 						errc <- err
-						return
 					}
 				}(fn, snap, s.region, r)
 			}
@@ -896,18 +857,17 @@ func (s *Infra) Fetch(ctx context.Context) (cloud.GraphAPI, error) {
 		if err != nil {
 			return gph, err
 		}
-		if _, ok := list.([]*autoscaling.Group); !ok {
-			return gph, errors.New("cannot cast to '[]*autoscaling.Group' type from fetch context")
+		objects, ok := list.([]autoscalingtypes.AutoScalingGroup)
+		if !ok {
+			return gph, errors.New("cannot cast to '[]autoscalingtypes.AutoScalingGroup' type from fetch context")
 		}
-		for _, r := range list.([]*autoscaling.Group) {
+		for _, r := range objects {
 			for _, fn := range addParentsFns["scalinggroup"] {
 				wg.Add(1)
-				go func(f addParentFn, snap tstore.RDFGraph, region string, res *autoscaling.Group) {
+				go func(f addParentFn, snap tstore.RDFGraph, region string, res autoscalingtypes.AutoScalingGroup) {
 					defer wg.Done()
-					err := f(gph, snap, region, res)
-					if err != nil {
+					if err := f(gph, snap, region, res); err != nil {
 						errc <- err
-						return
 					}
 				}(fn, snap, s.region, r)
 			}
@@ -918,18 +878,17 @@ func (s *Infra) Fetch(ctx context.Context) (cloud.GraphAPI, error) {
 		if err != nil {
 			return gph, err
 		}
-		if _, ok := list.([]*autoscaling.ScalingPolicy); !ok {
-			return gph, errors.New("cannot cast to '[]*autoscaling.ScalingPolicy' type from fetch context")
+		objects, ok := list.([]autoscalingtypes.ScalingPolicy)
+		if !ok {
+			return gph, errors.New("cannot cast to '[]autoscalingtypes.ScalingPolicy' type from fetch context")
 		}
-		for _, r := range list.([]*autoscaling.ScalingPolicy) {
+		for _, r := range objects {
 			for _, fn := range addParentsFns["scalingpolicy"] {
 				wg.Add(1)
-				go func(f addParentFn, snap tstore.RDFGraph, region string, res *autoscaling.ScalingPolicy) {
+				go func(f addParentFn, snap tstore.RDFGraph, region string, res autoscalingtypes.ScalingPolicy) {
 					defer wg.Done()
-					err := f(gph, snap, region, res)
-					if err != nil {
+					if err := f(gph, snap, region, res); err != nil {
 						errc <- err
-						return
 					}
 				}(fn, snap, s.region, r)
 			}
@@ -940,18 +899,17 @@ func (s *Infra) Fetch(ctx context.Context) (cloud.GraphAPI, error) {
 		if err != nil {
 			return gph, err
 		}
-		if _, ok := list.([]*ecr.Repository); !ok {
-			return gph, errors.New("cannot cast to '[]*ecr.Repository' type from fetch context")
+		objects, ok := list.([]ecrtypes.Repository)
+		if !ok {
+			return gph, errors.New("cannot cast to '[]ecrtypes.Repository' type from fetch context")
 		}
-		for _, r := range list.([]*ecr.Repository) {
+		for _, r := range objects {
 			for _, fn := range addParentsFns["repository"] {
 				wg.Add(1)
-				go func(f addParentFn, snap tstore.RDFGraph, region string, res *ecr.Repository) {
+				go func(f addParentFn, snap tstore.RDFGraph, region string, res ecrtypes.Repository) {
 					defer wg.Done()
-					err := f(gph, snap, region, res)
-					if err != nil {
+					if err := f(gph, snap, region, res); err != nil {
 						errc <- err
-						return
 					}
 				}(fn, snap, s.region, r)
 			}
@@ -962,18 +920,17 @@ func (s *Infra) Fetch(ctx context.Context) (cloud.GraphAPI, error) {
 		if err != nil {
 			return gph, err
 		}
-		if _, ok := list.([]*ecs.Cluster); !ok {
-			return gph, errors.New("cannot cast to '[]*ecs.Cluster' type from fetch context")
+		objects, ok := list.([]ecstypes.Cluster)
+		if !ok {
+			return gph, errors.New("cannot cast to '[]ecstypes.Cluster' type from fetch context")
 		}
-		for _, r := range list.([]*ecs.Cluster) {
+		for _, r := range objects {
 			for _, fn := range addParentsFns["containercluster"] {
 				wg.Add(1)
-				go func(f addParentFn, snap tstore.RDFGraph, region string, res *ecs.Cluster) {
+				go func(f addParentFn, snap tstore.RDFGraph, region string, res ecstypes.Cluster) {
 					defer wg.Done()
-					err := f(gph, snap, region, res)
-					if err != nil {
+					if err := f(gph, snap, region, res); err != nil {
 						errc <- err
-						return
 					}
 				}(fn, snap, s.region, r)
 			}
@@ -984,18 +941,17 @@ func (s *Infra) Fetch(ctx context.Context) (cloud.GraphAPI, error) {
 		if err != nil {
 			return gph, err
 		}
-		if _, ok := list.([]*ecs.TaskDefinition); !ok {
-			return gph, errors.New("cannot cast to '[]*ecs.TaskDefinition' type from fetch context")
+		objects, ok := list.([]ecstypes.TaskDefinition)
+		if !ok {
+			return gph, errors.New("cannot cast to '[]ecstypes.TaskDefinition' type from fetch context")
 		}
-		for _, r := range list.([]*ecs.TaskDefinition) {
+		for _, r := range objects {
 			for _, fn := range addParentsFns["containertask"] {
 				wg.Add(1)
-				go func(f addParentFn, snap tstore.RDFGraph, region string, res *ecs.TaskDefinition) {
+				go func(f addParentFn, snap tstore.RDFGraph, region string, res ecstypes.TaskDefinition) {
 					defer wg.Done()
-					err := f(gph, snap, region, res)
-					if err != nil {
+					if err := f(gph, snap, region, res); err != nil {
 						errc <- err
-						return
 					}
 				}(fn, snap, s.region, r)
 			}
@@ -1006,18 +962,17 @@ func (s *Infra) Fetch(ctx context.Context) (cloud.GraphAPI, error) {
 		if err != nil {
 			return gph, err
 		}
-		if _, ok := list.([]*ecs.Container); !ok {
-			return gph, errors.New("cannot cast to '[]*ecs.Container' type from fetch context")
+		objects, ok := list.([]ecstypes.Container)
+		if !ok {
+			return gph, errors.New("cannot cast to '[]ecstypes.Container' type from fetch context")
 		}
-		for _, r := range list.([]*ecs.Container) {
+		for _, r := range objects {
 			for _, fn := range addParentsFns["container"] {
 				wg.Add(1)
-				go func(f addParentFn, snap tstore.RDFGraph, region string, res *ecs.Container) {
+				go func(f addParentFn, snap tstore.RDFGraph, region string, res ecstypes.Container) {
 					defer wg.Done()
-					err := f(gph, snap, region, res)
-					if err != nil {
+					if err := f(gph, snap, region, res); err != nil {
 						errc <- err
-						return
 					}
 				}(fn, snap, s.region, r)
 			}
@@ -1028,18 +983,17 @@ func (s *Infra) Fetch(ctx context.Context) (cloud.GraphAPI, error) {
 		if err != nil {
 			return gph, err
 		}
-		if _, ok := list.([]*ecs.ContainerInstance); !ok {
-			return gph, errors.New("cannot cast to '[]*ecs.ContainerInstance' type from fetch context")
+		objects, ok := list.([]ecstypes.ContainerInstance)
+		if !ok {
+			return gph, errors.New("cannot cast to '[]ecstypes.ContainerInstance' type from fetch context")
 		}
-		for _, r := range list.([]*ecs.ContainerInstance) {
+		for _, r := range objects {
 			for _, fn := range addParentsFns["containerinstance"] {
 				wg.Add(1)
-				go func(f addParentFn, snap tstore.RDFGraph, region string, res *ecs.ContainerInstance) {
+				go func(f addParentFn, snap tstore.RDFGraph, region string, res ecstypes.ContainerInstance) {
 					defer wg.Done()
-					err := f(gph, snap, region, res)
-					if err != nil {
+					if err := f(gph, snap, region, res); err != nil {
 						errc <- err
-						return
 					}
 				}(fn, snap, s.region, r)
 			}
@@ -1050,18 +1004,17 @@ func (s *Infra) Fetch(ctx context.Context) (cloud.GraphAPI, error) {
 		if err != nil {
 			return gph, err
 		}
-		if _, ok := list.([]*acm.CertificateSummary); !ok {
-			return gph, errors.New("cannot cast to '[]*acm.CertificateSummary' type from fetch context")
+		objects, ok := list.([]acmtypes.CertificateSummary)
+		if !ok {
+			return gph, errors.New("cannot cast to '[]acmtypes.CertificateSummary' type from fetch context")
 		}
-		for _, r := range list.([]*acm.CertificateSummary) {
+		for _, r := range objects {
 			for _, fn := range addParentsFns["certificate"] {
 				wg.Add(1)
-				go func(f addParentFn, snap tstore.RDFGraph, region string, res *acm.CertificateSummary) {
+				go func(f addParentFn, snap tstore.RDFGraph, region string, res acmtypes.CertificateSummary) {
 					defer wg.Done()
-					err := f(gph, snap, region, res)
-					if err != nil {
+					if err := f(gph, snap, region, res); err != nil {
 						errc <- err
-						return
 					}
 				}(fn, snap, s.region, r)
 			}
@@ -1100,25 +1053,25 @@ type Access struct {
 	region, profile string
 	config          map[string]interface{}
 	log             *logger.Logger
-	iamiface.IAMAPI
-	stsiface.STSAPI
+	awsfetch.IamAPI
+	awsfetch.StsAPI
 }
 
-func NewAccess(sess *session.Session, profile string, extraConf map[string]interface{}, log *logger.Logger) cloud.Service {
+func NewAccess(cfg awssdk.Config, profile string, extraConf map[string]interface{}, log *logger.Logger) cloud.Service {
 	region := "global"
-	iamAPI := iam.New(sess)
-	stsAPI := sts.New(sess)
+	iamAPI := iam.NewFromConfig(cfg)
+	stsAPI := sts.NewFromConfig(cfg)
 
-	fetchConfig := awsfetch.NewConfig(
-		iamAPI,
-		stsAPI,
-	)
+	fetchConfig := awsfetch.NewConfig(&awsfetch.AWSAPI{
+		Iam: iamAPI,
+		Sts: stsAPI,
+	})
 	fetchConfig.Extra = extraConf
 	fetchConfig.Log = log
 
 	return &Access{
-		IAMAPI:  iamAPI,
-		STSAPI:  stsAPI,
+		IamAPI:  iamAPI,
+		StsAPI:  stsAPI,
 		fetcher: fetch.NewFetcher(awsfetch.BuildAccessFetchFuncs(fetchConfig)),
 		config:  extraConf,
 		region:  region,
@@ -1162,18 +1115,13 @@ func (s *Access) Fetch(ctx context.Context) (cloud.GraphAPI, error) {
 	defer s.fetcher.Reset()
 
 	for _, e := range *fetch.WrapError(err) {
-		switch ee := e.(type) {
-		case awserr.RequestFailure:
-			switch ee.Message() {
-			case accessDenied:
-				allErrors.Add(cloud.ErrFetchAccessDenied)
-			default:
-				allErrors.Add(ee)
-			}
-		case nil:
+		switch {
+		case e == nil:
 			continue
+		case awsfetch.IsAccessDenied(e):
+			allErrors.Add(cloud.ErrFetchAccessDenied)
 		default:
-			allErrors.Add(ee)
+			allErrors.Add(e)
 		}
 	}
 
@@ -1190,18 +1138,17 @@ func (s *Access) Fetch(ctx context.Context) (cloud.GraphAPI, error) {
 		if err != nil {
 			return gph, err
 		}
-		if _, ok := list.([]*iam.UserDetail); !ok {
-			return gph, errors.New("cannot cast to '[]*iam.UserDetail' type from fetch context")
+		objects, ok := list.([]iamtypes.UserDetail)
+		if !ok {
+			return gph, errors.New("cannot cast to '[]iamtypes.UserDetail' type from fetch context")
 		}
-		for _, r := range list.([]*iam.UserDetail) {
+		for _, r := range objects {
 			for _, fn := range addParentsFns["user"] {
 				wg.Add(1)
-				go func(f addParentFn, snap tstore.RDFGraph, region string, res *iam.UserDetail) {
+				go func(f addParentFn, snap tstore.RDFGraph, region string, res iamtypes.UserDetail) {
 					defer wg.Done()
-					err := f(gph, snap, region, res)
-					if err != nil {
+					if err := f(gph, snap, region, res); err != nil {
 						errc <- err
-						return
 					}
 				}(fn, snap, s.region, r)
 			}
@@ -1212,18 +1159,17 @@ func (s *Access) Fetch(ctx context.Context) (cloud.GraphAPI, error) {
 		if err != nil {
 			return gph, err
 		}
-		if _, ok := list.([]*iam.GroupDetail); !ok {
-			return gph, errors.New("cannot cast to '[]*iam.GroupDetail' type from fetch context")
+		objects, ok := list.([]iamtypes.GroupDetail)
+		if !ok {
+			return gph, errors.New("cannot cast to '[]iamtypes.GroupDetail' type from fetch context")
 		}
-		for _, r := range list.([]*iam.GroupDetail) {
+		for _, r := range objects {
 			for _, fn := range addParentsFns["group"] {
 				wg.Add(1)
-				go func(f addParentFn, snap tstore.RDFGraph, region string, res *iam.GroupDetail) {
+				go func(f addParentFn, snap tstore.RDFGraph, region string, res iamtypes.GroupDetail) {
 					defer wg.Done()
-					err := f(gph, snap, region, res)
-					if err != nil {
+					if err := f(gph, snap, region, res); err != nil {
 						errc <- err
-						return
 					}
 				}(fn, snap, s.region, r)
 			}
@@ -1234,18 +1180,17 @@ func (s *Access) Fetch(ctx context.Context) (cloud.GraphAPI, error) {
 		if err != nil {
 			return gph, err
 		}
-		if _, ok := list.([]*iam.RoleDetail); !ok {
-			return gph, errors.New("cannot cast to '[]*iam.RoleDetail' type from fetch context")
+		objects, ok := list.([]iamtypes.RoleDetail)
+		if !ok {
+			return gph, errors.New("cannot cast to '[]iamtypes.RoleDetail' type from fetch context")
 		}
-		for _, r := range list.([]*iam.RoleDetail) {
+		for _, r := range objects {
 			for _, fn := range addParentsFns["role"] {
 				wg.Add(1)
-				go func(f addParentFn, snap tstore.RDFGraph, region string, res *iam.RoleDetail) {
+				go func(f addParentFn, snap tstore.RDFGraph, region string, res iamtypes.RoleDetail) {
 					defer wg.Done()
-					err := f(gph, snap, region, res)
-					if err != nil {
+					if err := f(gph, snap, region, res); err != nil {
 						errc <- err
-						return
 					}
 				}(fn, snap, s.region, r)
 			}
@@ -1256,18 +1201,17 @@ func (s *Access) Fetch(ctx context.Context) (cloud.GraphAPI, error) {
 		if err != nil {
 			return gph, err
 		}
-		if _, ok := list.([]*iam.Policy); !ok {
-			return gph, errors.New("cannot cast to '[]*iam.Policy' type from fetch context")
+		objects, ok := list.([]iamtypes.Policy)
+		if !ok {
+			return gph, errors.New("cannot cast to '[]iamtypes.Policy' type from fetch context")
 		}
-		for _, r := range list.([]*iam.Policy) {
+		for _, r := range objects {
 			for _, fn := range addParentsFns["policy"] {
 				wg.Add(1)
-				go func(f addParentFn, snap tstore.RDFGraph, region string, res *iam.Policy) {
+				go func(f addParentFn, snap tstore.RDFGraph, region string, res iamtypes.Policy) {
 					defer wg.Done()
-					err := f(gph, snap, region, res)
-					if err != nil {
+					if err := f(gph, snap, region, res); err != nil {
 						errc <- err
-						return
 					}
 				}(fn, snap, s.region, r)
 			}
@@ -1278,18 +1222,17 @@ func (s *Access) Fetch(ctx context.Context) (cloud.GraphAPI, error) {
 		if err != nil {
 			return gph, err
 		}
-		if _, ok := list.([]*iam.AccessKeyMetadata); !ok {
-			return gph, errors.New("cannot cast to '[]*iam.AccessKeyMetadata' type from fetch context")
+		objects, ok := list.([]iamtypes.AccessKeyMetadata)
+		if !ok {
+			return gph, errors.New("cannot cast to '[]iamtypes.AccessKeyMetadata' type from fetch context")
 		}
-		for _, r := range list.([]*iam.AccessKeyMetadata) {
+		for _, r := range objects {
 			for _, fn := range addParentsFns["accesskey"] {
 				wg.Add(1)
-				go func(f addParentFn, snap tstore.RDFGraph, region string, res *iam.AccessKeyMetadata) {
+				go func(f addParentFn, snap tstore.RDFGraph, region string, res iamtypes.AccessKeyMetadata) {
 					defer wg.Done()
-					err := f(gph, snap, region, res)
-					if err != nil {
+					if err := f(gph, snap, region, res); err != nil {
 						errc <- err
-						return
 					}
 				}(fn, snap, s.region, r)
 			}
@@ -1300,18 +1243,17 @@ func (s *Access) Fetch(ctx context.Context) (cloud.GraphAPI, error) {
 		if err != nil {
 			return gph, err
 		}
-		if _, ok := list.([]*iam.InstanceProfile); !ok {
-			return gph, errors.New("cannot cast to '[]*iam.InstanceProfile' type from fetch context")
+		objects, ok := list.([]iamtypes.InstanceProfile)
+		if !ok {
+			return gph, errors.New("cannot cast to '[]iamtypes.InstanceProfile' type from fetch context")
 		}
-		for _, r := range list.([]*iam.InstanceProfile) {
+		for _, r := range objects {
 			for _, fn := range addParentsFns["instanceprofile"] {
 				wg.Add(1)
-				go func(f addParentFn, snap tstore.RDFGraph, region string, res *iam.InstanceProfile) {
+				go func(f addParentFn, snap tstore.RDFGraph, region string, res iamtypes.InstanceProfile) {
 					defer wg.Done()
-					err := f(gph, snap, region, res)
-					if err != nil {
+					if err := f(gph, snap, region, res); err != nil {
 						errc <- err
-						return
 					}
 				}(fn, snap, s.region, r)
 			}
@@ -1322,18 +1264,17 @@ func (s *Access) Fetch(ctx context.Context) (cloud.GraphAPI, error) {
 		if err != nil {
 			return gph, err
 		}
-		if _, ok := list.([]*iam.VirtualMFADevice); !ok {
-			return gph, errors.New("cannot cast to '[]*iam.VirtualMFADevice' type from fetch context")
+		objects, ok := list.([]iamtypes.VirtualMFADevice)
+		if !ok {
+			return gph, errors.New("cannot cast to '[]iamtypes.VirtualMFADevice' type from fetch context")
 		}
-		for _, r := range list.([]*iam.VirtualMFADevice) {
+		for _, r := range objects {
 			for _, fn := range addParentsFns["mfadevice"] {
 				wg.Add(1)
-				go func(f addParentFn, snap tstore.RDFGraph, region string, res *iam.VirtualMFADevice) {
+				go func(f addParentFn, snap tstore.RDFGraph, region string, res iamtypes.VirtualMFADevice) {
 					defer wg.Done()
-					err := f(gph, snap, region, res)
-					if err != nil {
+					if err := f(gph, snap, region, res); err != nil {
 						errc <- err
-						return
 					}
 				}(fn, snap, s.region, r)
 			}
@@ -1372,16 +1313,16 @@ type Storage struct {
 	region, profile string
 	config          map[string]interface{}
 	log             *logger.Logger
-	s3iface.S3API
+	awsfetch.S3API
 }
 
-func NewStorage(sess *session.Session, profile string, extraConf map[string]interface{}, log *logger.Logger) cloud.Service {
-	region := awssdk.StringValue(sess.Config.Region)
-	s3API := s3.New(sess)
+func NewStorage(cfg awssdk.Config, profile string, extraConf map[string]interface{}, log *logger.Logger) cloud.Service {
+	region := cfg.Region
+	s3API := s3.NewFromConfig(cfg)
 
-	fetchConfig := awsfetch.NewConfig(
-		s3API,
-	)
+	fetchConfig := awsfetch.NewConfig(&awsfetch.AWSAPI{
+		S3: s3API,
+	})
 	fetchConfig.Extra = extraConf
 	fetchConfig.Log = log
 
@@ -1425,18 +1366,13 @@ func (s *Storage) Fetch(ctx context.Context) (cloud.GraphAPI, error) {
 	defer s.fetcher.Reset()
 
 	for _, e := range *fetch.WrapError(err) {
-		switch ee := e.(type) {
-		case awserr.RequestFailure:
-			switch ee.Message() {
-			case accessDenied:
-				allErrors.Add(cloud.ErrFetchAccessDenied)
-			default:
-				allErrors.Add(ee)
-			}
-		case nil:
+		switch {
+		case e == nil:
 			continue
+		case awsfetch.IsAccessDenied(e):
+			allErrors.Add(cloud.ErrFetchAccessDenied)
 		default:
-			allErrors.Add(ee)
+			allErrors.Add(e)
 		}
 	}
 
@@ -1453,18 +1389,17 @@ func (s *Storage) Fetch(ctx context.Context) (cloud.GraphAPI, error) {
 		if err != nil {
 			return gph, err
 		}
-		if _, ok := list.([]*s3.Bucket); !ok {
-			return gph, errors.New("cannot cast to '[]*s3.Bucket' type from fetch context")
+		objects, ok := list.([]s3types.Bucket)
+		if !ok {
+			return gph, errors.New("cannot cast to '[]s3types.Bucket' type from fetch context")
 		}
-		for _, r := range list.([]*s3.Bucket) {
+		for _, r := range objects {
 			for _, fn := range addParentsFns["bucket"] {
 				wg.Add(1)
-				go func(f addParentFn, snap tstore.RDFGraph, region string, res *s3.Bucket) {
+				go func(f addParentFn, snap tstore.RDFGraph, region string, res s3types.Bucket) {
 					defer wg.Done()
-					err := f(gph, snap, region, res)
-					if err != nil {
+					if err := f(gph, snap, region, res); err != nil {
 						errc <- err
-						return
 					}
 				}(fn, snap, s.region, r)
 			}
@@ -1475,18 +1410,17 @@ func (s *Storage) Fetch(ctx context.Context) (cloud.GraphAPI, error) {
 		if err != nil {
 			return gph, err
 		}
-		if _, ok := list.([]*s3.Object); !ok {
-			return gph, errors.New("cannot cast to '[]*s3.Object' type from fetch context")
+		objects, ok := list.([]s3types.Object)
+		if !ok {
+			return gph, errors.New("cannot cast to '[]s3types.Object' type from fetch context")
 		}
-		for _, r := range list.([]*s3.Object) {
+		for _, r := range objects {
 			for _, fn := range addParentsFns["s3object"] {
 				wg.Add(1)
-				go func(f addParentFn, snap tstore.RDFGraph, region string, res *s3.Object) {
+				go func(f addParentFn, snap tstore.RDFGraph, region string, res s3types.Object) {
 					defer wg.Done()
-					err := f(gph, snap, region, res)
-					if err != nil {
+					if err := f(gph, snap, region, res); err != nil {
 						errc <- err
-						return
 					}
 				}(fn, snap, s.region, r)
 			}
@@ -1525,25 +1459,25 @@ type Messaging struct {
 	region, profile string
 	config          map[string]interface{}
 	log             *logger.Logger
-	snsiface.SNSAPI
-	sqsiface.SQSAPI
+	awsfetch.SnsAPI
+	awsfetch.SqsAPI
 }
 
-func NewMessaging(sess *session.Session, profile string, extraConf map[string]interface{}, log *logger.Logger) cloud.Service {
-	region := awssdk.StringValue(sess.Config.Region)
-	snsAPI := sns.New(sess)
-	sqsAPI := sqs.New(sess)
+func NewMessaging(cfg awssdk.Config, profile string, extraConf map[string]interface{}, log *logger.Logger) cloud.Service {
+	region := cfg.Region
+	snsAPI := sns.NewFromConfig(cfg)
+	sqsAPI := sqs.NewFromConfig(cfg)
 
-	fetchConfig := awsfetch.NewConfig(
-		snsAPI,
-		sqsAPI,
-	)
+	fetchConfig := awsfetch.NewConfig(&awsfetch.AWSAPI{
+		Sns: snsAPI,
+		Sqs: sqsAPI,
+	})
 	fetchConfig.Extra = extraConf
 	fetchConfig.Log = log
 
 	return &Messaging{
-		SNSAPI:  snsAPI,
-		SQSAPI:  sqsAPI,
+		SnsAPI:  snsAPI,
+		SqsAPI:  sqsAPI,
 		fetcher: fetch.NewFetcher(awsfetch.BuildMessagingFetchFuncs(fetchConfig)),
 		config:  extraConf,
 		region:  region,
@@ -1583,18 +1517,13 @@ func (s *Messaging) Fetch(ctx context.Context) (cloud.GraphAPI, error) {
 	defer s.fetcher.Reset()
 
 	for _, e := range *fetch.WrapError(err) {
-		switch ee := e.(type) {
-		case awserr.RequestFailure:
-			switch ee.Message() {
-			case accessDenied:
-				allErrors.Add(cloud.ErrFetchAccessDenied)
-			default:
-				allErrors.Add(ee)
-			}
-		case nil:
+		switch {
+		case e == nil:
 			continue
+		case awsfetch.IsAccessDenied(e):
+			allErrors.Add(cloud.ErrFetchAccessDenied)
 		default:
-			allErrors.Add(ee)
+			allErrors.Add(e)
 		}
 	}
 
@@ -1611,18 +1540,17 @@ func (s *Messaging) Fetch(ctx context.Context) (cloud.GraphAPI, error) {
 		if err != nil {
 			return gph, err
 		}
-		if _, ok := list.([]*sns.Subscription); !ok {
-			return gph, errors.New("cannot cast to '[]*sns.Subscription' type from fetch context")
+		objects, ok := list.([]snstypes.Subscription)
+		if !ok {
+			return gph, errors.New("cannot cast to '[]snstypes.Subscription' type from fetch context")
 		}
-		for _, r := range list.([]*sns.Subscription) {
+		for _, r := range objects {
 			for _, fn := range addParentsFns["subscription"] {
 				wg.Add(1)
-				go func(f addParentFn, snap tstore.RDFGraph, region string, res *sns.Subscription) {
+				go func(f addParentFn, snap tstore.RDFGraph, region string, res snstypes.Subscription) {
 					defer wg.Done()
-					err := f(gph, snap, region, res)
-					if err != nil {
+					if err := f(gph, snap, region, res); err != nil {
 						errc <- err
-						return
 					}
 				}(fn, snap, s.region, r)
 			}
@@ -1633,18 +1561,17 @@ func (s *Messaging) Fetch(ctx context.Context) (cloud.GraphAPI, error) {
 		if err != nil {
 			return gph, err
 		}
-		if _, ok := list.([]*sns.Topic); !ok {
-			return gph, errors.New("cannot cast to '[]*sns.Topic' type from fetch context")
+		objects, ok := list.([]snstypes.Topic)
+		if !ok {
+			return gph, errors.New("cannot cast to '[]snstypes.Topic' type from fetch context")
 		}
-		for _, r := range list.([]*sns.Topic) {
+		for _, r := range objects {
 			for _, fn := range addParentsFns["topic"] {
 				wg.Add(1)
-				go func(f addParentFn, snap tstore.RDFGraph, region string, res *sns.Topic) {
+				go func(f addParentFn, snap tstore.RDFGraph, region string, res snstypes.Topic) {
 					defer wg.Done()
-					err := f(gph, snap, region, res)
-					if err != nil {
+					if err := f(gph, snap, region, res); err != nil {
 						errc <- err
-						return
 					}
 				}(fn, snap, s.region, r)
 			}
@@ -1655,18 +1582,17 @@ func (s *Messaging) Fetch(ctx context.Context) (cloud.GraphAPI, error) {
 		if err != nil {
 			return gph, err
 		}
-		if _, ok := list.([]*string); !ok {
-			return gph, errors.New("cannot cast to '[]*string' type from fetch context")
+		objects, ok := list.([]string)
+		if !ok {
+			return gph, errors.New("cannot cast to '[]string' type from fetch context")
 		}
-		for _, r := range list.([]*string) {
+		for _, r := range objects {
 			for _, fn := range addParentsFns["queue"] {
 				wg.Add(1)
-				go func(f addParentFn, snap tstore.RDFGraph, region string, res *string) {
+				go func(f addParentFn, snap tstore.RDFGraph, region string, res string) {
 					defer wg.Done()
-					err := f(gph, snap, region, res)
-					if err != nil {
+					if err := f(gph, snap, region, res); err != nil {
 						errc <- err
-						return
 					}
 				}(fn, snap, s.region, r)
 			}
@@ -1705,16 +1631,16 @@ type Dns struct {
 	region, profile string
 	config          map[string]interface{}
 	log             *logger.Logger
-	route53iface.Route53API
+	awsfetch.Route53API
 }
 
-func NewDns(sess *session.Session, profile string, extraConf map[string]interface{}, log *logger.Logger) cloud.Service {
+func NewDns(cfg awssdk.Config, profile string, extraConf map[string]interface{}, log *logger.Logger) cloud.Service {
 	region := "global"
-	route53API := route53.New(sess)
+	route53API := route53.NewFromConfig(cfg)
 
-	fetchConfig := awsfetch.NewConfig(
-		route53API,
-	)
+	fetchConfig := awsfetch.NewConfig(&awsfetch.AWSAPI{
+		Route53: route53API,
+	})
 	fetchConfig.Extra = extraConf
 	fetchConfig.Log = log
 
@@ -1758,18 +1684,13 @@ func (s *Dns) Fetch(ctx context.Context) (cloud.GraphAPI, error) {
 	defer s.fetcher.Reset()
 
 	for _, e := range *fetch.WrapError(err) {
-		switch ee := e.(type) {
-		case awserr.RequestFailure:
-			switch ee.Message() {
-			case accessDenied:
-				allErrors.Add(cloud.ErrFetchAccessDenied)
-			default:
-				allErrors.Add(ee)
-			}
-		case nil:
+		switch {
+		case e == nil:
 			continue
+		case awsfetch.IsAccessDenied(e):
+			allErrors.Add(cloud.ErrFetchAccessDenied)
 		default:
-			allErrors.Add(ee)
+			allErrors.Add(e)
 		}
 	}
 
@@ -1786,18 +1707,17 @@ func (s *Dns) Fetch(ctx context.Context) (cloud.GraphAPI, error) {
 		if err != nil {
 			return gph, err
 		}
-		if _, ok := list.([]*route53.HostedZone); !ok {
-			return gph, errors.New("cannot cast to '[]*route53.HostedZone' type from fetch context")
+		objects, ok := list.([]route53types.HostedZone)
+		if !ok {
+			return gph, errors.New("cannot cast to '[]route53types.HostedZone' type from fetch context")
 		}
-		for _, r := range list.([]*route53.HostedZone) {
+		for _, r := range objects {
 			for _, fn := range addParentsFns["zone"] {
 				wg.Add(1)
-				go func(f addParentFn, snap tstore.RDFGraph, region string, res *route53.HostedZone) {
+				go func(f addParentFn, snap tstore.RDFGraph, region string, res route53types.HostedZone) {
 					defer wg.Done()
-					err := f(gph, snap, region, res)
-					if err != nil {
+					if err := f(gph, snap, region, res); err != nil {
 						errc <- err
-						return
 					}
 				}(fn, snap, s.region, r)
 			}
@@ -1808,18 +1728,17 @@ func (s *Dns) Fetch(ctx context.Context) (cloud.GraphAPI, error) {
 		if err != nil {
 			return gph, err
 		}
-		if _, ok := list.([]*route53.ResourceRecordSet); !ok {
-			return gph, errors.New("cannot cast to '[]*route53.ResourceRecordSet' type from fetch context")
+		objects, ok := list.([]route53types.ResourceRecordSet)
+		if !ok {
+			return gph, errors.New("cannot cast to '[]route53types.ResourceRecordSet' type from fetch context")
 		}
-		for _, r := range list.([]*route53.ResourceRecordSet) {
+		for _, r := range objects {
 			for _, fn := range addParentsFns["record"] {
 				wg.Add(1)
-				go func(f addParentFn, snap tstore.RDFGraph, region string, res *route53.ResourceRecordSet) {
+				go func(f addParentFn, snap tstore.RDFGraph, region string, res route53types.ResourceRecordSet) {
 					defer wg.Done()
-					err := f(gph, snap, region, res)
-					if err != nil {
+					if err := f(gph, snap, region, res); err != nil {
 						errc <- err
-						return
 					}
 				}(fn, snap, s.region, r)
 			}
@@ -1858,16 +1777,16 @@ type Lambda struct {
 	region, profile string
 	config          map[string]interface{}
 	log             *logger.Logger
-	lambdaiface.LambdaAPI
+	awsfetch.LambdaAPI
 }
 
-func NewLambda(sess *session.Session, profile string, extraConf map[string]interface{}, log *logger.Logger) cloud.Service {
-	region := awssdk.StringValue(sess.Config.Region)
-	lambdaAPI := lambda.New(sess)
+func NewLambda(cfg awssdk.Config, profile string, extraConf map[string]interface{}, log *logger.Logger) cloud.Service {
+	region := cfg.Region
+	lambdaAPI := lambda.NewFromConfig(cfg)
 
-	fetchConfig := awsfetch.NewConfig(
-		lambdaAPI,
-	)
+	fetchConfig := awsfetch.NewConfig(&awsfetch.AWSAPI{
+		Lambda: lambdaAPI,
+	})
 	fetchConfig.Extra = extraConf
 	fetchConfig.Log = log
 
@@ -1910,18 +1829,13 @@ func (s *Lambda) Fetch(ctx context.Context) (cloud.GraphAPI, error) {
 	defer s.fetcher.Reset()
 
 	for _, e := range *fetch.WrapError(err) {
-		switch ee := e.(type) {
-		case awserr.RequestFailure:
-			switch ee.Message() {
-			case accessDenied:
-				allErrors.Add(cloud.ErrFetchAccessDenied)
-			default:
-				allErrors.Add(ee)
-			}
-		case nil:
+		switch {
+		case e == nil:
 			continue
+		case awsfetch.IsAccessDenied(e):
+			allErrors.Add(cloud.ErrFetchAccessDenied)
 		default:
-			allErrors.Add(ee)
+			allErrors.Add(e)
 		}
 	}
 
@@ -1938,18 +1852,17 @@ func (s *Lambda) Fetch(ctx context.Context) (cloud.GraphAPI, error) {
 		if err != nil {
 			return gph, err
 		}
-		if _, ok := list.([]*lambda.FunctionConfiguration); !ok {
-			return gph, errors.New("cannot cast to '[]*lambda.FunctionConfiguration' type from fetch context")
+		objects, ok := list.([]lambdatypes.FunctionConfiguration)
+		if !ok {
+			return gph, errors.New("cannot cast to '[]lambdatypes.FunctionConfiguration' type from fetch context")
 		}
-		for _, r := range list.([]*lambda.FunctionConfiguration) {
+		for _, r := range objects {
 			for _, fn := range addParentsFns["function"] {
 				wg.Add(1)
-				go func(f addParentFn, snap tstore.RDFGraph, region string, res *lambda.FunctionConfiguration) {
+				go func(f addParentFn, snap tstore.RDFGraph, region string, res lambdatypes.FunctionConfiguration) {
 					defer wg.Done()
-					err := f(gph, snap, region, res)
-					if err != nil {
+					if err := f(gph, snap, region, res); err != nil {
 						errc <- err
-						return
 					}
 				}(fn, snap, s.region, r)
 			}
@@ -1988,21 +1901,21 @@ type Monitoring struct {
 	region, profile string
 	config          map[string]interface{}
 	log             *logger.Logger
-	cloudwatchiface.CloudWatchAPI
+	awsfetch.CloudwatchAPI
 }
 
-func NewMonitoring(sess *session.Session, profile string, extraConf map[string]interface{}, log *logger.Logger) cloud.Service {
-	region := awssdk.StringValue(sess.Config.Region)
-	cloudwatchAPI := cloudwatch.New(sess)
+func NewMonitoring(cfg awssdk.Config, profile string, extraConf map[string]interface{}, log *logger.Logger) cloud.Service {
+	region := cfg.Region
+	cloudwatchAPI := cloudwatch.NewFromConfig(cfg)
 
-	fetchConfig := awsfetch.NewConfig(
-		cloudwatchAPI,
-	)
+	fetchConfig := awsfetch.NewConfig(&awsfetch.AWSAPI{
+		Cloudwatch: cloudwatchAPI,
+	})
 	fetchConfig.Extra = extraConf
 	fetchConfig.Log = log
 
 	return &Monitoring{
-		CloudWatchAPI: cloudwatchAPI,
+		CloudwatchAPI: cloudwatchAPI,
 		fetcher:       fetch.NewFetcher(awsfetch.BuildMonitoringFetchFuncs(fetchConfig)),
 		config:        extraConf,
 		region:        region,
@@ -2041,18 +1954,13 @@ func (s *Monitoring) Fetch(ctx context.Context) (cloud.GraphAPI, error) {
 	defer s.fetcher.Reset()
 
 	for _, e := range *fetch.WrapError(err) {
-		switch ee := e.(type) {
-		case awserr.RequestFailure:
-			switch ee.Message() {
-			case accessDenied:
-				allErrors.Add(cloud.ErrFetchAccessDenied)
-			default:
-				allErrors.Add(ee)
-			}
-		case nil:
+		switch {
+		case e == nil:
 			continue
+		case awsfetch.IsAccessDenied(e):
+			allErrors.Add(cloud.ErrFetchAccessDenied)
 		default:
-			allErrors.Add(ee)
+			allErrors.Add(e)
 		}
 	}
 
@@ -2069,18 +1977,17 @@ func (s *Monitoring) Fetch(ctx context.Context) (cloud.GraphAPI, error) {
 		if err != nil {
 			return gph, err
 		}
-		if _, ok := list.([]*cloudwatch.Metric); !ok {
-			return gph, errors.New("cannot cast to '[]*cloudwatch.Metric' type from fetch context")
+		objects, ok := list.([]cloudwatchtypes.Metric)
+		if !ok {
+			return gph, errors.New("cannot cast to '[]cloudwatchtypes.Metric' type from fetch context")
 		}
-		for _, r := range list.([]*cloudwatch.Metric) {
+		for _, r := range objects {
 			for _, fn := range addParentsFns["metric"] {
 				wg.Add(1)
-				go func(f addParentFn, snap tstore.RDFGraph, region string, res *cloudwatch.Metric) {
+				go func(f addParentFn, snap tstore.RDFGraph, region string, res cloudwatchtypes.Metric) {
 					defer wg.Done()
-					err := f(gph, snap, region, res)
-					if err != nil {
+					if err := f(gph, snap, region, res); err != nil {
 						errc <- err
-						return
 					}
 				}(fn, snap, s.region, r)
 			}
@@ -2091,18 +1998,17 @@ func (s *Monitoring) Fetch(ctx context.Context) (cloud.GraphAPI, error) {
 		if err != nil {
 			return gph, err
 		}
-		if _, ok := list.([]*cloudwatch.MetricAlarm); !ok {
-			return gph, errors.New("cannot cast to '[]*cloudwatch.MetricAlarm' type from fetch context")
+		objects, ok := list.([]cloudwatchtypes.MetricAlarm)
+		if !ok {
+			return gph, errors.New("cannot cast to '[]cloudwatchtypes.MetricAlarm' type from fetch context")
 		}
-		for _, r := range list.([]*cloudwatch.MetricAlarm) {
+		for _, r := range objects {
 			for _, fn := range addParentsFns["alarm"] {
 				wg.Add(1)
-				go func(f addParentFn, snap tstore.RDFGraph, region string, res *cloudwatch.MetricAlarm) {
+				go func(f addParentFn, snap tstore.RDFGraph, region string, res cloudwatchtypes.MetricAlarm) {
 					defer wg.Done()
-					err := f(gph, snap, region, res)
-					if err != nil {
+					if err := f(gph, snap, region, res); err != nil {
 						errc <- err
-						return
 					}
 				}(fn, snap, s.region, r)
 			}
@@ -2141,21 +2047,21 @@ type Cdn struct {
 	region, profile string
 	config          map[string]interface{}
 	log             *logger.Logger
-	cloudfrontiface.CloudFrontAPI
+	awsfetch.CloudfrontAPI
 }
 
-func NewCdn(sess *session.Session, profile string, extraConf map[string]interface{}, log *logger.Logger) cloud.Service {
+func NewCdn(cfg awssdk.Config, profile string, extraConf map[string]interface{}, log *logger.Logger) cloud.Service {
 	region := "global"
-	cloudfrontAPI := cloudfront.New(sess)
+	cloudfrontAPI := cloudfront.NewFromConfig(cfg)
 
-	fetchConfig := awsfetch.NewConfig(
-		cloudfrontAPI,
-	)
+	fetchConfig := awsfetch.NewConfig(&awsfetch.AWSAPI{
+		Cloudfront: cloudfrontAPI,
+	})
 	fetchConfig.Extra = extraConf
 	fetchConfig.Log = log
 
 	return &Cdn{
-		CloudFrontAPI: cloudfrontAPI,
+		CloudfrontAPI: cloudfrontAPI,
 		fetcher:       fetch.NewFetcher(awsfetch.BuildCdnFetchFuncs(fetchConfig)),
 		config:        extraConf,
 		region:        region,
@@ -2193,18 +2099,13 @@ func (s *Cdn) Fetch(ctx context.Context) (cloud.GraphAPI, error) {
 	defer s.fetcher.Reset()
 
 	for _, e := range *fetch.WrapError(err) {
-		switch ee := e.(type) {
-		case awserr.RequestFailure:
-			switch ee.Message() {
-			case accessDenied:
-				allErrors.Add(cloud.ErrFetchAccessDenied)
-			default:
-				allErrors.Add(ee)
-			}
-		case nil:
+		switch {
+		case e == nil:
 			continue
+		case awsfetch.IsAccessDenied(e):
+			allErrors.Add(cloud.ErrFetchAccessDenied)
 		default:
-			allErrors.Add(ee)
+			allErrors.Add(e)
 		}
 	}
 
@@ -2221,18 +2122,17 @@ func (s *Cdn) Fetch(ctx context.Context) (cloud.GraphAPI, error) {
 		if err != nil {
 			return gph, err
 		}
-		if _, ok := list.([]*cloudfront.DistributionSummary); !ok {
-			return gph, errors.New("cannot cast to '[]*cloudfront.DistributionSummary' type from fetch context")
+		objects, ok := list.([]cloudfronttypes.DistributionSummary)
+		if !ok {
+			return gph, errors.New("cannot cast to '[]cloudfronttypes.DistributionSummary' type from fetch context")
 		}
-		for _, r := range list.([]*cloudfront.DistributionSummary) {
+		for _, r := range objects {
 			for _, fn := range addParentsFns["distribution"] {
 				wg.Add(1)
-				go func(f addParentFn, snap tstore.RDFGraph, region string, res *cloudfront.DistributionSummary) {
+				go func(f addParentFn, snap tstore.RDFGraph, region string, res cloudfronttypes.DistributionSummary) {
 					defer wg.Done()
-					err := f(gph, snap, region, res)
-					if err != nil {
+					if err := f(gph, snap, region, res); err != nil {
 						errc <- err
-						return
 					}
 				}(fn, snap, s.region, r)
 			}
@@ -2271,21 +2171,21 @@ type Cloudformation struct {
 	region, profile string
 	config          map[string]interface{}
 	log             *logger.Logger
-	cloudformationiface.CloudFormationAPI
+	awsfetch.CloudformationAPI
 }
 
-func NewCloudformation(sess *session.Session, profile string, extraConf map[string]interface{}, log *logger.Logger) cloud.Service {
-	region := awssdk.StringValue(sess.Config.Region)
-	cloudformationAPI := cloudformation.New(sess)
+func NewCloudformation(cfg awssdk.Config, profile string, extraConf map[string]interface{}, log *logger.Logger) cloud.Service {
+	region := cfg.Region
+	cloudformationAPI := cloudformation.NewFromConfig(cfg)
 
-	fetchConfig := awsfetch.NewConfig(
-		cloudformationAPI,
-	)
+	fetchConfig := awsfetch.NewConfig(&awsfetch.AWSAPI{
+		Cloudformation: cloudformationAPI,
+	})
 	fetchConfig.Extra = extraConf
 	fetchConfig.Log = log
 
 	return &Cloudformation{
-		CloudFormationAPI: cloudformationAPI,
+		CloudformationAPI: cloudformationAPI,
 		fetcher:           fetch.NewFetcher(awsfetch.BuildCloudformationFetchFuncs(fetchConfig)),
 		config:            extraConf,
 		region:            region,
@@ -2323,18 +2223,13 @@ func (s *Cloudformation) Fetch(ctx context.Context) (cloud.GraphAPI, error) {
 	defer s.fetcher.Reset()
 
 	for _, e := range *fetch.WrapError(err) {
-		switch ee := e.(type) {
-		case awserr.RequestFailure:
-			switch ee.Message() {
-			case accessDenied:
-				allErrors.Add(cloud.ErrFetchAccessDenied)
-			default:
-				allErrors.Add(ee)
-			}
-		case nil:
+		switch {
+		case e == nil:
 			continue
+		case awsfetch.IsAccessDenied(e):
+			allErrors.Add(cloud.ErrFetchAccessDenied)
 		default:
-			allErrors.Add(ee)
+			allErrors.Add(e)
 		}
 	}
 
@@ -2351,18 +2246,17 @@ func (s *Cloudformation) Fetch(ctx context.Context) (cloud.GraphAPI, error) {
 		if err != nil {
 			return gph, err
 		}
-		if _, ok := list.([]*cloudformation.Stack); !ok {
-			return gph, errors.New("cannot cast to '[]*cloudformation.Stack' type from fetch context")
+		objects, ok := list.([]cloudformationtypes.Stack)
+		if !ok {
+			return gph, errors.New("cannot cast to '[]cloudformationtypes.Stack' type from fetch context")
 		}
-		for _, r := range list.([]*cloudformation.Stack) {
+		for _, r := range objects {
 			for _, fn := range addParentsFns["stack"] {
 				wg.Add(1)
-				go func(f addParentFn, snap tstore.RDFGraph, region string, res *cloudformation.Stack) {
+				go func(f addParentFn, snap tstore.RDFGraph, region string, res cloudformationtypes.Stack) {
 					defer wg.Done()
-					err := f(gph, snap, region, res)
-					if err != nil {
+					if err := f(gph, snap, region, res); err != nil {
 						errc <- err
-						return
 					}
 				}(fn, snap, s.region, r)
 			}
