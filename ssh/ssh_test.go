@@ -6,6 +6,7 @@ import (
 	"os"
 	"path/filepath"
 	"reflect"
+	"strings"
 	"testing"
 
 	gossh "golang.org/x/crypto/ssh"
@@ -206,6 +207,26 @@ func TestCLIAndConfig(t *testing.T) {
 			"/usr/bin/ssh -o StrictHostKeychecking=no ec2-user@1.2.3.4",
 			"\nHost TestHost\n  Hostname 1.2.3.4\n  User ec2-user\n  StrictHostKeychecking no",
 		},
+		// The jump-host cases. There were none before, which is why the
+		// ProxyCommand value carried literal single quotes for years: nothing
+		// looked at it. ConnectString is shell text and quotes the option, argv
+		// does not — see TestLocalExecArgvCarriesNoShellSyntax.
+		{
+			&Client{
+				Port: 22, IP: "10.0.0.1", User: "ec2-user", StrictHostKeyChecking: true,
+				Proxy: &Client{Port: 22, IP: "52.0.0.1", User: "admin"},
+			},
+			"/usr/bin/ssh ec2-user@10.0.0.1 -o 'ProxyCommand=ssh admin@52.0.0.1 -p 22 -W %h:%p'",
+			"\nHost TestHost\n  Hostname 10.0.0.1\n  User ec2-user\n  ProxyCommand ssh admin@52.0.0.1 -p 22 -W %h:%p",
+		},
+		{
+			&Client{
+				Port: 22, IP: "10.0.0.1", User: "ec2-user", StrictHostKeyChecking: true, Keypath: "/path/to/key",
+				Proxy: &Client{Port: 2222, IP: "52.0.0.1", User: "admin", Keypath: "/path/to/jumpkey"},
+			},
+			"/usr/bin/ssh -i /path/to/key ec2-user@10.0.0.1 -o 'ProxyCommand=ssh -i /path/to/jumpkey admin@52.0.0.1 -p 2222 -W %h:%p'",
+			"\nHost TestHost\n  Hostname 10.0.0.1\n  User ec2-user\n  IdentityFile /path/to/key\n  ProxyCommand ssh -i /path/to/jumpkey admin@52.0.0.1 -p 2222 -W %h:%p",
+		},
 	}
 
 	var got string
@@ -219,6 +240,73 @@ func TestCLIAndConfig(t *testing.T) {
 		got = tcase.client.SSHConfigString("TestHost")
 		if got != tcase.config {
 			t.Fatalf("case %d: got '%s', want '%s'", i+1, got, tcase.config)
+		}
+	}
+}
+
+// localExec feeds execve directly, with no shell in between, so not one element
+// may contain shell syntax. Upstream wrapped the ProxyCommand value in literal
+// single quotes, ssh forwarded them to /bin/sh, and the shell then looked for a
+// command whose entire name was "ssh user@host -W %h:%p".
+func TestLocalExecArgvCarriesNoShellSyntax(t *testing.T) {
+	c := &Client{
+		Port: 22, IP: "10.0.0.1", User: "ec2-user", StrictHostKeyChecking: true,
+		Proxy: &Client{Port: 22, IP: "52.0.0.1", User: "admin", Keypath: "/path/to/jumpkey"},
+	}
+
+	args, _ := c.localExec()
+
+	var proxyArg string
+	for i, a := range args {
+		if a == "-o" && i+1 < len(args) {
+			proxyArg = args[i+1]
+		}
+	}
+	if want := "ProxyCommand=ssh -i /path/to/jumpkey admin@52.0.0.1 -p 22 -W %h:%p"; proxyArg != want {
+		t.Fatalf("got %q, want %q", proxyArg, want)
+	}
+	for _, a := range args {
+		if strings.ContainsAny(a, `'"`) {
+			t.Fatalf("argv element %q contains shell quoting; execve passes it through literally", a)
+		}
+	}
+}
+
+// The ProxyCommand value is executed by ssh through /bin/sh, and the values spliced
+// into it are not trustworthy: the address comes from the synced graph, the key path
+// can come from an instance's KeyPair tag.
+func TestProxyCommandQuotesUntrustedValues(t *testing.T) {
+	proxy := &Client{
+		Port: 22,
+		IP:   "52.0.0.1",
+		User: "admin; touch /tmp/pwned",
+		// A path a shell would otherwise split, plus an embedded single quote.
+		Keypath: "/path/with space/it's",
+	}
+
+	got := (&Client{Port: 22, IP: "10.0.0.1", User: "ec2-user", Proxy: proxy}).Proxy.proxyCommand()
+	want := `ssh -i '/path/with space/it'\''s' 'admin; touch /tmp/pwned@52.0.0.1' -p 22 -W %h:%p`
+	if got != want {
+		t.Fatalf("got %q, want %q", got, want)
+	}
+}
+
+func TestShellQuote(t *testing.T) {
+	tcases := []struct{ in, want string }{
+		{"", "''"},
+		{"plain", "plain"},
+		{"/path/to/key", "/path/to/key"},
+		{"ec2-user@1.2.3.4", "ec2-user@1.2.3.4"},
+		{"ProxyCommand=ssh -W %h:%p", "'ProxyCommand=ssh -W %h:%p'"},
+		{"a b", "'a b'"},
+		{"; rm -rf /", "'; rm -rf /'"},
+		{"$(whoami)", "'$(whoami)'"},
+		{"back`tick`", "'back`tick`'"},
+		{"it's", `'it'\''s'`},
+	}
+	for _, tc := range tcases {
+		if got := shellQuote(tc.in); got != tc.want {
+			t.Errorf("shellQuote(%q) = %q, want %q", tc.in, got, tc.want)
 		}
 	}
 }

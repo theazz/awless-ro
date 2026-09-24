@@ -10,6 +10,7 @@ import (
 	"os"
 	"os/exec"
 	"path/filepath"
+	"regexp"
 	"strconv"
 	"strings"
 	"syscall"
@@ -156,9 +157,6 @@ func (c *Client) Connect() (err error) {
 		if err := c.CloseAll(); err != nil {
 			c.logger.Warning("could not close properly SSH awless client before delegating")
 		}
-		if c.Proxy != nil {
-			return workaroundExeCVEThroughScript(args)
-		}
 		return syscall.Exec(args[0], args, os.Environ())
 	}
 
@@ -180,11 +178,7 @@ func (c *Client) SSHConfigString(hostname string) string {
 		extraOpts["Port"] = strconv.Itoa(c.Port)
 	}
 	if c.Proxy != nil {
-		var keyArg string
-		if k := c.Proxy.Keypath; len(k) > 0 {
-			keyArg = fmt.Sprintf("-i %s", k)
-		}
-		extraOpts["ProxyCommand"] = fmt.Sprintf("ssh %s %s@%s -p %d -W %%h:%%p", keyArg, c.Proxy.User, c.Proxy.IP, c.Proxy.Port)
+		extraOpts["ProxyCommand"] = c.Proxy.proxyCommand()
 	}
 
 	params := struct {
@@ -204,11 +198,33 @@ Host {{ .Name }}
 	return buf.String()
 }
 
+// ConnectString renders the same command as localExec, but as text meant to be
+// pasted into a shell. That is why it quotes: localExec produces argv, which goes
+// to execve with no shell in between and must therefore carry no shell syntax,
+// whereas this output is read by a shell and has to survive it.
+//
+// Conflating those two was the bug behind the temporary-script hack that used to
+// live at the bottom of this file. See localExec.
 func (c *Client) ConnectString() string {
 	args, _ := c.localExec()
-	return strings.Join(args, " ")
+	quoted := make([]string, 0, len(args))
+	for _, a := range args {
+		quoted = append(quoted, shellQuote(a))
+	}
+	return strings.Join(quoted, " ")
 }
 
+// localExec builds the argv for handing the session over to the system ssh.
+//
+// Every element is a bare value: no shell quoting, because Connect passes this
+// straight to execve and there is no shell to interpret it. Upstream wrapped the
+// ProxyCommand value in literal single quotes here, which ssh then forwarded to
+// /bin/sh as a single quoted word — so the shell looked for a program whose whole
+// name was "ssh user@host -W %h:%p" and reported "not found". Rather than remove
+// the quotes, upstream wrote the joined string into an executable file in the
+// shared temp directory and exec'd that instead, which turned a quoting mistake
+// into arbitrary file overwrite through a predictable path plus shell injection
+// from any metacharacter in the user, host or key path.
 func (c *Client) localExec() ([]string, bool) {
 	exists := true
 	bin, err := exec.LookPath("ssh")
@@ -230,14 +246,48 @@ func (c *Client) localExec() ([]string, bool) {
 	args = append(args, fmt.Sprintf("%s@%s", c.User, c.IP))
 
 	if c.Proxy != nil {
-		var keyArg string
-		if k := c.Proxy.Keypath; len(k) > 0 {
-			keyArg = fmt.Sprintf("-i %s", k)
-		}
-		args = append(args, "-o", fmt.Sprintf("ProxyCommand='ssh %s %s@%s -p %d -W %%h:%%p'", keyArg, c.Proxy.User, c.Proxy.IP, c.Proxy.Port))
+		args = append(args, "-o", "ProxyCommand="+c.Proxy.proxyCommand())
 	}
 
 	return args, exists
+}
+
+// proxyCommand renders the jump-host hop for ssh's ProxyCommand option, from the
+// perspective of the jump host itself (c is the proxy).
+//
+// ssh hands this value to /bin/sh, so every interpolated value is shell-quoted
+// here. They are not trustworthy: the address comes from the synced graph, that is
+// to say from the AWS API, and the key path can come from an instance's KeyPair
+// tag. %h and %p are left bare on purpose — ssh substitutes them before the shell
+// ever sees the string.
+func (c *Client) proxyCommand() string {
+	var b strings.Builder
+	b.WriteString("ssh ")
+	if len(c.Keypath) > 0 {
+		b.WriteString("-i ")
+		b.WriteString(shellQuote(c.Keypath))
+		b.WriteString(" ")
+	}
+	b.WriteString(shellQuote(fmt.Sprintf("%s@%s", c.User, c.IP)))
+	fmt.Fprintf(&b, " -p %d -W %%h:%%p", c.Port)
+	return b.String()
+}
+
+// shellSafe matches the characters a POSIX shell leaves alone. Anything else means
+// the value has to be quoted.
+var shellSafe = regexp.MustCompile(`^[A-Za-z0-9_@%+=:,./-]+$`)
+
+// shellQuote makes s survive a single pass through a POSIX shell as one word.
+// Single quotes protect everything except a single quote itself, which is spliced
+// in by closing the quoted run, emitting an escaped quote and reopening.
+func shellQuote(s string) string {
+	if s == "" {
+		return "''"
+	}
+	if shellSafe.MatchString(s) {
+		return s
+	}
+	return "'" + strings.ReplaceAll(s, "'", `'\''`) + "'"
 }
 
 func DecryptSSHKey(key []byte, password []byte) (gossh.Signer, error) {
@@ -371,37 +421,4 @@ var trustKeyFunc func(hostname string, remote net.Addr, key gossh.PublicKey, key
 		return false
 	}
 	return strings.ToLower(yesorno) == "yes"
-}
-
-const tmpProxyCommandScriptFilename = "awless-ro-ssh-proxycommand"
-
-// This hack is used to circumvent a bug i cannot yet figure out
-// Bug: when executing syscall.Exec(args[0], args, os.Environ()) and args contains
-// the proxy command (typically args := []string{"/usr/bin/ssh", "ec2-user@172.31.78.138", "-o", "StrictHostKeychecking=no", "-o", "ProxyCommand='ssh ec2-user@52.26.181.76 -W [%h]:%p'"}
-// we get an error like (in Go, Python):
-//
-//	/bin/bash: 1: exec: ssh ec2-user@52.26.181.76 -W [172.31.78.138]:22: not found
-//	ssh_exchange_identification: Connection closed by remote host
-//
-// Since execve(2) can take as the first argument a filename, the workaround is to use
-// a temporary script to execute this command.
-//
-// Note that the file cannot be removed since we syscall for another process. So the first time
-// it is created and after that only truncated (reuse the same file)
-func workaroundExeCVEThroughScript(args []string) error {
-	fpath := filepath.Join(os.TempDir(), tmpProxyCommandScriptFilename)
-	logger.ExtraVerbosef("using script %s", fpath)
-	tmpExec, err := os.OpenFile(fpath, os.O_RDWR|os.O_CREATE|os.O_TRUNC, 0700)
-	if err != nil {
-		return err
-	}
-
-	script := fmt.Sprintf("#! /bin/bash\n%s", strings.Join(args, " "))
-	if _, err := tmpExec.Write([]byte(script)); err != nil {
-		return err
-	}
-	if err := tmpExec.Close(); err != nil {
-		return err
-	}
-	return syscall.Exec(tmpExec.Name(), []string{}, os.Environ())
 }
