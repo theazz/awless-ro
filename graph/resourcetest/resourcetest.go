@@ -98,6 +98,10 @@ func Bucket(id string) *rBuilder {
 	return new("bucket", id)
 }
 
+func S3Object(id string) *rBuilder {
+	return new("s3object", id)
+}
+
 func Zone(id string) *rBuilder {
 	return new("zone", id)
 }

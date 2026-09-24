@@ -17,6 +17,8 @@ limitations under the License.
 package graph
 
 import (
+	"errors"
+
 	"github.com/theazz/awless-ro/cloud/rdf"
 	"github.com/theazz/awless-ro/triplestore"
 )
@@ -91,6 +93,24 @@ func prepareRDFVisit(g *Graph, root *Resource, each visitEachFunc, includeRoot b
 	foreach := func(rdfG triplestore.RDFGraph, n string, i int) error {
 		rT, err := resolveResourceType(rdfG, n)
 		if err != nil {
+			// A node named by a relation but never fetched as a resource of its own
+			// has no type. That is ordinary rather than exceptional: relations point
+			// across services, and a service may be switched off, unreachable for
+			// want of permissions, or simply not synced yet. A security group
+			// applying on something outside the local graph was enough to stop
+			// `inspect -i port_scanner` with "resource type not found", and would
+			// have stopped `show` on the same resource.
+			//
+			// ListResourcesAppliedOn and ListResourcesDependingOn already answer this
+			// with NotFoundResource, which exists for it; the traversals disagreed
+			// with them, so the same graph was fine through one door and fatal
+			// through another.
+			if errors.Is(err, errTypeNotFound) {
+				if includeRoot || root.Id() != n {
+					return each(NotFoundResource(n), i)
+				}
+				return nil
+			}
 			return err
 		}
 		res, err := g.GetResource(rT, n)
