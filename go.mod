@@ -30,7 +30,6 @@ require (
 	github.com/fatih/color v1.19.0
 	github.com/olekukonko/tablewriter v0.0.5
 	github.com/spf13/cobra v1.10.2
-	github.com/wallix/triplestore v0.0.0-20180213143850-4099dd913851
 	go.etcd.io/bbolt v1.5.0
 	golang.org/x/crypto v0.57.0
 	golang.org/x/term v0.46.0

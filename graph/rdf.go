@@ -5,10 +5,10 @@ import (
 	"math/rand"
 
 	"github.com/theazz/awless-ro/cloud/rdf"
-	tstore "github.com/wallix/triplestore"
+	"github.com/theazz/awless-ro/triplestore"
 )
 
-func getPropertyValue(gph tstore.RDFGraph, propObj tstore.Object, prop string) (interface{}, error) {
+func getPropertyValue(gph triplestore.RDFGraph, propObj triplestore.Object, prop string) (interface{}, error) {
 	rdfProp, err := rdf.Properties.Get(prop)
 	if err != nil {
 		return "", err
@@ -18,7 +18,7 @@ func getPropertyValue(gph tstore.RDFGraph, propObj tstore.Object, prop string) (
 	dataType := rdfProp.RdfsDataType
 	switch {
 	case definedBy == rdf.RdfsLiteral, (definedBy == rdf.RdfsList) && (dataType == rdf.XsdString):
-		return tstore.ParseLiteral(propObj)
+		return triplestore.ParseLiteral(propObj)
 	case definedBy == rdf.RdfsList && dataType == rdf.NetFirewallRule:
 		id, ok := propObj.Resource()
 		if !ok {
@@ -85,11 +85,11 @@ func getPropertyValue(gph tstore.RDFGraph, propObj tstore.Object, prop string) (
 	}
 }
 
-func extractUniqueLiteralTextFromTriples(triples []tstore.Triple) (string, error) {
+func extractUniqueLiteralTextFromTriples(triples []triplestore.Triple) (string, error) {
 	if ln := len(triples); ln != 1 {
 		return "", fmt.Errorf("expected unique, got %d: %s", ln, triples)
 	}
-	return tstore.ParseString(triples[0].Object())
+	return triplestore.ParseString(triples[0].Object())
 }
 
 func randomRdfId() string {

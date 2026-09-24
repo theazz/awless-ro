@@ -25,7 +25,7 @@ import (
 	"strings"
 
 	"github.com/theazz/awless-ro/cloud/rdf"
-	tstore "github.com/wallix/triplestore"
+	"github.com/theazz/awless-ro/triplestore"
 )
 
 type FirewallRules []*FirewallRule
@@ -62,14 +62,14 @@ func (r *FirewallRule) String() string {
 	return fmt.Sprintf("PortRange:%+v; Protocol:%s; IPRanges:%+v; Sources:%+v", r.PortRange, r.Protocol, r.IPRanges, r.Sources)
 }
 
-func (r *FirewallRule) marshalToTriples(id string) []tstore.Triple {
-	var triples []tstore.Triple
-	triples = append(triples, tstore.SubjPred(id, rdf.RdfType).Resource(rdf.NetFirewallRule))
-	triples = append(triples, tstore.TriplesFromStruct(id, r)...)
+func (r *FirewallRule) marshalToTriples(id string) []triplestore.Triple {
+	var triples []triplestore.Triple
+	triples = append(triples, triplestore.SubjPred(id, rdf.RdfType).Resource(rdf.NetFirewallRule))
+	triples = append(triples, triplestore.TriplesFromStruct(id, r)...)
 	return triples
 }
 
-func (r *FirewallRule) unmarshalFromTriples(g tstore.RDFGraph, id string) error {
+func (r *FirewallRule) unmarshalFromTriples(g triplestore.RDFGraph, id string) error {
 	portRangeTs := g.WithSubjPred(id, rdf.PortRange)
 	ports, err := extractUniqueLiteralTextFromTriples(portRangeTs)
 	if err != nil {
@@ -90,7 +90,7 @@ func (r *FirewallRule) unmarshalFromTriples(g tstore.RDFGraph, id string) error 
 
 	cidrTs := g.WithSubjPred(id, rdf.CIDR)
 	for _, cidrT := range cidrTs {
-		cidrTxt, err := tstore.ParseString(cidrT.Object())
+		cidrTxt, err := triplestore.ParseString(cidrT.Object())
 		if err != nil {
 			return fmt.Errorf("unmarshal firewall rule: cidr: %s", err)
 		}
@@ -103,7 +103,7 @@ func (r *FirewallRule) unmarshalFromTriples(g tstore.RDFGraph, id string) error 
 
 	sourceTs := g.WithSubjPred(id, rdf.Source)
 	for _, sourceT := range sourceTs {
-		source, err := tstore.ParseString(sourceT.Object())
+		source, err := triplestore.ParseString(sourceT.Object())
 		if err != nil {
 			return fmt.Errorf("unmarshal firewall rule: source: %s", err)
 		}
@@ -221,14 +221,14 @@ func (r *Route) String() string {
 	return fmt.Sprintf("Destination:%+v; DestinationIPv6:%+v; DestinationPrefixListId:%s; Targets:%+v", r.Destination, r.DestinationIPv6, r.DestinationPrefixListId, r.Targets)
 }
 
-func (r *Route) marshalToTriples(id string) []tstore.Triple {
-	var triples []tstore.Triple
-	triples = append(triples, tstore.SubjPred(id, rdf.RdfType).Resource(rdf.NetRoute))
-	triples = append(triples, tstore.TriplesFromStruct(id, r)...)
+func (r *Route) marshalToTriples(id string) []triplestore.Triple {
+	var triples []triplestore.Triple
+	triples = append(triples, triplestore.SubjPred(id, rdf.RdfType).Resource(rdf.NetRoute))
+	triples = append(triples, triplestore.TriplesFromStruct(id, r)...)
 	return triples
 }
 
-func (r *Route) unmarshalFromTriples(g tstore.RDFGraph, id string) error {
+func (r *Route) unmarshalFromTriples(g triplestore.RDFGraph, id string) error {
 	routeDestTs := g.WithSubjPred(id, rdf.CIDR)
 	if len(routeDestTs) > 0 {
 		dest, err := extractUniqueLiteralTextFromTriples(routeDestTs)
@@ -265,7 +265,7 @@ func (r *Route) unmarshalFromTriples(g tstore.RDFGraph, id string) error {
 
 	targetTs := g.WithSubjPred(id, rdf.NetRouteTargets)
 	for _, targetT := range targetTs {
-		litText, err := tstore.ParseString(targetT.Object())
+		litText, err := triplestore.ParseString(targetT.Object())
 		if err != nil {
 			return err
 		}
@@ -301,16 +301,16 @@ func (g *Grant) String() string {
 	return fmt.Sprintf("Permission:%s; GranteeID:%s; GranteeDisplayName:%s; GranteeType:%s", g.Permission, g.Grantee.GranteeID, g.Grantee.GranteeDisplayName, g.Grantee.GranteeType)
 }
 
-func (g *Grant) marshalToTriples(id string) []tstore.Triple {
-	var triples []tstore.Triple
+func (g *Grant) marshalToTriples(id string) []triplestore.Triple {
+	var triples []triplestore.Triple
 
-	triples = append(triples, tstore.SubjPred(id, rdf.RdfType).Resource(rdf.Grant))
-	triples = append(triples, tstore.TriplesFromStruct(id, g)...)
+	triples = append(triples, triplestore.SubjPred(id, rdf.RdfType).Resource(rdf.Grant))
+	triples = append(triples, triplestore.TriplesFromStruct(id, g)...)
 
 	return triples
 }
 
-func (g *Grant) unmarshalFromTriples(gph tstore.RDFGraph, id string) error {
+func (g *Grant) unmarshalFromTriples(gph triplestore.RDFGraph, id string) error {
 	permissionTs := gph.WithSubjPred(id, rdf.Permission)
 	var err error
 	g.Permission, err = extractUniqueLiteralTextFromTriples(permissionTs)
@@ -360,16 +360,16 @@ func (kv *KeyValue) String() string {
 	return fmt.Sprintf("[Key:%s,Value:%s]", kv.KeyName, kv.Value)
 }
 
-func (kv *KeyValue) marshalToTriples(id string) []tstore.Triple {
-	var triples []tstore.Triple
+func (kv *KeyValue) marshalToTriples(id string) []triplestore.Triple {
+	var triples []triplestore.Triple
 
-	triples = append(triples, tstore.SubjPred(id, rdf.RdfType).Resource(rdf.KeyValue))
-	triples = append(triples, tstore.TriplesFromStruct(id, kv)...)
+	triples = append(triples, triplestore.SubjPred(id, rdf.RdfType).Resource(rdf.KeyValue))
+	triples = append(triples, triplestore.TriplesFromStruct(id, kv)...)
 
 	return triples
 }
 
-func (kv *KeyValue) unmarshalFromTriples(gph tstore.RDFGraph, id string) error {
+func (kv *KeyValue) unmarshalFromTriples(gph triplestore.RDFGraph, id string) error {
 	var err error
 	kv.KeyName, err = extractUniqueLiteralTextFromGraph(gph, id, rdf.KeyName)
 	if err != nil {
@@ -408,16 +408,16 @@ func (o *DistributionOrigin) String() string {
 	return fmt.Sprintf("[%s]", strings.Join(elems, ","))
 }
 
-func (o *DistributionOrigin) marshalToTriples(id string) []tstore.Triple {
-	var triples []tstore.Triple
+func (o *DistributionOrigin) marshalToTriples(id string) []triplestore.Triple {
+	var triples []triplestore.Triple
 
-	triples = append(triples, tstore.SubjPred(id, rdf.RdfType).Resource(rdf.DistributionOrigin))
-	triples = append(triples, tstore.TriplesFromStruct(id, o)...)
+	triples = append(triples, triplestore.SubjPred(id, rdf.RdfType).Resource(rdf.DistributionOrigin))
+	triples = append(triples, triplestore.TriplesFromStruct(id, o)...)
 
 	return triples
 }
 
-func (o *DistributionOrigin) unmarshalFromTriples(gph tstore.RDFGraph, id string) error {
+func (o *DistributionOrigin) unmarshalFromTriples(gph triplestore.RDFGraph, id string) error {
 	var err error
 	o.ID, err = extractUniqueLiteralTextFromGraph(gph, id, rdf.ID)
 	if err != nil {
@@ -527,7 +527,7 @@ func (c *StatementPrincipal) UnmarshalJSON(data []byte) (err error) {
 	return
 }
 
-func extractUniqueLiteralTextFromGraph(gph tstore.RDFGraph, subj, pred string) (string, error) {
+func extractUniqueLiteralTextFromGraph(gph triplestore.RDFGraph, subj, pred string) (string, error) {
 	ts := gph.WithSubjPred(subj, pred)
 	if len(ts) != 1 {
 		return "", fmt.Errorf("%s,%s: expect 1 triple got: %d", subj, pred, len(ts))

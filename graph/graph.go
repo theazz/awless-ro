@@ -24,15 +24,15 @@ import (
 
 	"github.com/theazz/awless-ro/cloud"
 	"github.com/theazz/awless-ro/cloud/rdf"
-	tstore "github.com/wallix/triplestore"
+	"github.com/theazz/awless-ro/triplestore"
 )
 
 type Graph struct {
-	store tstore.Source
+	store triplestore.Source
 }
 
 func NewGraph() *Graph {
-	return &Graph{tstore.NewSource()}
+	return &Graph{triplestore.NewSource()}
 }
 
 func NewGraphFromFiles(files ...string) (cloud.GraphAPI, error) {
@@ -51,7 +51,7 @@ func NewGraphFromFiles(files ...string) (cloud.GraphAPI, error) {
 	return g, err
 }
 
-func (g *Graph) AsRDFGraphSnaphot() tstore.RDFGraph {
+func (g *Graph) AsRDFGraphSnaphot() triplestore.RDFGraph {
 	return g.store.Snapshot()
 }
 
@@ -297,7 +297,7 @@ func (g *Graph) ResourceSiblings(res cloud.Resource) (collect []cloud.Resource, 
 	return collect, err
 }
 
-func ResolveResourcesWithProp(snap tstore.RDFGraph, resType, propName, propVal string) ([]*Resource, error) {
+func ResolveResourcesWithProp(snap triplestore.RDFGraph, resType, propName, propVal string) ([]*Resource, error) {
 	resolv := ByTypeAndProperty{
 		Type:  resType,
 		Key:   propName,
@@ -310,7 +310,7 @@ func (g *Graph) ListResourcesDependingOn(start *Resource) ([]*Resource, error) {
 	var resources []*Resource
 
 	snap := g.store.Snapshot()
-	for _, tri := range snap.WithPredObj(rdf.ApplyOn, tstore.Resource(start.Id())) {
+	for _, tri := range snap.WithPredObj(rdf.ApplyOn, triplestore.Resource(start.Id())) {
 		id := tri.Subject()
 		rT, err := resolveResourceType(snap, id)
 		if err != nil {
@@ -361,17 +361,13 @@ func (g *Graph) Accept(v Visitor) error {
 	return v.Visit(g)
 }
 
-func (g *Graph) Unmarshal(data []byte) error {
-	ts, err := tstore.NewAutoDecoder(bytes.NewReader(data)).Decode()
-	if err != nil {
-		return err
-	}
-	g.store.Add(ts...)
-	return nil
-}
+// Graph.Unmarshal used to live here, reading a byte slice through a decoder that
+// sniffed between N-Triples and a binary encoding. It had no callers, and it was the
+// only reason the binary codec existed at all: some 230 lines carried in the binary
+// for a format nothing ever wrote.
 
 func (g *Graph) UnmarshalFromReaders(readers ...io.Reader) error {
-	dec := tstore.NewDatasetDecoder(tstore.NewLenientNTDecoder, readers...)
+	dec := triplestore.NewMultiDecoder(readers...)
 	ts, err := dec.Decode()
 	if err != nil {
 		return err
@@ -382,17 +378,17 @@ func (g *Graph) UnmarshalFromReaders(readers ...io.Reader) error {
 
 func (g *Graph) MustMarshal() string {
 	var buff bytes.Buffer
-	if err := tstore.NewLenientNTEncoder(&buff).Encode(g.store.CopyTriples()...); err != nil {
+	if err := triplestore.NewEncoder(&buff).Encode(g.store.CopyTriples()...); err != nil {
 		panic(err)
 	}
 	return string(buff.Bytes())
 }
 
 func (g *Graph) MarshalTo(w io.Writer) error {
-	return tstore.NewLenientNTEncoder(w).Encode(g.store.CopyTriples()...)
+	return triplestore.NewEncoder(w).Encode(g.store.CopyTriples()...)
 }
 
 func (g *Graph) addRelation(one, other *Resource, pred string) error {
-	g.store.Add(tstore.SubjPred(one.Id(), pred).Resource(other.Id()))
+	g.store.Add(triplestore.SubjPred(one.Id(), pred).Resource(other.Id()))
 	return nil
 }

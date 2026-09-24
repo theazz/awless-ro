@@ -18,16 +18,26 @@ import (
 
 // The on-disk N-Triples format is the one thing in this package that outlives the
 // process: `sync` writes it, every later `--local` command reads it back. These
-// tests pin it, so that changing the triple store underneath cannot silently
-// change or corrupt what is already on disk.
+// tests pin it, so that changing the triple store underneath cannot silently change
+// or corrupt what is already on disk.
 //
-// testdata/graph.nt was generated from the implementation in place at the time and
-// is committed deliberately. Regenerate it with -update only when the format
-// change is the point, and say so in the commit.
+// There are two committed files, and they are not the same format:
+//
+//   - testdata/legacy.nt was written by github.com/wallix/triplestore, before that
+//     dependency was replaced. It is frozen. Nothing regenerates it, because its
+//     whole job is to stand in for the graphs sitting in ~/.awless-ro on machines
+//     that have not re-synced, and prove they still load.
+//   - testdata/graph.nt is what the current writer produces. Regenerate it with
+//     -update only when a format change is the point, and say so in the commit.
+//
+// Both have to yield the same resources.
 
 var updateGolden = flag.Bool("update", false, "rewrite testdata/graph.nt from the current implementation")
 
-const goldenPath = "testdata/graph.nt"
+const (
+	goldenPath = "testdata/graph.nt"
+	legacyPath = "testdata/legacy.nt"
+)
 
 // ntCorpus covers every shape the serialiser has to deal with: the four literal
 // types our vocabulary declares, both kinds of list, a nested struct that becomes
@@ -213,27 +223,32 @@ func TestNTSerialisationMatchesGolden(t *testing.T) {
 	}
 }
 
-// Reading is pinned separately from writing: the committed golden file stands in
-// for the graphs already sitting in ~/.awless-ro, and they have to keep loading
-// whatever the writer does later.
-func TestNTGoldenStillParsesIntoTheSameResources(t *testing.T) {
-	raw, err := os.ReadFile(goldenPath)
-	if err != nil {
-		t.Fatal(err)
-	}
+// Reading is pinned separately from writing, and against both formats: a graph
+// written by the abandoned dependency has to yield exactly the resources a graph
+// written today does. This is what makes replacing the triple store safe for anyone
+// who has already synced.
+func TestNTGoldensParseIntoTheSameResources(t *testing.T) {
+	for _, path := range []string{legacyPath, goldenPath} {
+		t.Run(filepath.Base(path), func(t *testing.T) {
+			raw, err := os.ReadFile(path)
+			if err != nil {
+				t.Fatal(err)
+			}
 
-	loaded := NewGraph()
-	if err := loaded.UnmarshalFromReaders(strings.NewReader(string(raw))); err != nil {
-		t.Fatalf("cannot parse the committed graph: %s", err)
-	}
+			loaded := NewGraph()
+			if err := loaded.UnmarshalFromReaders(strings.NewReader(string(raw))); err != nil {
+				t.Fatalf("cannot parse %s: %s", path, err)
+			}
 
-	for _, want := range ntCorpus() {
-		got, err := loaded.GetResource(want.Type(), want.Id())
-		if err != nil {
-			t.Errorf("%s %s: %s", want.Type(), want.Id(), err)
-			continue
-		}
-		compareProperties(t, want, got)
+			for _, want := range ntCorpus() {
+				got, err := loaded.GetResource(want.Type(), want.Id())
+				if err != nil {
+					t.Errorf("%s %s: %s", want.Type(), want.Id(), err)
+					continue
+				}
+				compareProperties(t, want, got)
+			}
+		})
 	}
 }
 
@@ -258,16 +273,17 @@ func TestNTRoundTripsCorpus(t *testing.T) {
 // TestNTRoundTripsAwkwardLiterals is the value-level version of the round trip: a
 // property goes in, the same property has to come back out.
 //
-// The cases marked corrupted are ones the pre-existing serialiser got wrong; they
-// are listed rather than omitted so that the day they start working is visible in
-// the diff. A literal backslash-n is the one that matters in practice: the writer
-// turned a real newline into the two characters \n but did not escape a backslash
-// that was already there, so the reader could not tell them apart.
+// The last three cases were corrupted by the serialiser this replaced, and were
+// listed here as known-broken before the replacement so that fixing them would show
+// up as a test failure telling us to drop the flag. That is what happened. The one
+// that mattered in practice is the literal backslash-n: the old writer turned a real
+// newline into the two characters \n but left an existing backslash alone, so the
+// reader could not tell the two apart and rewrote one into the other. Policy
+// documents are JSON, and JSON spells an embedded newline exactly that way.
 func TestNTRoundTripsAwkwardLiterals(t *testing.T) {
 	cases := []struct {
-		name      string
-		value     string
-		corrupted bool
+		name  string
+		value string
 	}{
 		{name: "plain", value: "hello world"},
 		{name: "json policy", value: `{"Version":"2012-10-17","Statement":[{"Effect":"Allow"}]}`},
@@ -282,9 +298,9 @@ func TestNTRoundTripsAwkwardLiterals(t *testing.T) {
 		{name: "ends with dot", value: "ends with ."},
 		{name: "dot inside", value: "has . inside"},
 
-		{name: "literal backslash n", value: `a \n b`, corrupted: true},
-		{name: "quote then langtag", value: `value"@en`, corrupted: true},
-		{name: "quote then datatype", value: `value"^^x`, corrupted: true},
+		{name: "literal backslash n", value: `a \n b`},
+		{name: "quote then langtag", value: `value"@en`},
+		{name: "quote then datatype", value: `value"^^x`},
 	}
 
 	for _, tc := range cases {
@@ -308,11 +324,7 @@ func TestNTRoundTripsAwkwardLiterals(t *testing.T) {
 				}
 			}
 
-			survived := err == nil && back == tc.value
-			switch {
-			case tc.corrupted && survived:
-				t.Errorf("this value used to be corrupted and now round trips; drop the corrupted flag.\n  value: %q", tc.value)
-			case !tc.corrupted && !survived:
+			if err != nil || back != tc.value {
 				t.Errorf("value did not survive the round trip.\n  in:   %q\n  out:  %q\n  err:  %v\n  .nt:  %q", tc.value, back, err, serialised)
 			}
 		})

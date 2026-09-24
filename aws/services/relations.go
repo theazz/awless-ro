@@ -33,7 +33,7 @@ import (
 	"github.com/theazz/awless-ro/aws/conv"
 	"github.com/theazz/awless-ro/cloud"
 	"github.com/theazz/awless-ro/graph"
-	tstore "github.com/wallix/triplestore"
+	"github.com/theazz/awless-ro/triplestore"
 )
 
 const (
@@ -48,7 +48,7 @@ type funcBuilder struct {
 	relation                            int
 }
 
-type addParentFn func(*graph.Graph, tstore.RDFGraph, string, interface{}) error
+type addParentFn func(*graph.Graph, triplestore.RDFGraph, string, interface{}) error
 
 var addParentsFns = map[string][]addParentFn{
 	// Infra
@@ -172,7 +172,7 @@ func (fb funcBuilder) build() addParentFn {
 }
 
 func (fb funcBuilder) addRelationWithField() addParentFn {
-	return func(g *graph.Graph, snap tstore.RDFGraph, region string, i interface{}) error {
+	return func(g *graph.Graph, snap triplestore.RDFGraph, region string, i interface{}) error {
 		field, found, err := structFieldByPath(i, fb.fieldName)
 		if err != nil {
 			return err
@@ -238,7 +238,7 @@ func stringFromField(v reflect.Value) (string, error) {
 }
 
 func (fb funcBuilder) addRelationListWithStringField() addParentFn {
-	return func(g *graph.Graph, snap tstore.RDFGraph, region string, i interface{}) error {
+	return func(g *graph.Graph, snap triplestore.RDFGraph, region string, i interface{}) error {
 		structField, err := verifyValidStructField(i, fb.stringListName)
 		if err != nil {
 			return err
@@ -272,7 +272,7 @@ func (fb funcBuilder) addRelationListWithStringField() addParentFn {
 }
 
 func (fb funcBuilder) addRelationListWithField() addParentFn {
-	return func(g *graph.Graph, snap tstore.RDFGraph, region string, i interface{}) error {
+	return func(g *graph.Graph, snap triplestore.RDFGraph, region string, i interface{}) error {
 		structField, err := verifyValidStructField(i, fb.listName)
 		if err != nil {
 			return err
@@ -354,7 +354,7 @@ func addRelation(g *graph.Graph, first, other *graph.Resource, relation int) err
 	return nil
 }
 
-func addRegionParent(g *graph.Graph, snap tstore.RDFGraph, region string, i interface{}) error {
+func addRegionParent(g *graph.Graph, snap triplestore.RDFGraph, region string, i interface{}) error {
 	res, err := awsconv.InitResource(i)
 	if err != nil {
 		return err
@@ -363,7 +363,7 @@ func addRegionParent(g *graph.Graph, snap tstore.RDFGraph, region string, i inte
 	return nil
 }
 
-func addManagedPoliciesRelations(g *graph.Graph, snap tstore.RDFGraph, region string, i interface{}) error {
+func addManagedPoliciesRelations(g *graph.Graph, snap triplestore.RDFGraph, region string, i interface{}) error {
 	res, err := awsconv.InitResource(i)
 	if err != nil {
 		return err
@@ -391,7 +391,7 @@ func addManagedPoliciesRelations(g *graph.Graph, snap tstore.RDFGraph, region st
 	return nil
 }
 
-func userAddGroupsRelations(g *graph.Graph, snap tstore.RDFGraph, region string, i interface{}) error {
+func userAddGroupsRelations(g *graph.Graph, snap triplestore.RDFGraph, region string, i interface{}) error {
 	user, ok := i.(iamtypes.UserDetail)
 	if !ok {
 		return fmt.Errorf("aws fetch: not a user, but a %T", i)
@@ -419,7 +419,7 @@ func userAddGroupsRelations(g *graph.Graph, snap tstore.RDFGraph, region string,
 	return nil
 }
 
-func fetchTargetsAndAddRelations(g *graph.Graph, snap tstore.RDFGraph, region string, i interface{}) error {
+func fetchTargetsAndAddRelations(g *graph.Graph, snap triplestore.RDFGraph, region string, i interface{}) error {
 	group, ok := i.(elbv2types.TargetGroup)
 	if !ok {
 		return fmt.Errorf("add targets relation: not a target group, but a %T", i)
@@ -444,7 +444,7 @@ func fetchTargetsAndAddRelations(g *graph.Graph, snap tstore.RDFGraph, region st
 	return nil
 }
 
-func addScalingGroupSubnets(g *graph.Graph, snap tstore.RDFGraph, region string, i interface{}) error {
+func addScalingGroupSubnets(g *graph.Graph, snap triplestore.RDFGraph, region string, i interface{}) error {
 	group, ok := i.(autoscalingtypes.AutoScalingGroup)
 	if !ok {
 		return fmt.Errorf("add autoscaling group relation: not a autoscaling group, but a %T", i)
@@ -466,7 +466,7 @@ func addScalingGroupSubnets(g *graph.Graph, snap tstore.RDFGraph, region string,
 	return nil
 }
 
-func addAlarmMetric(g *graph.Graph, snap tstore.RDFGraph, region string, i interface{}) error {
+func addAlarmMetric(g *graph.Graph, snap triplestore.RDFGraph, region string, i interface{}) error {
 	alarm, ok := i.(cloudwatchtypes.MetricAlarm)
 	if !ok {
 		return fmt.Errorf("add alarm metric relation: not a alarm, but a %T", i)

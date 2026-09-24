@@ -18,7 +18,7 @@ package graph
 
 import (
 	"github.com/theazz/awless-ro/cloud/rdf"
-	tstore "github.com/wallix/triplestore"
+	"github.com/theazz/awless-ro/triplestore"
 )
 
 type Visitor interface {
@@ -49,7 +49,7 @@ func (v *ParentsVisitor) Visit(g *Graph) error {
 	if v.Relation == "" {
 		v.Relation = rdf.ParentOf
 	}
-	return tstore.NewTree(g.store.Snapshot(), v.Relation).TraverseAncestors(startNode, foreach)
+	return triplestore.NewTree(g.store.Snapshot(), v.Relation).TraverseAncestors(startNode, foreach)
 }
 
 type ChildrenVisitor struct {
@@ -67,7 +67,7 @@ func (v *ChildrenVisitor) Visit(g *Graph) error {
 	if v.Relation == "" {
 		v.Relation = rdf.ParentOf
 	}
-	return tstore.NewTree(g.store.Snapshot(), v.Relation).TraverseDFS(startNode, foreach)
+	return triplestore.NewTree(g.store.Snapshot(), v.Relation).TraverseDFS(startNode, foreach)
 }
 
 type SiblingsVisitor struct {
@@ -82,13 +82,13 @@ func (v *SiblingsVisitor) Visit(g *Graph) error {
 		return err
 	}
 
-	return tstore.NewTree(g.store.Snapshot(), rdf.ParentOf).TraverseSiblings(startNode, resolveResourceType, foreach)
+	return triplestore.NewTree(g.store.Snapshot(), rdf.ParentOf).TraverseSiblings(startNode, resolveResourceType, foreach)
 }
 
-func prepareRDFVisit(g *Graph, root *Resource, each visitEachFunc, includeRoot bool) (string, func(g tstore.RDFGraph, n string, i int) error, error) {
+func prepareRDFVisit(g *Graph, root *Resource, each visitEachFunc, includeRoot bool) (string, func(g triplestore.RDFGraph, n string, i int) error, error) {
 	rootNode := root.Id()
 
-	foreach := func(rdfG tstore.RDFGraph, n string, i int) error {
+	foreach := func(rdfG triplestore.RDFGraph, n string, i int) error {
 		rT, err := resolveResourceType(rdfG, n)
 		if err != nil {
 			return err

@@ -18,7 +18,7 @@ package graph
 
 import (
 	"github.com/theazz/awless-ro/cloud/rdf"
-	tstore "github.com/wallix/triplestore"
+	"github.com/theazz/awless-ro/triplestore"
 )
 
 var (
@@ -62,7 +62,7 @@ func (d *Diff) MergedGraph() *Graph {
 
 	for _, fromT := range fromTriples {
 		if MetaPredicate == fromT.Predicate() {
-			d.mergedGraph.store.Add(tstore.SubjPred(fromT.Subject(), MetaPredicate).StringLiteral(missingLit))
+			d.mergedGraph.store.Add(triplestore.SubjPred(fromT.Subject(), MetaPredicate).StringLiteral(missingLit))
 		} else {
 			d.mergedGraph.store.Add(fromT)
 		}
@@ -106,7 +106,7 @@ func (d *hierarchicDiffer) Run(root string, from *Graph, to *Graph) (*Diff, erro
 				res, ok := extra.Object().Resource()
 				if ok {
 					diff.hasDiffs = true
-					diff.toGraph.store.Add(tstore.SubjPred(res, MetaPredicate).StringLiteral(extraLit))
+					diff.toGraph.store.Add(triplestore.SubjPred(res, MetaPredicate).StringLiteral(extraLit))
 					processing <- res
 				}
 			}
@@ -115,7 +115,7 @@ func (d *hierarchicDiffer) Run(root string, from *Graph, to *Graph) (*Diff, erro
 				res, ok := missing.Object().Resource()
 				if ok {
 					diff.hasDiffs = true
-					diff.fromGraph.store.Add(tstore.SubjPred(res, MetaPredicate).StringLiteral(extraLit))
+					diff.fromGraph.store.Add(triplestore.SubjPred(res, MetaPredicate).StringLiteral(extraLit))
 					processing <- res
 				}
 			}
@@ -132,8 +132,8 @@ func (d *hierarchicDiffer) Run(root string, from *Graph, to *Graph) (*Diff, erro
 	return diff, nil
 }
 
-func compareChildTriplesOf(onPredicate, root string, fromGraph tstore.RDFGraph, toGraph tstore.RDFGraph) ([]tstore.Triple, []tstore.Triple, []tstore.Triple, error) {
-	var extras, missings, commons []tstore.Triple
+func compareChildTriplesOf(onPredicate, root string, fromGraph triplestore.RDFGraph, toGraph triplestore.RDFGraph) ([]triplestore.Triple, []triplestore.Triple, []triplestore.Triple, error) {
+	var extras, missings, commons []triplestore.Triple
 
 	fromTriples := fromGraph.WithSubjPred(root, onPredicate)
 	toTriples := toGraph.WithSubjPred(root, onPredicate)
@@ -145,8 +145,8 @@ func compareChildTriplesOf(onPredicate, root string, fromGraph tstore.RDFGraph, 
 	return extras, missings, commons, nil
 }
 
-func intersectTriples(a, b []tstore.Triple) []tstore.Triple {
-	var inter []tstore.Triple
+func intersectTriples(a, b []triplestore.Triple) []triplestore.Triple {
+	var inter []triplestore.Triple
 
 	for i := 0; i < len(a); i++ {
 		for j := 0; j < len(b); j++ {
@@ -159,8 +159,8 @@ func intersectTriples(a, b []tstore.Triple) []tstore.Triple {
 	return inter
 }
 
-func subtractTriples(a, b []tstore.Triple) []tstore.Triple {
-	var sub []tstore.Triple
+func subtractTriples(a, b []triplestore.Triple) []triplestore.Triple {
+	var sub []triplestore.Triple
 
 	for i := 0; i < len(a); i++ {
 		var found bool

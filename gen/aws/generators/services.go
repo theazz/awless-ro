@@ -92,7 +92,7 @@ import (
 	"github.com/theazz/awless-ro/fetch"
 	"github.com/theazz/awless-ro/graph"
 	"github.com/theazz/awless-ro/logger"
-	tstore "github.com/wallix/triplestore"
+	"github.com/theazz/awless-ro/triplestore"
 )
 
 var ServiceNames = []string{
@@ -238,7 +238,7 @@ func (s *{{ Title $service.Name }}) Fetch(ctx context.Context) (cloud.GraphAPI, 
 		for _, r := range objects {
 			for _, fn := range addParentsFns["{{ $fetcher.ResourceType }}"] {
 				wg.Add(1)
-				go func(f addParentFn, snap tstore.RDFGraph, region string, res {{ $fetcher.AWSType }}) {
+				go func(f addParentFn, snap triplestore.RDFGraph, region string, res {{ $fetcher.AWSType }}) {
 					defer wg.Done()
 					if err := f(gph, snap, region, res); err != nil {
 						errc <- err

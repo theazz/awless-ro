@@ -27,7 +27,7 @@ import (
 	"github.com/theazz/awless-ro/cloud"
 	"github.com/theazz/awless-ro/cloud/properties"
 	"github.com/theazz/awless-ro/cloud/rdf"
-	tstore "github.com/wallix/triplestore"
+	"github.com/theazz/awless-ro/triplestore"
 )
 
 type Resource struct {
@@ -152,15 +152,15 @@ func (res *Resource) Same(other cloud.Resource) bool {
 	return res.Id() == other.Id() && res.Type() == other.Type()
 }
 
-func (res *Resource) marshalFullRDF() ([]tstore.Triple, error) {
-	var triples []tstore.Triple
+func (res *Resource) marshalFullRDF() ([]triplestore.Triple, error) {
+	var triples []triplestore.Triple
 
 	cloudType := namespacedResourceType(res.Type())
-	triples = append(triples, tstore.SubjPred(res.id, rdf.RdfType).Resource(cloudType))
+	triples = append(triples, triplestore.SubjPred(res.id, rdf.RdfType).Resource(cloudType))
 
 	for key, value := range res.meta {
 		if key == "diff" {
-			triples = append(triples, tstore.SubjPred(res.id, MetaPredicate).StringLiteral(fmt.Sprint(value)))
+			triples = append(triples, triplestore.SubjPred(res.id, MetaPredicate).StringLiteral(fmt.Sprint(value)))
 		}
 	}
 
@@ -188,7 +188,7 @@ func (res *Resource) marshalFullRDF() ([]tstore.Triple, error) {
 			if err != nil {
 				return triples, fmt.Errorf("resource %s: marshalling property '%s': %s", res, key, err)
 			}
-			triples = append(triples, tstore.SubjPred(res.Id(), propId).Object(obj))
+			triples = append(triples, triplestore.SubjPred(res.Id(), propId).Object(obj))
 		case rdf.RdfsList:
 			switch dataType {
 			case rdf.XsdString:
@@ -197,7 +197,7 @@ func (res *Resource) marshalFullRDF() ([]tstore.Triple, error) {
 					return triples, fmt.Errorf("resource %s: marshalling property '%s': expected a string slice, got a %T", res, key, value)
 				}
 				for _, l := range list {
-					triples = append(triples, tstore.SubjPred(res.id, propId).StringLiteral(l))
+					triples = append(triples, triplestore.SubjPred(res.id, propId).StringLiteral(l))
 				}
 			case rdf.RdfsClass:
 				list, ok := value.([]string)
@@ -205,7 +205,7 @@ func (res *Resource) marshalFullRDF() ([]tstore.Triple, error) {
 					return triples, fmt.Errorf("resource %s: marshalling property '%s': expected a string slice, got a %T", res, key, value)
 				}
 				for _, l := range list {
-					triples = append(triples, tstore.SubjPred(res.id, propId).Resource(l))
+					triples = append(triples, triplestore.SubjPred(res.id, propId).Resource(l))
 				}
 			case rdf.NetFirewallRule:
 				list, ok := value.([]*FirewallRule)
@@ -214,7 +214,7 @@ func (res *Resource) marshalFullRDF() ([]tstore.Triple, error) {
 				}
 				for _, r := range list {
 					ruleId := randomRdfId()
-					triples = append(triples, tstore.SubjPred(res.id, propId).Resource(ruleId))
+					triples = append(triples, triplestore.SubjPred(res.id, propId).Resource(ruleId))
 					triples = append(triples, r.marshalToTriples(ruleId)...)
 				}
 			case rdf.NetRoute:
@@ -224,7 +224,7 @@ func (res *Resource) marshalFullRDF() ([]tstore.Triple, error) {
 				}
 				for _, r := range list {
 					routeId := randomRdfId()
-					triples = append(triples, tstore.SubjPred(res.id, propId).Resource(routeId))
+					triples = append(triples, triplestore.SubjPred(res.id, propId).Resource(routeId))
 					triples = append(triples, r.marshalToTriples(routeId)...)
 				}
 			case rdf.Grant:
@@ -234,7 +234,7 @@ func (res *Resource) marshalFullRDF() ([]tstore.Triple, error) {
 				}
 				for _, g := range list {
 					grantId := randomRdfId()
-					triples = append(triples, tstore.SubjPred(res.id, propId).Resource(grantId))
+					triples = append(triples, triplestore.SubjPred(res.id, propId).Resource(grantId))
 					triples = append(triples, g.marshalToTriples(grantId)...)
 				}
 			case rdf.KeyValue:
@@ -244,7 +244,7 @@ func (res *Resource) marshalFullRDF() ([]tstore.Triple, error) {
 				}
 				for _, kv := range list {
 					keyValId := randomRdfId()
-					triples = append(triples, tstore.SubjPred(res.id, propId).Resource(keyValId))
+					triples = append(triples, triplestore.SubjPred(res.id, propId).Resource(keyValId))
 					triples = append(triples, kv.marshalToTriples(keyValId)...)
 				}
 			case rdf.DistributionOrigin:
@@ -254,7 +254,7 @@ func (res *Resource) marshalFullRDF() ([]tstore.Triple, error) {
 				}
 				for _, o := range list {
 					keyValId := randomRdfId()
-					triples = append(triples, tstore.SubjPred(res.id, propId).Resource(keyValId))
+					triples = append(triples, triplestore.SubjPred(res.id, propId).Resource(keyValId))
 					triples = append(triples, o.marshalToTriples(keyValId)...)
 				}
 			case rdf.Grant:
@@ -270,20 +270,20 @@ func (res *Resource) marshalFullRDF() ([]tstore.Triple, error) {
 	return triples, nil
 }
 
-func marshalToRdfObject(i interface{}, definedBy, dataType string) (tstore.Object, error) {
+func marshalToRdfObject(i interface{}, definedBy, dataType string) (triplestore.Object, error) {
 	switch definedBy {
 	case rdf.RdfsLiteral:
-		return tstore.ObjectLiteral(i)
+		return triplestore.ObjectLiteral(i)
 	case rdf.RdfsClass:
-		return tstore.Resource(fmt.Sprint(i)), nil
+		return triplestore.Resource(fmt.Sprint(i)), nil
 	default:
 		return nil, fmt.Errorf("unexpected rdfs:isDefinedBy: %s", definedBy)
 	}
 }
 
-func (res *Resource) unmarshalFullRdf(gph tstore.RDFGraph) error {
+func (res *Resource) unmarshalFullRdf(gph triplestore.RDFGraph) error {
 	cloudType := namespacedResourceType(res.Type())
-	if !gph.Contains(tstore.SubjPred(res.Id(), rdf.RdfType).Resource(cloudType)) {
+	if !gph.Contains(triplestore.SubjPred(res.Id(), rdf.RdfType).Resource(cloudType)) {
 		return fmt.Errorf("triple <%s><%s><%s> not found in graph", res.Id(), rdf.RdfType, cloudType)
 	}
 	for _, t := range gph.WithSubject(res.Id()) {
@@ -358,9 +358,9 @@ func (res *Resource) unmarshalFullRdf(gph tstore.RDFGraph) error {
 	return nil
 }
 
-func (r *Resource) unmarshalMeta(gph tstore.RDFGraph) error {
+func (r *Resource) unmarshalMeta(gph triplestore.RDFGraph) error {
 	for _, t := range gph.WithSubjPred(r.Id(), MetaPredicate) {
-		text, err := tstore.ParseString(t.Object())
+		text, err := triplestore.ParseString(t.Object())
 		if err != nil {
 			return err
 		}
@@ -402,7 +402,7 @@ func Subtract(one, other map[string]interface{}) map[string]interface{} {
 
 var errTypeNotFound = errors.New("resource type not found")
 
-func resolveResourceType(g tstore.RDFGraph, id string) (string, error) {
+func resolveResourceType(g triplestore.RDFGraph, id string) (string, error) {
 	typeTs := g.WithSubjPred(id, rdf.RdfType)
 	switch len(typeTs) {
 	case 0:
@@ -420,7 +420,7 @@ func lowerFirstLetter(s string) string {
 	return string(a)
 }
 
-func unmarshalResourceType(obj tstore.Object) (string, error) {
+func unmarshalResourceType(obj triplestore.Object) (string, error) {
 	node, ok := obj.Resource()
 	if !ok {
 		return "", fmt.Errorf("object is not a resource identifier, %v", obj)

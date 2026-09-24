@@ -66,7 +66,7 @@ import (
 	"github.com/theazz/awless-ro/fetch"
 	"github.com/theazz/awless-ro/graph"
 	"github.com/theazz/awless-ro/logger"
-	tstore "github.com/wallix/triplestore"
+	"github.com/theazz/awless-ro/triplestore"
 )
 
 var ServiceNames = []string{
@@ -402,7 +402,7 @@ func (s *Infra) Fetch(ctx context.Context) (cloud.GraphAPI, error) {
 		for _, r := range objects {
 			for _, fn := range addParentsFns["instance"] {
 				wg.Add(1)
-				go func(f addParentFn, snap tstore.RDFGraph, region string, res ec2types.Instance) {
+				go func(f addParentFn, snap triplestore.RDFGraph, region string, res ec2types.Instance) {
 					defer wg.Done()
 					if err := f(gph, snap, region, res); err != nil {
 						errc <- err
@@ -423,7 +423,7 @@ func (s *Infra) Fetch(ctx context.Context) (cloud.GraphAPI, error) {
 		for _, r := range objects {
 			for _, fn := range addParentsFns["subnet"] {
 				wg.Add(1)
-				go func(f addParentFn, snap tstore.RDFGraph, region string, res ec2types.Subnet) {
+				go func(f addParentFn, snap triplestore.RDFGraph, region string, res ec2types.Subnet) {
 					defer wg.Done()
 					if err := f(gph, snap, region, res); err != nil {
 						errc <- err
@@ -444,7 +444,7 @@ func (s *Infra) Fetch(ctx context.Context) (cloud.GraphAPI, error) {
 		for _, r := range objects {
 			for _, fn := range addParentsFns["vpc"] {
 				wg.Add(1)
-				go func(f addParentFn, snap tstore.RDFGraph, region string, res ec2types.Vpc) {
+				go func(f addParentFn, snap triplestore.RDFGraph, region string, res ec2types.Vpc) {
 					defer wg.Done()
 					if err := f(gph, snap, region, res); err != nil {
 						errc <- err
@@ -465,7 +465,7 @@ func (s *Infra) Fetch(ctx context.Context) (cloud.GraphAPI, error) {
 		for _, r := range objects {
 			for _, fn := range addParentsFns["keypair"] {
 				wg.Add(1)
-				go func(f addParentFn, snap tstore.RDFGraph, region string, res ec2types.KeyPairInfo) {
+				go func(f addParentFn, snap triplestore.RDFGraph, region string, res ec2types.KeyPairInfo) {
 					defer wg.Done()
 					if err := f(gph, snap, region, res); err != nil {
 						errc <- err
@@ -486,7 +486,7 @@ func (s *Infra) Fetch(ctx context.Context) (cloud.GraphAPI, error) {
 		for _, r := range objects {
 			for _, fn := range addParentsFns["securitygroup"] {
 				wg.Add(1)
-				go func(f addParentFn, snap tstore.RDFGraph, region string, res ec2types.SecurityGroup) {
+				go func(f addParentFn, snap triplestore.RDFGraph, region string, res ec2types.SecurityGroup) {
 					defer wg.Done()
 					if err := f(gph, snap, region, res); err != nil {
 						errc <- err
@@ -507,7 +507,7 @@ func (s *Infra) Fetch(ctx context.Context) (cloud.GraphAPI, error) {
 		for _, r := range objects {
 			for _, fn := range addParentsFns["volume"] {
 				wg.Add(1)
-				go func(f addParentFn, snap tstore.RDFGraph, region string, res ec2types.Volume) {
+				go func(f addParentFn, snap triplestore.RDFGraph, region string, res ec2types.Volume) {
 					defer wg.Done()
 					if err := f(gph, snap, region, res); err != nil {
 						errc <- err
@@ -528,7 +528,7 @@ func (s *Infra) Fetch(ctx context.Context) (cloud.GraphAPI, error) {
 		for _, r := range objects {
 			for _, fn := range addParentsFns["internetgateway"] {
 				wg.Add(1)
-				go func(f addParentFn, snap tstore.RDFGraph, region string, res ec2types.InternetGateway) {
+				go func(f addParentFn, snap triplestore.RDFGraph, region string, res ec2types.InternetGateway) {
 					defer wg.Done()
 					if err := f(gph, snap, region, res); err != nil {
 						errc <- err
@@ -549,7 +549,7 @@ func (s *Infra) Fetch(ctx context.Context) (cloud.GraphAPI, error) {
 		for _, r := range objects {
 			for _, fn := range addParentsFns["natgateway"] {
 				wg.Add(1)
-				go func(f addParentFn, snap tstore.RDFGraph, region string, res ec2types.NatGateway) {
+				go func(f addParentFn, snap triplestore.RDFGraph, region string, res ec2types.NatGateway) {
 					defer wg.Done()
 					if err := f(gph, snap, region, res); err != nil {
 						errc <- err
@@ -570,7 +570,7 @@ func (s *Infra) Fetch(ctx context.Context) (cloud.GraphAPI, error) {
 		for _, r := range objects {
 			for _, fn := range addParentsFns["routetable"] {
 				wg.Add(1)
-				go func(f addParentFn, snap tstore.RDFGraph, region string, res ec2types.RouteTable) {
+				go func(f addParentFn, snap triplestore.RDFGraph, region string, res ec2types.RouteTable) {
 					defer wg.Done()
 					if err := f(gph, snap, region, res); err != nil {
 						errc <- err
@@ -591,7 +591,7 @@ func (s *Infra) Fetch(ctx context.Context) (cloud.GraphAPI, error) {
 		for _, r := range objects {
 			for _, fn := range addParentsFns["availabilityzone"] {
 				wg.Add(1)
-				go func(f addParentFn, snap tstore.RDFGraph, region string, res ec2types.AvailabilityZone) {
+				go func(f addParentFn, snap triplestore.RDFGraph, region string, res ec2types.AvailabilityZone) {
 					defer wg.Done()
 					if err := f(gph, snap, region, res); err != nil {
 						errc <- err
@@ -612,7 +612,7 @@ func (s *Infra) Fetch(ctx context.Context) (cloud.GraphAPI, error) {
 		for _, r := range objects {
 			for _, fn := range addParentsFns["image"] {
 				wg.Add(1)
-				go func(f addParentFn, snap tstore.RDFGraph, region string, res ec2types.Image) {
+				go func(f addParentFn, snap triplestore.RDFGraph, region string, res ec2types.Image) {
 					defer wg.Done()
 					if err := f(gph, snap, region, res); err != nil {
 						errc <- err
@@ -633,7 +633,7 @@ func (s *Infra) Fetch(ctx context.Context) (cloud.GraphAPI, error) {
 		for _, r := range objects {
 			for _, fn := range addParentsFns["importimagetask"] {
 				wg.Add(1)
-				go func(f addParentFn, snap tstore.RDFGraph, region string, res ec2types.ImportImageTask) {
+				go func(f addParentFn, snap triplestore.RDFGraph, region string, res ec2types.ImportImageTask) {
 					defer wg.Done()
 					if err := f(gph, snap, region, res); err != nil {
 						errc <- err
@@ -654,7 +654,7 @@ func (s *Infra) Fetch(ctx context.Context) (cloud.GraphAPI, error) {
 		for _, r := range objects {
 			for _, fn := range addParentsFns["elasticip"] {
 				wg.Add(1)
-				go func(f addParentFn, snap tstore.RDFGraph, region string, res ec2types.Address) {
+				go func(f addParentFn, snap triplestore.RDFGraph, region string, res ec2types.Address) {
 					defer wg.Done()
 					if err := f(gph, snap, region, res); err != nil {
 						errc <- err
@@ -675,7 +675,7 @@ func (s *Infra) Fetch(ctx context.Context) (cloud.GraphAPI, error) {
 		for _, r := range objects {
 			for _, fn := range addParentsFns["snapshot"] {
 				wg.Add(1)
-				go func(f addParentFn, snap tstore.RDFGraph, region string, res ec2types.Snapshot) {
+				go func(f addParentFn, snap triplestore.RDFGraph, region string, res ec2types.Snapshot) {
 					defer wg.Done()
 					if err := f(gph, snap, region, res); err != nil {
 						errc <- err
@@ -696,7 +696,7 @@ func (s *Infra) Fetch(ctx context.Context) (cloud.GraphAPI, error) {
 		for _, r := range objects {
 			for _, fn := range addParentsFns["networkinterface"] {
 				wg.Add(1)
-				go func(f addParentFn, snap tstore.RDFGraph, region string, res ec2types.NetworkInterface) {
+				go func(f addParentFn, snap triplestore.RDFGraph, region string, res ec2types.NetworkInterface) {
 					defer wg.Done()
 					if err := f(gph, snap, region, res); err != nil {
 						errc <- err
@@ -717,7 +717,7 @@ func (s *Infra) Fetch(ctx context.Context) (cloud.GraphAPI, error) {
 		for _, r := range objects {
 			for _, fn := range addParentsFns["classicloadbalancer"] {
 				wg.Add(1)
-				go func(f addParentFn, snap tstore.RDFGraph, region string, res elbtypes.LoadBalancerDescription) {
+				go func(f addParentFn, snap triplestore.RDFGraph, region string, res elbtypes.LoadBalancerDescription) {
 					defer wg.Done()
 					if err := f(gph, snap, region, res); err != nil {
 						errc <- err
@@ -738,7 +738,7 @@ func (s *Infra) Fetch(ctx context.Context) (cloud.GraphAPI, error) {
 		for _, r := range objects {
 			for _, fn := range addParentsFns["loadbalancer"] {
 				wg.Add(1)
-				go func(f addParentFn, snap tstore.RDFGraph, region string, res elbv2types.LoadBalancer) {
+				go func(f addParentFn, snap triplestore.RDFGraph, region string, res elbv2types.LoadBalancer) {
 					defer wg.Done()
 					if err := f(gph, snap, region, res); err != nil {
 						errc <- err
@@ -759,7 +759,7 @@ func (s *Infra) Fetch(ctx context.Context) (cloud.GraphAPI, error) {
 		for _, r := range objects {
 			for _, fn := range addParentsFns["targetgroup"] {
 				wg.Add(1)
-				go func(f addParentFn, snap tstore.RDFGraph, region string, res elbv2types.TargetGroup) {
+				go func(f addParentFn, snap triplestore.RDFGraph, region string, res elbv2types.TargetGroup) {
 					defer wg.Done()
 					if err := f(gph, snap, region, res); err != nil {
 						errc <- err
@@ -780,7 +780,7 @@ func (s *Infra) Fetch(ctx context.Context) (cloud.GraphAPI, error) {
 		for _, r := range objects {
 			for _, fn := range addParentsFns["listener"] {
 				wg.Add(1)
-				go func(f addParentFn, snap tstore.RDFGraph, region string, res elbv2types.Listener) {
+				go func(f addParentFn, snap triplestore.RDFGraph, region string, res elbv2types.Listener) {
 					defer wg.Done()
 					if err := f(gph, snap, region, res); err != nil {
 						errc <- err
@@ -801,7 +801,7 @@ func (s *Infra) Fetch(ctx context.Context) (cloud.GraphAPI, error) {
 		for _, r := range objects {
 			for _, fn := range addParentsFns["database"] {
 				wg.Add(1)
-				go func(f addParentFn, snap tstore.RDFGraph, region string, res rdstypes.DBInstance) {
+				go func(f addParentFn, snap triplestore.RDFGraph, region string, res rdstypes.DBInstance) {
 					defer wg.Done()
 					if err := f(gph, snap, region, res); err != nil {
 						errc <- err
@@ -822,7 +822,7 @@ func (s *Infra) Fetch(ctx context.Context) (cloud.GraphAPI, error) {
 		for _, r := range objects {
 			for _, fn := range addParentsFns["dbsubnetgroup"] {
 				wg.Add(1)
-				go func(f addParentFn, snap tstore.RDFGraph, region string, res rdstypes.DBSubnetGroup) {
+				go func(f addParentFn, snap triplestore.RDFGraph, region string, res rdstypes.DBSubnetGroup) {
 					defer wg.Done()
 					if err := f(gph, snap, region, res); err != nil {
 						errc <- err
@@ -843,7 +843,7 @@ func (s *Infra) Fetch(ctx context.Context) (cloud.GraphAPI, error) {
 		for _, r := range objects {
 			for _, fn := range addParentsFns["launchconfiguration"] {
 				wg.Add(1)
-				go func(f addParentFn, snap tstore.RDFGraph, region string, res autoscalingtypes.LaunchConfiguration) {
+				go func(f addParentFn, snap triplestore.RDFGraph, region string, res autoscalingtypes.LaunchConfiguration) {
 					defer wg.Done()
 					if err := f(gph, snap, region, res); err != nil {
 						errc <- err
@@ -864,7 +864,7 @@ func (s *Infra) Fetch(ctx context.Context) (cloud.GraphAPI, error) {
 		for _, r := range objects {
 			for _, fn := range addParentsFns["scalinggroup"] {
 				wg.Add(1)
-				go func(f addParentFn, snap tstore.RDFGraph, region string, res autoscalingtypes.AutoScalingGroup) {
+				go func(f addParentFn, snap triplestore.RDFGraph, region string, res autoscalingtypes.AutoScalingGroup) {
 					defer wg.Done()
 					if err := f(gph, snap, region, res); err != nil {
 						errc <- err
@@ -885,7 +885,7 @@ func (s *Infra) Fetch(ctx context.Context) (cloud.GraphAPI, error) {
 		for _, r := range objects {
 			for _, fn := range addParentsFns["scalingpolicy"] {
 				wg.Add(1)
-				go func(f addParentFn, snap tstore.RDFGraph, region string, res autoscalingtypes.ScalingPolicy) {
+				go func(f addParentFn, snap triplestore.RDFGraph, region string, res autoscalingtypes.ScalingPolicy) {
 					defer wg.Done()
 					if err := f(gph, snap, region, res); err != nil {
 						errc <- err
@@ -906,7 +906,7 @@ func (s *Infra) Fetch(ctx context.Context) (cloud.GraphAPI, error) {
 		for _, r := range objects {
 			for _, fn := range addParentsFns["repository"] {
 				wg.Add(1)
-				go func(f addParentFn, snap tstore.RDFGraph, region string, res ecrtypes.Repository) {
+				go func(f addParentFn, snap triplestore.RDFGraph, region string, res ecrtypes.Repository) {
 					defer wg.Done()
 					if err := f(gph, snap, region, res); err != nil {
 						errc <- err
@@ -927,7 +927,7 @@ func (s *Infra) Fetch(ctx context.Context) (cloud.GraphAPI, error) {
 		for _, r := range objects {
 			for _, fn := range addParentsFns["containercluster"] {
 				wg.Add(1)
-				go func(f addParentFn, snap tstore.RDFGraph, region string, res ecstypes.Cluster) {
+				go func(f addParentFn, snap triplestore.RDFGraph, region string, res ecstypes.Cluster) {
 					defer wg.Done()
 					if err := f(gph, snap, region, res); err != nil {
 						errc <- err
@@ -948,7 +948,7 @@ func (s *Infra) Fetch(ctx context.Context) (cloud.GraphAPI, error) {
 		for _, r := range objects {
 			for _, fn := range addParentsFns["containertask"] {
 				wg.Add(1)
-				go func(f addParentFn, snap tstore.RDFGraph, region string, res ecstypes.TaskDefinition) {
+				go func(f addParentFn, snap triplestore.RDFGraph, region string, res ecstypes.TaskDefinition) {
 					defer wg.Done()
 					if err := f(gph, snap, region, res); err != nil {
 						errc <- err
@@ -969,7 +969,7 @@ func (s *Infra) Fetch(ctx context.Context) (cloud.GraphAPI, error) {
 		for _, r := range objects {
 			for _, fn := range addParentsFns["container"] {
 				wg.Add(1)
-				go func(f addParentFn, snap tstore.RDFGraph, region string, res ecstypes.Container) {
+				go func(f addParentFn, snap triplestore.RDFGraph, region string, res ecstypes.Container) {
 					defer wg.Done()
 					if err := f(gph, snap, region, res); err != nil {
 						errc <- err
@@ -990,7 +990,7 @@ func (s *Infra) Fetch(ctx context.Context) (cloud.GraphAPI, error) {
 		for _, r := range objects {
 			for _, fn := range addParentsFns["containerinstance"] {
 				wg.Add(1)
-				go func(f addParentFn, snap tstore.RDFGraph, region string, res ecstypes.ContainerInstance) {
+				go func(f addParentFn, snap triplestore.RDFGraph, region string, res ecstypes.ContainerInstance) {
 					defer wg.Done()
 					if err := f(gph, snap, region, res); err != nil {
 						errc <- err
@@ -1011,7 +1011,7 @@ func (s *Infra) Fetch(ctx context.Context) (cloud.GraphAPI, error) {
 		for _, r := range objects {
 			for _, fn := range addParentsFns["certificate"] {
 				wg.Add(1)
-				go func(f addParentFn, snap tstore.RDFGraph, region string, res acmtypes.CertificateSummary) {
+				go func(f addParentFn, snap triplestore.RDFGraph, region string, res acmtypes.CertificateSummary) {
 					defer wg.Done()
 					if err := f(gph, snap, region, res); err != nil {
 						errc <- err
@@ -1145,7 +1145,7 @@ func (s *Access) Fetch(ctx context.Context) (cloud.GraphAPI, error) {
 		for _, r := range objects {
 			for _, fn := range addParentsFns["user"] {
 				wg.Add(1)
-				go func(f addParentFn, snap tstore.RDFGraph, region string, res iamtypes.UserDetail) {
+				go func(f addParentFn, snap triplestore.RDFGraph, region string, res iamtypes.UserDetail) {
 					defer wg.Done()
 					if err := f(gph, snap, region, res); err != nil {
 						errc <- err
@@ -1166,7 +1166,7 @@ func (s *Access) Fetch(ctx context.Context) (cloud.GraphAPI, error) {
 		for _, r := range objects {
 			for _, fn := range addParentsFns["group"] {
 				wg.Add(1)
-				go func(f addParentFn, snap tstore.RDFGraph, region string, res iamtypes.GroupDetail) {
+				go func(f addParentFn, snap triplestore.RDFGraph, region string, res iamtypes.GroupDetail) {
 					defer wg.Done()
 					if err := f(gph, snap, region, res); err != nil {
 						errc <- err
@@ -1187,7 +1187,7 @@ func (s *Access) Fetch(ctx context.Context) (cloud.GraphAPI, error) {
 		for _, r := range objects {
 			for _, fn := range addParentsFns["role"] {
 				wg.Add(1)
-				go func(f addParentFn, snap tstore.RDFGraph, region string, res iamtypes.RoleDetail) {
+				go func(f addParentFn, snap triplestore.RDFGraph, region string, res iamtypes.RoleDetail) {
 					defer wg.Done()
 					if err := f(gph, snap, region, res); err != nil {
 						errc <- err
@@ -1208,7 +1208,7 @@ func (s *Access) Fetch(ctx context.Context) (cloud.GraphAPI, error) {
 		for _, r := range objects {
 			for _, fn := range addParentsFns["policy"] {
 				wg.Add(1)
-				go func(f addParentFn, snap tstore.RDFGraph, region string, res iamtypes.Policy) {
+				go func(f addParentFn, snap triplestore.RDFGraph, region string, res iamtypes.Policy) {
 					defer wg.Done()
 					if err := f(gph, snap, region, res); err != nil {
 						errc <- err
@@ -1229,7 +1229,7 @@ func (s *Access) Fetch(ctx context.Context) (cloud.GraphAPI, error) {
 		for _, r := range objects {
 			for _, fn := range addParentsFns["accesskey"] {
 				wg.Add(1)
-				go func(f addParentFn, snap tstore.RDFGraph, region string, res iamtypes.AccessKeyMetadata) {
+				go func(f addParentFn, snap triplestore.RDFGraph, region string, res iamtypes.AccessKeyMetadata) {
 					defer wg.Done()
 					if err := f(gph, snap, region, res); err != nil {
 						errc <- err
@@ -1250,7 +1250,7 @@ func (s *Access) Fetch(ctx context.Context) (cloud.GraphAPI, error) {
 		for _, r := range objects {
 			for _, fn := range addParentsFns["instanceprofile"] {
 				wg.Add(1)
-				go func(f addParentFn, snap tstore.RDFGraph, region string, res iamtypes.InstanceProfile) {
+				go func(f addParentFn, snap triplestore.RDFGraph, region string, res iamtypes.InstanceProfile) {
 					defer wg.Done()
 					if err := f(gph, snap, region, res); err != nil {
 						errc <- err
@@ -1271,7 +1271,7 @@ func (s *Access) Fetch(ctx context.Context) (cloud.GraphAPI, error) {
 		for _, r := range objects {
 			for _, fn := range addParentsFns["mfadevice"] {
 				wg.Add(1)
-				go func(f addParentFn, snap tstore.RDFGraph, region string, res iamtypes.VirtualMFADevice) {
+				go func(f addParentFn, snap triplestore.RDFGraph, region string, res iamtypes.VirtualMFADevice) {
 					defer wg.Done()
 					if err := f(gph, snap, region, res); err != nil {
 						errc <- err
@@ -1396,7 +1396,7 @@ func (s *Storage) Fetch(ctx context.Context) (cloud.GraphAPI, error) {
 		for _, r := range objects {
 			for _, fn := range addParentsFns["bucket"] {
 				wg.Add(1)
-				go func(f addParentFn, snap tstore.RDFGraph, region string, res s3types.Bucket) {
+				go func(f addParentFn, snap triplestore.RDFGraph, region string, res s3types.Bucket) {
 					defer wg.Done()
 					if err := f(gph, snap, region, res); err != nil {
 						errc <- err
@@ -1417,7 +1417,7 @@ func (s *Storage) Fetch(ctx context.Context) (cloud.GraphAPI, error) {
 		for _, r := range objects {
 			for _, fn := range addParentsFns["s3object"] {
 				wg.Add(1)
-				go func(f addParentFn, snap tstore.RDFGraph, region string, res s3types.Object) {
+				go func(f addParentFn, snap triplestore.RDFGraph, region string, res s3types.Object) {
 					defer wg.Done()
 					if err := f(gph, snap, region, res); err != nil {
 						errc <- err
@@ -1547,7 +1547,7 @@ func (s *Messaging) Fetch(ctx context.Context) (cloud.GraphAPI, error) {
 		for _, r := range objects {
 			for _, fn := range addParentsFns["subscription"] {
 				wg.Add(1)
-				go func(f addParentFn, snap tstore.RDFGraph, region string, res snstypes.Subscription) {
+				go func(f addParentFn, snap triplestore.RDFGraph, region string, res snstypes.Subscription) {
 					defer wg.Done()
 					if err := f(gph, snap, region, res); err != nil {
 						errc <- err
@@ -1568,7 +1568,7 @@ func (s *Messaging) Fetch(ctx context.Context) (cloud.GraphAPI, error) {
 		for _, r := range objects {
 			for _, fn := range addParentsFns["topic"] {
 				wg.Add(1)
-				go func(f addParentFn, snap tstore.RDFGraph, region string, res snstypes.Topic) {
+				go func(f addParentFn, snap triplestore.RDFGraph, region string, res snstypes.Topic) {
 					defer wg.Done()
 					if err := f(gph, snap, region, res); err != nil {
 						errc <- err
@@ -1589,7 +1589,7 @@ func (s *Messaging) Fetch(ctx context.Context) (cloud.GraphAPI, error) {
 		for _, r := range objects {
 			for _, fn := range addParentsFns["queue"] {
 				wg.Add(1)
-				go func(f addParentFn, snap tstore.RDFGraph, region string, res string) {
+				go func(f addParentFn, snap triplestore.RDFGraph, region string, res string) {
 					defer wg.Done()
 					if err := f(gph, snap, region, res); err != nil {
 						errc <- err
@@ -1714,7 +1714,7 @@ func (s *Dns) Fetch(ctx context.Context) (cloud.GraphAPI, error) {
 		for _, r := range objects {
 			for _, fn := range addParentsFns["zone"] {
 				wg.Add(1)
-				go func(f addParentFn, snap tstore.RDFGraph, region string, res route53types.HostedZone) {
+				go func(f addParentFn, snap triplestore.RDFGraph, region string, res route53types.HostedZone) {
 					defer wg.Done()
 					if err := f(gph, snap, region, res); err != nil {
 						errc <- err
@@ -1735,7 +1735,7 @@ func (s *Dns) Fetch(ctx context.Context) (cloud.GraphAPI, error) {
 		for _, r := range objects {
 			for _, fn := range addParentsFns["record"] {
 				wg.Add(1)
-				go func(f addParentFn, snap tstore.RDFGraph, region string, res route53types.ResourceRecordSet) {
+				go func(f addParentFn, snap triplestore.RDFGraph, region string, res route53types.ResourceRecordSet) {
 					defer wg.Done()
 					if err := f(gph, snap, region, res); err != nil {
 						errc <- err
@@ -1859,7 +1859,7 @@ func (s *Lambda) Fetch(ctx context.Context) (cloud.GraphAPI, error) {
 		for _, r := range objects {
 			for _, fn := range addParentsFns["function"] {
 				wg.Add(1)
-				go func(f addParentFn, snap tstore.RDFGraph, region string, res lambdatypes.FunctionConfiguration) {
+				go func(f addParentFn, snap triplestore.RDFGraph, region string, res lambdatypes.FunctionConfiguration) {
 					defer wg.Done()
 					if err := f(gph, snap, region, res); err != nil {
 						errc <- err
@@ -1984,7 +1984,7 @@ func (s *Monitoring) Fetch(ctx context.Context) (cloud.GraphAPI, error) {
 		for _, r := range objects {
 			for _, fn := range addParentsFns["metric"] {
 				wg.Add(1)
-				go func(f addParentFn, snap tstore.RDFGraph, region string, res cloudwatchtypes.Metric) {
+				go func(f addParentFn, snap triplestore.RDFGraph, region string, res cloudwatchtypes.Metric) {
 					defer wg.Done()
 					if err := f(gph, snap, region, res); err != nil {
 						errc <- err
@@ -2005,7 +2005,7 @@ func (s *Monitoring) Fetch(ctx context.Context) (cloud.GraphAPI, error) {
 		for _, r := range objects {
 			for _, fn := range addParentsFns["alarm"] {
 				wg.Add(1)
-				go func(f addParentFn, snap tstore.RDFGraph, region string, res cloudwatchtypes.MetricAlarm) {
+				go func(f addParentFn, snap triplestore.RDFGraph, region string, res cloudwatchtypes.MetricAlarm) {
 					defer wg.Done()
 					if err := f(gph, snap, region, res); err != nil {
 						errc <- err
@@ -2129,7 +2129,7 @@ func (s *Cdn) Fetch(ctx context.Context) (cloud.GraphAPI, error) {
 		for _, r := range objects {
 			for _, fn := range addParentsFns["distribution"] {
 				wg.Add(1)
-				go func(f addParentFn, snap tstore.RDFGraph, region string, res cloudfronttypes.DistributionSummary) {
+				go func(f addParentFn, snap triplestore.RDFGraph, region string, res cloudfronttypes.DistributionSummary) {
 					defer wg.Done()
 					if err := f(gph, snap, region, res); err != nil {
 						errc <- err
@@ -2253,7 +2253,7 @@ func (s *Cloudformation) Fetch(ctx context.Context) (cloud.GraphAPI, error) {
 		for _, r := range objects {
 			for _, fn := range addParentsFns["stack"] {
 				wg.Add(1)
-				go func(f addParentFn, snap tstore.RDFGraph, region string, res cloudformationtypes.Stack) {
+				go func(f addParentFn, snap triplestore.RDFGraph, region string, res cloudformationtypes.Stack) {
 					defer wg.Done()
 					if err := f(gph, snap, region, res); err != nil {
 						errc <- err

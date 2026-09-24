@@ -5,18 +5,18 @@ import (
 
 	"github.com/theazz/awless-ro/cloud/properties"
 	"github.com/theazz/awless-ro/cloud/rdf"
-	tstore "github.com/wallix/triplestore"
+	"github.com/theazz/awless-ro/triplestore"
 )
 
 type Resolver interface {
-	Resolve(snap tstore.RDFGraph) ([]*Resource, error)
+	Resolve(snap triplestore.RDFGraph) ([]*Resource, error)
 }
 
 type ById struct {
 	Id string
 }
 
-func (r *ById) Resolve(snap tstore.RDFGraph) ([]*Resource, error) {
+func (r *ById) Resolve(snap triplestore.RDFGraph) ([]*Resource, error) {
 	resolver := &ByProperty{Key: properties.ID, Value: r.Id}
 	return resolver.Resolve(snap)
 }
@@ -27,7 +27,7 @@ type ByTypeAndProperty struct {
 	Value interface{}
 }
 
-func (r *ByTypeAndProperty) Resolve(snap tstore.RDFGraph) ([]*Resource, error) {
+func (r *ByTypeAndProperty) Resolve(snap triplestore.RDFGraph) ([]*Resource, error) {
 	var resources []*Resource
 
 	if r.Value == nil {
@@ -67,7 +67,7 @@ type ByProperty struct {
 	Value interface{}
 }
 
-func (r *ByProperty) Resolve(snap tstore.RDFGraph) ([]*Resource, error) {
+func (r *ByProperty) Resolve(snap triplestore.RDFGraph) ([]*Resource, error) {
 	var resources []*Resource
 	if r.Value == nil {
 		return resources, nil
@@ -103,7 +103,7 @@ type And struct {
 	Resolvers []Resolver
 }
 
-func (r *And) Resolve(snap tstore.RDFGraph) (result []*Resource, err error) {
+func (r *And) Resolve(snap triplestore.RDFGraph) (result []*Resource, err error) {
 	if len(r.Resolvers) == 0 {
 		return
 	}
@@ -132,7 +132,7 @@ type Or struct {
 	Resolvers []Resolver
 }
 
-func (r *Or) Resolve(snap tstore.RDFGraph) (result []*Resource, err error) {
+func (r *Or) Resolve(snap triplestore.RDFGraph) (result []*Resource, err error) {
 	for _, resolv := range r.Resolvers {
 		result, err = resolv.Resolve(snap)
 		if err != nil {
@@ -149,10 +149,10 @@ type ByType struct {
 	Typ string
 }
 
-func (r *ByType) Resolve(snap tstore.RDFGraph) ([]*Resource, error) {
+func (r *ByType) Resolve(snap triplestore.RDFGraph) ([]*Resource, error) {
 	var resources []*Resource
 	typ := namespacedResourceType(r.Typ)
-	for _, t := range snap.WithPredObj(rdf.RdfType, tstore.Resource(typ)) {
+	for _, t := range snap.WithPredObj(rdf.RdfType, triplestore.Resource(typ)) {
 		r := InitResource(r.Typ, t.Subject())
 		err := r.unmarshalFullRdf(snap)
 		if err != nil {
@@ -167,7 +167,7 @@ type ByTypes struct {
 	Typs []string
 }
 
-func (r *ByTypes) Resolve(snap tstore.RDFGraph) ([]*Resource, error) {
+func (r *ByTypes) Resolve(snap triplestore.RDFGraph) ([]*Resource, error) {
 	var res []*Resource
 	for _, t := range r.Typs {
 		bt := &ByType{t}
