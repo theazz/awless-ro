@@ -2,7 +2,15 @@
 *.out
 *.svg
 *.prof
+.idea
+
+# Locally built binaries.
 awless
 awless-ro
+
+# Release artefacts. They are attached to the GitHub release, not committed: a
+# checksum file in the repository would be a second source of truth for what a
+# release contains, and the wrong one as soon as anything is rebuilt.
 *.zip
-.idea
+*.tar.gz
+SHA256SUMS
