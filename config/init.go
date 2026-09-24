@@ -51,7 +51,13 @@ func InitAwlessEnv() error {
 	AwlessFirstInstall = os.IsNotExist(err)
 	os.Setenv("__AWLESS_FIRST_INSTALL", strconv.FormatBool(AwlessFirstInstall))
 
-	os.MkdirAll(KeysDir, 0700)
+	// This creates ~/.awless-ro as well as the keys directory inside it, and the
+	// mode matters: everything below holds either private keys or a synced picture
+	// of the account. A failure here was ignored, so a home directory that could not
+	// be created surfaced later as some unrelated file not opening.
+	if err := os.MkdirAll(KeysDir, 0700); err != nil {
+		return fmt.Errorf("cannot create %s: %s", KeysDir, err)
+	}
 
 	if AwlessFirstInstall {
 		fmt.Fprint(os.Stderr, AWLESS_ASCII_LOGO)

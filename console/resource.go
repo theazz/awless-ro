@@ -22,12 +22,37 @@ import (
 
 	"github.com/olekukonko/tablewriter"
 	"github.com/theazz/awless-ro/cloud"
+	"github.com/theazz/awless-ro/cloud/properties"
 )
 
 type tableResourceDisplayer struct {
 	maxwidth          int
 	r                 cloud.Resource
 	columnDefinitions []ColumnDefinition
+}
+
+// withheldFromTable lists properties whose value is not printed in the property table
+// that `show` prints by default.
+//
+// UserData is a launch configuration's bootstrap script, and bootstrap scripts are a
+// standard place to find tokens, registry credentials and database passwords. Printing
+// one unasked puts it on screen, into the scrollback and into whatever recorded the
+// session. It is also base64 and frequently kilobytes long, so it wrecks a two-column
+// table either way.
+//
+// Nothing is hidden from a request that names the property: `show --values-for
+// UserData` prints it in full, and it is stored in the graph as before. The point is
+// only that showing a resource should not spray a secret.
+//
+// That single escape hatch is the only one, because displaying one resource ignores
+// --format and always comes through here. That is a separate oddity, not something
+// this relies on.
+var withheldFromTable = map[string]bool{
+	properties.UserData: true,
+}
+
+func withheldNotice(prop string, value interface{}) string {
+	return fmt.Sprintf("<%d bytes withheld, see `--values-for %s`>", len(fmt.Sprint(value)), prop)
 }
 
 func (d *tableResourceDisplayer) Print(w io.Writer) error {
@@ -53,7 +78,11 @@ func (d *tableResourceDisplayer) Print(w io.Writer) error {
 		if l := len(header.title()); l > propertyNameMaxWith {
 			propertyNameMaxWith = l
 		}
-		values[i][1] = header.format(val)
+		if withheldFromTable[prop] {
+			values[i][1] = withheldNotice(prop, val)
+		} else {
+			values[i][1] = header.format(val)
+		}
 		i++
 	}
 

@@ -129,7 +129,13 @@ Loop:
 		serviceRegion := servicesByName[name].Region()
 		serviceProfile := servicesByName[name].Profile()
 		serviceDir := filepath.Join(s.BaseDir(), serviceProfile, serviceRegion)
-		os.MkdirAll(serviceDir, 0700)
+		// 0700 because the files below describe the account. The error used to be
+		// dropped, which turned a permissions problem into a confusing failure to
+		// open a file in a directory that was never there.
+		if err := os.MkdirAll(serviceDir, 0700); err != nil {
+			allErrors = append(allErrors, fmt.Errorf("creating %s: %s", serviceDir, err))
+			continue
+		}
 
 		fullpath := filepath.Join(serviceDir, fmt.Sprintf("%s%s", name, fileExt))
 		f, err := os.OpenFile(fullpath, os.O_WRONLY|os.O_CREATE|os.O_TRUNC, 0600)
