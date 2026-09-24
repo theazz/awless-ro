@@ -20,6 +20,7 @@ import (
 	"context"
 	"errors"
 	"fmt"
+	"regexp"
 	"sort"
 	"sync"
 	"time"
@@ -112,6 +113,70 @@ func (s Search) namePattern() string {
 	return s.NamePattern
 }
 
+// order sorts newest first, which is what makes --latest-id mean anything.
+//
+// Two things complicate it. An image whose CreationDate did not parse sorts to the end
+// rather than the front, so a malformed date cannot be mistaken for the newest image.
+// And where a vendor publishes one release as several images, those are ranked among
+// themselves by name rather than by the seconds between their publication: see
+// Owner.Release for the case that made this necessary.
+func (r *Resolver) order(images []Image, releaseOf func(string) string) {
+	// A release is as new as its newest image, so that the group moves together
+	// rather than being interleaved with a neighbouring release.
+	releaseDate := make(map[string]time.Time)
+	for _, img := range images {
+		release := releaseOf(img.Name)
+		if release == "" {
+			continue
+		}
+		if img.Created.After(releaseDate[release]) {
+			releaseDate[release] = img.Created
+		}
+	}
+
+	// rank is the date an image is ordered by: its release's date where it belongs to
+	// one, otherwise its own.
+	rank := func(img Image) time.Time {
+		if release := releaseOf(img.Name); release != "" {
+			if d, ok := releaseDate[release]; ok {
+				return d
+			}
+		}
+		return img.Created
+	}
+
+	sort.SliceStable(images, func(i, j int) bool {
+		a, b := images[i], images[j]
+		if a.Created.IsZero() != b.Created.IsZero() {
+			return !a.Created.IsZero()
+		}
+		if da, db := rank(a), rank(b); !da.Equal(db) {
+			return da.After(db)
+		}
+		// Same release, or the same instant. Descending by name, which for a vendor
+		// numbering its builds in the name prefers the higher one.
+		return a.Name > b.Name
+	})
+}
+
+// releaseOf groups images by release, for the vendors that need it. A search by
+// account and name has no vendor, so nothing is grouped.
+func (s Search) releaseOf(name string) string {
+	if s.Query == nil || s.Query.Owner.Release == nil {
+		return ""
+	}
+	return s.Query.Owner.Release(name)
+}
+
+// mainstreamFilter applies only to vendor queries. A search by account and name is
+// the deliberate escape hatch from it: the caller has said which names they want.
+func (s Search) mainstreamFilter() (*regexp.Regexp, error) {
+	if s.Query == nil {
+		return nil, nil
+	}
+	return s.Query.MainstreamFilter()
+}
+
 func (s Search) arch() string {
 	if s.Query != nil {
 		return s.Query.Arch
@@ -171,7 +236,14 @@ func (r *Resolver) Resolve(ctx context.Context, s Search) ([]Image, error) {
 		},
 	}
 
+	// Built before the call, so a bad expression costs nothing.
+	mainstream, err := s.mainstreamFilter()
+	if err != nil {
+		return nil, err
+	}
+
 	images := make([]Image, 0)
+	var setAside int
 	paginator := ec2.NewDescribeImagesPaginator(r.api, input)
 	for paginator.HasMorePages() {
 		page, err := paginator.NextPage(ctx)
@@ -179,11 +251,21 @@ func (r *Resolver) Resolve(ctx context.Context, s Search) ([]Image, error) {
 			return nil, err
 		}
 		for _, ami := range page.Images {
+			name := awssdk.ToString(ami.Name)
+
+			// Specialised builds share a prefix with the ordinary image and are
+			// sometimes published minutes later, so they would win on date. See
+			// Owner.Mainstream for what this excludes and why a glob cannot.
+			if mainstream != nil && !mainstream.MatchString(name) {
+				setAside++
+				continue
+			}
+
 			created, _ := time.Parse(time.RFC3339, awssdk.ToString(ami.CreationDate))
 			images = append(images, Image{
 				ID:                 awssdk.ToString(ami.ImageId),
 				Owner:              awssdk.ToString(ami.OwnerId),
-				Name:               awssdk.ToString(ami.Name),
+				Name:               name,
 				Created:            created,
 				Architecture:       string(ami.Architecture),
 				VirtualizationType: string(ami.VirtualizationType),
@@ -195,17 +277,21 @@ func (r *Resolver) Resolve(ctx context.Context, s Search) ([]Image, error) {
 		}
 	}
 
-	// Newest first, which is what makes --latest-id mean anything. Images whose
-	// CreationDate did not parse sort to the end rather than to the front, so a
-	// malformed date cannot be mistaken for the newest image.
-	sort.SliceStable(images, func(i, j int) bool {
-		if images[i].Created.IsZero() != images[j].Created.IsZero() {
-			return !images[i].Created.IsZero()
-		}
-		return images[i].Created.After(images[j].Created)
-	})
+	r.order(images, s.releaseOf)
 
 	if len(images) == 0 {
+		// Two different situations, and the user can act on only one of them, so they
+		// are reported apart. Images set aside means the account is publishing under
+		// this glob but nothing looked like the ordinary line — a convention that has
+		// moved on, or a query for a release that only exists as specialised builds.
+		if setAside > 0 {
+			return images, fmt.Errorf("%w: account %s publishes %d image(s) matching %q, but none matching %q, "+
+				"which is what the ordinary %s line looks like. The vendor may have changed how it names images, "+
+				"or this release may only exist as specialised builds. "+
+				"`--owner %s --name '%s'` searches without that restriction",
+				ErrNoMatch, account, setAside, s.namePattern(), mainstream, s.Query.Owner.Name,
+				account, s.namePattern())
+		}
 		return images, fmt.Errorf("%w for account %s with name pattern %q, architecture %s, %s, %s: "+
 			"either nothing is published matching that, or the vendor changed how it names images",
 			ErrNoMatch, account, s.namePattern(), s.arch(), s.virt(), s.store())

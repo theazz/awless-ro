@@ -27,6 +27,7 @@ package awsimage
 
 import (
 	"fmt"
+	"regexp"
 	"sort"
 	"strings"
 )
@@ -63,6 +64,55 @@ type Owner struct {
 	// put it in their image names: there is a dedicated architecture filter, and
 	// spelling it twice would only add somewhere else to be wrong.
 	NamePattern func(q Query) string
+
+	// Mainstream returns a regular expression, anchored at both ends, matching only
+	// the vendor's ordinary general-purpose line.
+	//
+	// NamePattern cannot do this job. It is an EC2 name filter, whose only wildcard
+	// matches any run of characters including hyphens, so a glob cannot say "and no
+	// further words here" — suse-sles-15-sp6-v*-hvm-ssd-* matches
+	// suse-sles-15-sp6-v20260919-ecs-hvm-ssd-x86_64 just as happily as the image
+	// meant by it.
+	//
+	// That mattered, because vendors publish specialised images beside the ordinary
+	// one, under names sharing its prefix, and sometimes a few seconds newer. Picking
+	// the newest match therefore returned, against a live account in September 2026:
+	//
+	//	amazonlinux  al2023-ami-minimal-…      instead of al2023-ami-…
+	//	suselinux    …-sp6-chost-byos-…        instead of …-sp6-v…-hvm-ssd-…
+	//	debian       debian-13-backports-…     instead of debian-13-amd64-…
+	//
+	// The SUSE one is the worst of the three: byos means bring your own subscription,
+	// so that image comes up unregistered, and chost is a container host rather than
+	// a general-purpose server. None of it is detectable from the id we printed.
+	//
+	// Anything not matching is dropped. A convention that moves on therefore produces
+	// ErrNoMatch, naming the pattern, rather than a quietly wrong id — the same
+	// preference for a loud failure that ErrNoOwner is built on. `--owner` with
+	// `--name` bypasses this entirely and is the escape hatch.
+	//
+	// Interpolated query tokens must go through regexp.QuoteMeta: distro and variant
+	// come from the command line.
+	Mainstream func(q Query) string
+
+	// Release extracts the part of an image name identifying which release it is,
+	// for vendors that publish one release as several images, and returns "" for a
+	// name it does not recognise.
+	//
+	// Amazon Linux 2023 publishes a kernel 6.1, a 6.12 and a 6.18 build of every
+	// version, within seconds of each other. Ordering those by publication time made
+	// the answer to `search images amazonlinux --latest-id` turn on a one-second gap:
+	// against a live account in September 2026 the 6.1 build was published one second
+	// after the 6.18 build and so was reported as the latest image, while AWS's own
+	// al2023-ami-kernel-default pointer named the 6.18 one.
+	//
+	// Where this is declared, images sharing a release are treated as published
+	// together and ranked by name instead, descending, which prefers the higher
+	// kernel. Releases are still ranked by date, newest first.
+	//
+	// Vendors publishing a single image per release, which is most of them, leave
+	// this nil.
+	Release func(name string) string
 }
 
 // Query is a parsed image query.
@@ -85,6 +135,25 @@ func (q Query) NameFilter() string {
 		return "*"
 	}
 	return q.Owner.NamePattern(q)
+}
+
+// MainstreamFilter is the expression names must match to count as the vendor's
+// ordinary line, or nil if the owner declares none.
+//
+// The error is all but unreachable, because the builders quote the query tokens they
+// interpolate, but a compile failure here would otherwise be a panic on input a user
+// typed.
+func (q Query) MainstreamFilter() (*regexp.Regexp, error) {
+	if q.Owner.Mainstream == nil {
+		return nil, nil
+	}
+	src := q.Owner.Mainstream(q)
+	re, err := regexp.Compile(src)
+	if err != nil {
+		return nil, fmt.Errorf("image query %s: owner %s built an invalid name expression %q: %w",
+			q, q.Owner.Name, src, err)
+	}
+	return re, nil
 }
 
 var (
@@ -128,6 +197,13 @@ var Owners = map[string]Owner{
 		NamePattern: func(q Query) string {
 			return fmt.Sprintf("%s/images/*/%s-%s-*", q.Distro, q.Distro, q.Variant)
 		},
+		// The architecture segment is one word, which is what excludes the Pro
+		// images: those read amd64-pro-server rather than amd64-server.
+		Mainstream: func(q Query) string {
+			distro, variant := regexp.QuoteMeta(q.Distro), regexp.QuoteMeta(q.Variant)
+			return fmt.Sprintf(`^%s/images/[^/]+/%s-%s-[0-9.]+-[a-z0-9]+-server-[0-9.]+$`,
+				distro, distro, variant)
+		},
 	},
 	"debian": {
 		Name: "debian", AccountID: "136693071363",
@@ -136,6 +212,13 @@ var Owners = map[string]Owner{
 		NamePattern: func(q Query) string {
 			return fmt.Sprintf("%s-%s-*", q.Distro, q.Variant)
 		},
+		// One word for the architecture, so debian-13-backports-amd64-… does not
+		// match: that image tracks the backports kernel, which is a different
+		// support proposition from the release Debian ships.
+		Mainstream: func(q Query) string {
+			return fmt.Sprintf(`^%s-%s-[a-z0-9]+-[0-9]+-[0-9]+$`,
+				regexp.QuoteMeta(q.Distro), regexp.QuoteMeta(q.Variant))
+		},
 	},
 	"redhat": {
 		Name: "redhat", AccountID: "309956199498",
@@ -143,6 +226,15 @@ var Owners = map[string]Owner{
 		// RHEL-9.4.0_HVM-20240605-x86_64-82-Hourly2-GP3
 		NamePattern: func(q Query) string {
 			return fmt.Sprintf("%s-%s*", q.Distro, q.Variant)
+		},
+		// Hourly2 is the pay-as-you-go build, the one that works without a
+		// subscription of one's own; Access2 is the bring-your-own counterpart. The
+		// storage class is left open because RHEL 7 era images end in GP2.
+		// _HVM_GA, a release-day marker Red Hat occasionally adds, is excluded by
+		// _HVM being followed directly by the date.
+		Mainstream: func(q Query) string {
+			return fmt.Sprintf(`^%s-%s[0-9.]*_HVM-[0-9]+-[a-z0-9_]+-[0-9]+-Hourly2-GP[0-9]+$`,
+				regexp.QuoteMeta(q.Distro), regexp.QuoteMeta(q.Variant))
 		},
 	},
 	"amazonlinux": {
@@ -154,6 +246,27 @@ var Owners = map[string]Owner{
 		NamePattern: func(q Query) string {
 			return fmt.Sprintf("%s-ami-*", q.Distro)
 		},
+		// The two generations are named differently enough to need separate
+		// expressions. Both turn on requiring the version stamp, or a word naming a
+		// kernel, right after -ami-; that is what excludes -ami-minimal- and, for
+		// amzn2, -ami-minimal-selinux-enforcing-.
+		Mainstream: func(q Query) string {
+			distro := regexp.QuoteMeta(q.Distro)
+			if strings.HasPrefix(q.Distro, "al2") && !strings.HasPrefix(q.Distro, "amzn") {
+				// al2023-ami-2023.12.20260918.0-kernel-6.18-x86_64
+				return fmt.Sprintf(`^%s-ami-[0-9][0-9.]*-kernel-[0-9.]+-[a-z0-9_]+$`, distro)
+			}
+			// amzn2-ami-kernel-5.10-hvm-2.0.20260923.0-x86_64-gp2, and the older
+			// amzn2-ami-hvm-2.0.20260923.0-x86_64-gp2 without the kernel segment.
+			return fmt.Sprintf(`^%s-ami-(kernel-[0-9.]+-)?hvm-[0-9][0-9.]*-[a-z0-9_]+-(ebs|gp[0-9]+)$`, distro)
+		},
+		// The version stamp, which is what the kernel builds of one release share.
+		Release: func(name string) string {
+			if m := amazonReleaseStamp.FindStringSubmatch(name); m != nil {
+				return m[1]
+			}
+			return ""
+		},
 	},
 	"suselinux": {
 		Name: "suselinux", AccountID: "013907871322",
@@ -162,6 +275,14 @@ var Owners = map[string]Owner{
 		NamePattern: func(q Query) string {
 			return fmt.Sprintf("suse-%s-%s-*", q.Distro, q.Variant)
 		},
+		// The service pack is the only word allowed before the build stamp, and the
+		// stamp is followed directly by hvm-ssd. That is what rules out the
+		// specialised builds SUSE publishes alongside: chost-byos, sapcal, and the
+		// ECS variant, whose name inserts -ecs- exactly where a glob cannot see it.
+		Mainstream: func(q Query) string {
+			return fmt.Sprintf(`^suse-%s-%s(-sp[0-9]+)?-v[0-9]+-hvm-ssd-[a-z0-9_]+$`,
+				regexp.QuoteMeta(q.Distro), regexp.QuoteMeta(q.Variant))
+		},
 	},
 	"windows": {
 		Name: "windows", AccountID: "801119661308",
@@ -169,6 +290,12 @@ var Owners = map[string]Owner{
 		// Windows_Server-2022-English-Full-Base-2024.07.10
 		NamePattern: func(q Query) string {
 			return fmt.Sprintf("%s-%s-English-Full-Base-*", q.Distro, q.Variant)
+		},
+		// The glob already pins the edition; this only requires the name to end at
+		// the date rather than carry a further word.
+		Mainstream: func(q Query) string {
+			return fmt.Sprintf(`^%s-%s-English-Full-Base-[0-9.]+$`,
+				regexp.QuoteMeta(q.Distro), regexp.QuoteMeta(q.Variant))
 		},
 	},
 }
@@ -238,6 +365,11 @@ func ParseQuery(s string) (Query, error) {
 
 	return q, nil
 }
+
+// The version stamp in an Amazon Linux name, covering both generations:
+// al2023-ami-2023.12.20260918.0-kernel-6.18-x86_64 and
+// amzn2-ami-kernel-5.10-hvm-2.0.20260923.0-x86_64-gp2.
+var amazonReleaseStamp = regexp.MustCompile(`-ami-(?:minimal-)?(?:selinux-enforcing-)?(?:kernel-[0-9.]+-)?(?:hvm-)?([0-9][0-9.]*[0-9])`)
 
 var retiredOwners = map[string]string{
 	"coreos": "CoreOS Container Linux reached end of life in 2020",
