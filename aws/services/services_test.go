@@ -888,18 +888,18 @@ func TestBuildDnsRdfGraph(t *testing.T) {
 	}
 
 	expected := map[string]cloud.Resource{
-		"/hostedzone/12345": resourcetest.Zone("/hostedzone/12345").Prop(p.Name, "my.first.domain").Build(),
-		"/hostedzone/23456": resourcetest.Zone("/hostedzone/23456").Prop(p.Name, "my.second.domain").Build(),
-		"/hostedzone/34567": resourcetest.Zone("/hostedzone/34567").Prop(p.Name, "my.third.domain").Build(),
-		"awls-91fa0a45":     resourcetest.Record("awls-91fa0a45").Prop(p.Name, "subdomain1.my.first.domain").Prop(p.Zone, "my.first.domain").Prop(p.Type, "A").Prop(p.TTL, 10).Prop(p.Records, []string{"1.2.3.4", "2.3.4.5"}).Build(),
-		"awls-920c0a46":     resourcetest.Record("awls-920c0a46").Prop(p.Name, "subdomain2.my.first.domain").Prop(p.Zone, "my.first.domain").Prop(p.Type, "A").Prop(p.TTL, 10).Prop(p.Records, []string{"3.4.5.6"}).Build(),
-		"awls-be1e0b6a":     resourcetest.Record("awls-be1e0b6a").Prop(p.Name, "subdomain3.my.first.domain").Prop(p.Zone, "my.first.domain").Prop(p.Type, "CNAME").Prop(p.TTL, 60).Prop(p.Records, []string{"4.5.6.7"}).Build(),
-		"awls-9c420a99":     resourcetest.Record("awls-9c420a99").Prop(p.Name, "subdomain1.my.second.domain").Prop(p.Zone, "my.second.domain").Prop(p.Type, "A").Prop(p.TTL, 30).Prop(p.Records, []string{"5.6.7.8"}).Build(),
-		"awls-c9b80bbe":     resourcetest.Record("awls-c9b80bbe").Prop(p.Name, "subdomain3.my.second.domain").Prop(p.Zone, "my.second.domain").Prop(p.Type, "CNAME").Prop(p.TTL, 10).Prop(p.Records, []string{"6.7.8.9"}).Build(),
+		"/hostedzone/12345":                              resourcetest.Zone("/hostedzone/12345").Prop(p.Name, "my.first.domain").Build(),
+		"/hostedzone/23456":                              resourcetest.Zone("/hostedzone/23456").Prop(p.Name, "my.second.domain").Build(),
+		"/hostedzone/34567":                              resourcetest.Zone("/hostedzone/34567").Prop(p.Name, "my.third.domain").Build(),
+		recordID("subdomain1.my.first.domain", "A"):      resourcetest.Record(recordID("subdomain1.my.first.domain", "A")).Prop(p.Name, "subdomain1.my.first.domain").Prop(p.Zone, "my.first.domain").Prop(p.Type, "A").Prop(p.TTL, 10).Prop(p.Records, []string{"1.2.3.4", "2.3.4.5"}).Build(),
+		recordID("subdomain2.my.first.domain", "A"):      resourcetest.Record(recordID("subdomain2.my.first.domain", "A")).Prop(p.Name, "subdomain2.my.first.domain").Prop(p.Zone, "my.first.domain").Prop(p.Type, "A").Prop(p.TTL, 10).Prop(p.Records, []string{"3.4.5.6"}).Build(),
+		recordID("subdomain3.my.first.domain", "CNAME"):  resourcetest.Record(recordID("subdomain3.my.first.domain", "CNAME")).Prop(p.Name, "subdomain3.my.first.domain").Prop(p.Zone, "my.first.domain").Prop(p.Type, "CNAME").Prop(p.TTL, 60).Prop(p.Records, []string{"4.5.6.7"}).Build(),
+		recordID("subdomain1.my.second.domain", "A"):     resourcetest.Record(recordID("subdomain1.my.second.domain", "A")).Prop(p.Name, "subdomain1.my.second.domain").Prop(p.Zone, "my.second.domain").Prop(p.Type, "A").Prop(p.TTL, 30).Prop(p.Records, []string{"5.6.7.8"}).Build(),
+		recordID("subdomain3.my.second.domain", "CNAME"): resourcetest.Record(recordID("subdomain3.my.second.domain", "CNAME")).Prop(p.Name, "subdomain3.my.second.domain").Prop(p.Zone, "my.second.domain").Prop(p.Type, "CNAME").Prop(p.TTL, 10).Prop(p.Records, []string{"6.7.8.9"}).Build(),
 	}
 	expectedChildren := map[string][]string{
-		"/hostedzone/12345": {"awls-91fa0a45", "awls-920c0a46", "awls-be1e0b6a"},
-		"/hostedzone/23456": {"awls-9c420a99", "awls-c9b80bbe"},
+		"/hostedzone/12345": {recordID("subdomain1.my.first.domain", "A"), recordID("subdomain2.my.first.domain", "A"), recordID("subdomain3.my.first.domain", "CNAME")},
+		"/hostedzone/23456": {recordID("subdomain1.my.second.domain", "A"), recordID("subdomain3.my.second.domain", "CNAME")},
 	}
 	expectedAppliedOn := map[string][]string{}
 
@@ -1101,22 +1101,22 @@ func TestBuildMonitoringGraph(t *testing.T) {
 	}
 
 	expected := map[string]cloud.Resource{
-		"awls-4ba90752": resourcetest.Metric("awls-4ba90752").Prop(p.Name, "metric_1").Prop(p.Namespace, "namespace_1").Build(),
-		"awls-4baa0753": resourcetest.Metric("awls-4baa0753").Prop(p.Name, "metric_2").Prop(p.Namespace, "namespace_1").Prop(p.Dimensions, []*graph.KeyValue{{KeyName: "first", Value: "dimension"}, {KeyName: "second", Value: "dimension"}}).Build(),
-		"awls-4bb20753": resourcetest.Metric("awls-4bb20753").Prop(p.Name, "metric_1").Prop(p.Namespace, "namespace_2").Build(),
-		"awls-4bb30754": resourcetest.Metric("awls-4bb30754").Prop(p.Name, "metric_2").Prop(p.Namespace, "namespace_2").Build(),
-		"alarm_1":       resourcetest.Alarm("alarm_1").Prop(p.Arn, "alarm_1").Build(),
-		"alarm_2":       resourcetest.Alarm("alarm_2").Prop(p.Arn, "alarm_2").Build(),
+		metricID("namespace_1", "metric_1"): resourcetest.Metric(metricID("namespace_1", "metric_1")).Prop(p.Name, "metric_1").Prop(p.Namespace, "namespace_1").Build(),
+		metricID("namespace_1", "metric_2"): resourcetest.Metric(metricID("namespace_1", "metric_2")).Prop(p.Name, "metric_2").Prop(p.Namespace, "namespace_1").Prop(p.Dimensions, []*graph.KeyValue{{KeyName: "first", Value: "dimension"}, {KeyName: "second", Value: "dimension"}}).Build(),
+		metricID("namespace_2", "metric_1"): resourcetest.Metric(metricID("namespace_2", "metric_1")).Prop(p.Name, "metric_1").Prop(p.Namespace, "namespace_2").Build(),
+		metricID("namespace_2", "metric_2"): resourcetest.Metric(metricID("namespace_2", "metric_2")).Prop(p.Name, "metric_2").Prop(p.Namespace, "namespace_2").Build(),
+		"alarm_1":                           resourcetest.Alarm("alarm_1").Prop(p.Arn, "alarm_1").Build(),
+		"alarm_2":                           resourcetest.Alarm("alarm_2").Prop(p.Arn, "alarm_2").Build(),
 		"alarm_3": resourcetest.Alarm("alarm_3").Prop(p.Arn, "alarm_3").Prop(p.Name, "my_alarm").Prop(p.ActionsEnabled, true).Prop(p.AlarmActions, []string{"action_arn_1", "action_arn_2", "action_arn_3"}).Prop(p.InsufficientDataActions, []string{"action_arn_1", "action_arn_3"}).
 			Prop(p.OKActions, []string{"action_arn_2"}).Prop(p.Description, "my alarm description").Prop(p.Dimensions, []*graph.KeyValue{{KeyName: "first", Value: "dimension"}, {KeyName: "second", Value: "dimension"}}).Prop(p.MetricName, "metric_2").
 			Prop(p.Namespace, "namespace_2").Prop(p.Updated, now).Prop(p.State, "OK").Build(),
 	}
 
 	expectedChildren := map[string][]string{
-		"eu-west-1": {"awls-4ba90752", "awls-4baa0753", "awls-4bb20753", "awls-4bb30754", "alarm_1", "alarm_2", "alarm_3"},
+		"eu-west-1": {metricID("namespace_1", "metric_1"), metricID("namespace_1", "metric_2"), metricID("namespace_2", "metric_1"), metricID("namespace_2", "metric_2"), "alarm_1", "alarm_2", "alarm_3"},
 	}
 	expectedAppliedOn := map[string][]string{
-		"alarm_3": {"awls-4bb30754"},
+		"alarm_3": {metricID("namespace_2", "metric_2")},
 	}
 
 	compareResources(t, g, resources, expected, expectedChildren, expectedAppliedOn)
@@ -1432,15 +1432,24 @@ func compareResources(t *testing.T, g cloud.GraphAPI, resources []cloud.Resource
 			//pretty.Print(want)
 			t.Errorf("got \n%#v\nwant\n%#v", got, want)
 		}
+		// Both sides are sorted. Relations have no order — they come out of the
+		// graph — so requiring the expectation to be written in sorted order made
+		// that order load-bearing without saying so, and every fixture here happened
+		// to satisfy it by luck.
 		children := mustGetChildrenId(g, got)
 		sort.Strings(children)
-		if g, w := children, expectedChildren[got.Id()]; !reflect.DeepEqual(g, w) {
-			t.Errorf("'%s' children: got %v, want %v", got.Id(), g, w)
+		wantChildren := append([]string(nil), expectedChildren[got.Id()]...)
+		sort.Strings(wantChildren)
+		if !reflect.DeepEqual(children, wantChildren) {
+			t.Errorf("'%s' children: got %v, want %v", got.Id(), children, wantChildren)
 		}
+
 		appliedOn := mustGetAppliedOnId(g, got)
 		sort.Strings(appliedOn)
-		if g, w := appliedOn, expectedAppliedOn[got.Id()]; !reflect.DeepEqual(g, w) {
-			t.Errorf("'%s' appliedOn: got %v, want %v", got.Id(), g, w)
+		wantAppliedOn := append([]string(nil), expectedAppliedOn[got.Id()]...)
+		sort.Strings(wantAppliedOn)
+		if !reflect.DeepEqual(appliedOn, wantAppliedOn) {
+			t.Errorf("'%s' appliedOn: got %v, want %v", got.Id(), appliedOn, wantAppliedOn)
 		}
 	}
 }

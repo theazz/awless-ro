@@ -35,11 +35,11 @@ package awsconv
 
 import (
 	"bytes"
+	"crypto/sha256"
 	"encoding/hex"
 	"encoding/json"
 	"errors"
 	"fmt"
-	"hash/adler32"
 	"net"
 	"net/url"
 	"reflect"
@@ -825,12 +825,28 @@ func notEmpty(str *string) bool {
 	return awssdk.ToString(str) != ""
 }
 
+// HashFields builds an identifier for a resource AWS gives no id of its own: a DNS
+// record, which is identified by its name and type together, and a CloudWatch metric,
+// by its namespace and name. The result is the node's identity in the graph, so two
+// different resources hashing alike do not merely look similar, they merge.
+//
+// Two things here are deliberate and both were wrong before.
+//
+// Fields are separated by a NUL, which cannot appear in an AWS name. Without one the
+// fields were concatenated, so HashFields("ab", "c") and HashFields("a", "bc") were
+// the same value — and for metrics that is not a contrivance, because both fields are
+// free-form: the namespace AWS/EC2 with metric CPUUtilization collided with the
+// namespace AWS/EC2C and metric PUUtilization.
+//
+// The digest is SHA-256 truncated rather than adler32. adler32 is a checksum meant to
+// detect damage in a stream, gives 32 bits, and disperses short strings particularly
+// badly; the two together made accidental collisions likelier than the identifier
+// length suggested. Six bytes is ample here: these are per-account resource counts,
+// not internet scale.
 func HashFields(fields ...interface{}) string {
-	var buf bytes.Buffer
+	h := sha256.New()
 	for _, field := range fields {
-		buf.WriteString(fmt.Sprint(field))
+		fmt.Fprintf(h, "%v\x00", field)
 	}
-	h := adler32.New()
-	buf.WriteTo(h)
-	return "awls-" + hex.EncodeToString(h.Sum(nil))
+	return "awls-" + hex.EncodeToString(h.Sum(nil)[:6])
 }
