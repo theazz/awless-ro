@@ -31,17 +31,23 @@ const (
 )
 
 var configDefinitions = map[string]*Definition{
-	autosyncConfigKey:           {help: "Automatically synchronize your cloud locally", defaultValue: "true", parseParamFn: parseBool},
-	RegionConfigKey:             {help: "AWS region", parseParamFn: awsconfig.ParseRegion, stdinParamProviderFn: awsconfig.StdinRegionSelector, onUpdateFns: []onUpdateFunc{runSyncWithUpdatedRegion}},
-	ProfileConfigKey:            {help: "AWS profile", defaultValue: "default"},
-	"aws.infra.sync":            {help: "Enable/disable sync of infra services (EC2, RDS, etc.) (when empty: true)", defaultValue: "true", parseParamFn: parseBool},
-	"aws.access.sync":           {help: "Enable/disable sync of IAM service (when empty: true)", defaultValue: "true", parseParamFn: parseBool},
-	"aws.storage.sync":          {help: "Enable/disable sync of S3 service (when empty: true)", defaultValue: "true", parseParamFn: parseBool},
-	"aws.storage.s3object.sync": {help: "Enable/disable sync of S3/s3object (when empty: true)", defaultValue: "false", parseParamFn: parseBool},
+	autosyncConfigKey:  {help: "Automatically synchronize your cloud locally", defaultValue: "true", parseParamFn: parseBool},
+	RegionConfigKey:    {help: "AWS region", parseParamFn: awsconfig.ParseRegion, stdinParamProviderFn: awsconfig.StdinRegionSelector, onUpdateFns: []onUpdateFunc{runSyncWithUpdatedRegion}},
+	ProfileConfigKey:   {help: "AWS profile", defaultValue: "default"},
+	"aws.infra.sync":   {help: "Enable/disable sync of infra services (EC2, RDS, etc.) (when empty: true)", defaultValue: "true", parseParamFn: parseBool},
+	"aws.access.sync":  {help: "Enable/disable sync of IAM service (when empty: true)", defaultValue: "true", parseParamFn: parseBool},
+	"aws.storage.sync": {help: "Enable/disable sync of S3 service (when empty: true)", defaultValue: "true", parseParamFn: parseBool},
+	// The three keys below are off by default, and their help said "(when empty:
+	// true)" while sitting next to the value false in `config list`. That phrase
+	// describes the fetchers' fallback when a key is absent, which a user never sees
+	// because the key is always written. What they need to know is that it is off
+	// and why, since the cost is what makes it off: a call per bucket, a call per
+	// hosted zone, a call per metric.
+	"aws.storage.s3object.sync": {help: "Sync S3 objects: off by default, one API call per bucket", defaultValue: "false", parseParamFn: parseBool},
 	"aws.dns.sync":              {help: "Enable/disable sync of DNS service (when empty: true)", defaultValue: "true", parseParamFn: parseBool},
-	"aws.dns.record.sync":       {help: "Enable/disable sync of DNS/record (when empty: true)", defaultValue: "false", parseParamFn: parseBool},
+	"aws.dns.record.sync":       {help: "Sync DNS records: off by default, one API call per hosted zone", defaultValue: "false", parseParamFn: parseBool},
 	"aws.notification.sync":     {help: "Enable/disable sync of SNS service (when empty: true)", defaultValue: "true", parseParamFn: parseBool},
-	"aws.monitoring.sync":       {help: "Enable/disable sync of CloudWatch service (when empty: true)", defaultValue: "false", parseParamFn: parseBool},
+	"aws.monitoring.sync":       {help: "Sync CloudWatch metrics and alarms: off by default, large in busy accounts", defaultValue: "false", parseParamFn: parseBool},
 	"aws.lambda.sync":           {help: "Enable/disable sync of Lambda service (when empty: true)", defaultValue: "true", parseParamFn: parseBool},
 	"aws.messaging.sync":        {help: "Enable/disable sync of SQS/SNS service (when empty: true)", defaultValue: "true", parseParamFn: parseBool},
 	"aws.cdn.sync":              {help: "Enable/disable sync of CloudFront service (when empty: true)", defaultValue: "true", parseParamFn: parseBool},

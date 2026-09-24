@@ -129,18 +129,55 @@ func withProfiling(fn func()) {
 func displaySyncStats(serviceName string, g cloud.GraphAPI) {
 	var strs []string
 	for rt, service := range awsservices.ServicePerResourceType {
-		if service == serviceName {
-			res, err := g.Find(cloud.NewQuery(rt))
-			if err != nil {
-				continue
-			}
-			nbRes := len(res)
-			if nbRes > 1 {
-				strs = append(strs, fmt.Sprintf("%d %s", nbRes, cloud.PluralizeResource(rt)))
-			} else {
-				strs = append(strs, fmt.Sprintf("%d %s", nbRes, rt))
-			}
+		if service != serviceName {
+			continue
+		}
+
+		// A resource type nobody looked at reported "0", which reads as an answer
+		// about the account: `-> dns: 2 zones, 0 record` against an account holding
+		// 84 records. Two types are off by default because they cost a call per
+		// parent — one per hosted zone, one per bucket — so this is the common case,
+		// not an edge one.
+		if key, off := syncDisabledFor(serviceName, rt); off {
+			strs = append(strs, fmt.Sprintf("%s: off (%s)", cloud.PluralizeResource(rt), key))
+			continue
+		}
+
+		res, err := g.Find(cloud.NewQuery(rt))
+		if err != nil {
+			continue
+		}
+		nbRes := len(res)
+		if nbRes > 1 {
+			strs = append(strs, fmt.Sprintf("%d %s", nbRes, cloud.PluralizeResource(rt)))
+		} else {
+			strs = append(strs, fmt.Sprintf("%d %s", nbRes, rt))
 		}
 	}
 	logger.Infof("-> %s: %s", serviceName, strings.Join(strs, ", "))
+}
+
+// syncDisabledFor reports whether a resource type was skipped by configuration, and
+// under which key, so that the message can name the setting to change.
+//
+// The fetchers read these keys themselves; this only has to agree with them about the
+// name, which is why the shape is spelled out rather than guessed at.
+func syncDisabledFor(serviceName, resourceType string) (string, bool) {
+	// The service key is checked first because that is the order the services
+	// themselves apply: IsSyncDisabled short-circuits Fetch into an empty graph
+	// without ever looking at the per-type key. Reporting the per-type key here would
+	// name a setting that is not the one having the effect.
+	for _, key := range []string{
+		fmt.Sprintf("aws.%s.sync", serviceName),
+		fmt.Sprintf("aws.%s.%s.sync", serviceName, resourceType),
+	} {
+		v, ok := config.Get(key)
+		if !ok {
+			continue
+		}
+		if enabled, isBool := v.(bool); isBool && !enabled {
+			return key, true
+		}
+	}
+	return "", false
 }
