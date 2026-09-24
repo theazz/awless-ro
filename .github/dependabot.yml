@@ -1,0 +1,23 @@
+version: 2
+
+updates:
+  - package-ecosystem: gomod
+    directory: "/"
+    schedule:
+      interval: weekly
+    # 24 of the direct dependencies are AWS SDK v2 service modules, and they release
+    # constantly. Ungrouped that is a couple of dozen pull requests a week, which
+    # gets muted and then ignored — the opposite of the point. One pull request for
+    # the SDK, separate ones for everything else.
+    groups:
+      aws-sdk-go-v2:
+        patterns:
+          - "github.com/aws/aws-sdk-go-v2*"
+          - "github.com/aws/smithy-go"
+
+  # Keeps the SHA pins in .github/workflows/ci.yml current. Without this, pinning by
+  # SHA means never receiving a security fix for an action.
+  - package-ecosystem: github-actions
+    directory: "/"
+    schedule:
+      interval: weekly

@@ -1,12 +1,58 @@
 name: CI
+
 on: [push, pull_request]
+
+# The workflow only ever reads the repository. Without this block the token gets
+# whatever the repository defaults happen to be, which for older repositories is
+# read-write on everything.
+permissions:
+  contents: read
+
 jobs:
   build:
     runs-on: ubuntu-latest
     steps:
-      - uses: actions/checkout@v4
-      - uses: actions/setup-go@v5
+      # Actions are pinned by commit SHA, not by tag: a tag is a movable label, and
+      # whoever owns the action can repoint it at different code after review. The
+      # trailing comment is the human-readable version; Dependabot keeps both in
+      # step.
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+      - uses: actions/setup-go@b7ad1dad31e06c5925ef5d2fc7ad053ef454303e # v7.0.0
         with:
           go-version: '1.26'
-      - run: go build ./...
-      - run: go test ./...
+
+      - name: gofmt -s
+        run: |
+          unformatted=$(gofmt -s -l .)
+          if [ -n "$unformatted" ]; then
+            echo "these files are not gofmt -s clean:"
+            echo "$unformatted"
+            exit 1
+          fi
+
+      - name: go vet
+        run: go vet ./...
+
+      - name: go build
+        run: go build ./...
+
+      - name: go test
+        run: go test ./... -race
+
+      # Generated code is regenerated and the tree must not move. This is what keeps
+      # the generator the source of truth: a hand-edit to any gen_*.go fails here
+      # instead of being silently erased by the next `make generate`.
+      - name: generated files are up to date
+        run: |
+          make generate
+          if [ -n "$(git status --porcelain)" ]; then
+            echo "generated files are stale: run 'make generate' and commit the result"
+            git status --porcelain
+            git diff
+            exit 1
+          fi
+
+      # Pinned rather than @latest, so that a new advisory database or a new tool
+      # release cannot turn a green build red without a commit of ours.
+      - name: govulncheck
+        run: go run golang.org/x/vuln/cmd/govulncheck@v1.8.0 ./...
