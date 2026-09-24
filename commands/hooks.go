@@ -35,6 +35,14 @@ import (
 
 func applyHooks(funcs ...func(*cobra.Command, []string) error) func(*cobra.Command, []string) {
 	return func(cmd *cobra.Command, args []string) {
+		// Past this point the command line parsed, so anything that goes wrong from
+		// here is a failure of the work rather than a misuse of the command, and
+		// printing the flag list over it only buries the message. cobra decides this
+		// by looking at the flag when the error comes back, and this hook runs after
+		// parsing and before the command body, which is exactly the boundary: a
+		// mistyped flag still gets the usage text it needs.
+		cmd.SilenceUsage = true
+
 		for _, fn := range funcs {
 			if err := fn(cmd, args); err != nil {
 				exitOn(err)

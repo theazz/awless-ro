@@ -16,8 +16,19 @@ limitations under the License.
 
 package main
 
-import "github.com/theazz/awless-ro/commands"
+import (
+	"os"
+
+	"github.com/theazz/awless-ro/commands"
+)
 
 func main() {
-	commands.RootCmd.Execute()
+	// The exit status was discarded here, so every failure reported itself on stderr
+	// and then exited 0. That is wrong for any command, and actively misleading for
+	// the ones built to be read by a script: `id=$(awless-ro search images canonical
+	// --latest-id)` looked like it had succeeded with an empty id when the lookup had
+	// failed. cobra has already printed the error, so there is nothing to add.
+	if err := commands.RootCmd.Execute(); err != nil {
+		os.Exit(1)
+	}
 }
