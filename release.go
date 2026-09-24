@@ -23,6 +23,7 @@ import (
 	"archive/tar"
 	"archive/zip"
 	"compress/gzip"
+	"crypto/sha256"
 	"errors"
 	"flag"
 	"fmt"
@@ -31,6 +32,7 @@ import (
 	"os/exec"
 	"path/filepath"
 	"runtime"
+	"sort"
 	"strings"
 	"sync"
 	"time"
@@ -63,34 +65,104 @@ func main() {
 		printInfo("RELEASING")
 	}
 
-	var wg sync.WaitGroup
+	var (
+		wg        sync.WaitGroup
+		mu        sync.Mutex
+		artefacts []string
+		failed    bool
+	)
 
 	for osname, archs := range allBuild {
 		for _, arch := range archs {
 			wg.Add(1)
 			go func(o, a string) {
 				defer wg.Done()
-				if err := buildAndZip(o, a); err != nil {
+				artefact, err := buildAndZip(o, a)
+				mu.Lock()
+				defer mu.Unlock()
+				if err != nil {
 					fmt.Fprintf(os.Stderr, "%s\n", err)
+					failed = true
 					return
+				}
+				if artefact != "" {
+					artefacts = append(artefacts, artefact)
 				}
 			}(osname, arch)
 		}
 	}
 
 	wg.Wait()
+
+	// A build failure used to be printed and then forgotten, so this exited zero
+	// having produced a partial release. Whoever publishes it would have had to
+	// notice by reading the log.
+	if failed {
+		printKo("some builds failed; nothing was checksummed")
+		os.Exit(1)
+	}
+
+	if len(artefacts) > 1 {
+		if err := writeChecksums(artefacts); err != nil {
+			printKo("%s", err)
+			os.Exit(1)
+		}
+	}
 }
 
-func buildAndZip(osname, arch string) error {
-	env := []string{
-		fmt.Sprintf("GOPATH=%s", os.Getenv("GOPATH")),
+const checksumFile = "SHA256SUMS"
+
+// writeChecksums records a digest per artefact, so that whoever downloads one has
+// something to check it against. Without this a user has no way to tell a tampered or
+// truncated download from a good one.
+//
+// The layout is the one coreutils writes, digest and two spaces and name, so that
+// `sha256sum -c SHA256SUMS` and `shasum -a 256 -c SHA256SUMS` both work as-is. Names
+// are sorted, because the build order comes from goroutines and a file whose lines
+// shuffle between runs is one nobody can diff.
+func writeChecksums(artefacts []string) error {
+	sort.Strings(artefacts)
+
+	var out strings.Builder
+	for _, name := range artefacts {
+		f, err := os.Open(name)
+		if err != nil {
+			return fmt.Errorf("checksumming %s: %s", name, err)
+		}
+		digest := sha256.New()
+		if _, err := io.Copy(digest, f); err != nil {
+			f.Close()
+			return fmt.Errorf("checksumming %s: %s", name, err)
+		}
+		f.Close()
+		fmt.Fprintf(&out, "%x  %s\n", digest.Sum(nil), name)
+	}
+
+	if err := os.WriteFile(checksumFile, []byte(out.String()), 0644); err != nil {
+		return fmt.Errorf("writing %s: %s", checksumFile, err)
+	}
+
+	printOk("wrote %s for %d artefacts", checksumFile, len(artefacts))
+	fmt.Printf("    verify with: sha256sum -c %s   (macOS: shasum -a 256 -c %s)\n", checksumFile, checksumFile)
+	return nil
+}
+
+// buildAndZip builds one platform and packages it, returning the name of the file it
+// produced so that main can checksum it. A brew build produces a bare binary and
+// returns no name, because there is no archive to publish.
+func buildAndZip(osname, arch string) (string, error) {
+	// Added to the environment rather than replacing it. Setting cmd.Env to just
+	// these three wiped everything else, including the module cache location, so the
+	// build only worked on a machine where GOPATH happened to be set — and on any
+	// other it failed with "module cache not found".
+	env := append(os.Environ(),
 		fmt.Sprintf("GOARCH=%s", arch),
 		fmt.Sprintf("GOOS=%s", osname),
-	}
+	)
 
 	builddir, err := os.MkdirTemp("", "")
 	if err != nil {
-		return err
+		return "", err
 	}
 	defer os.RemoveAll(builddir)
 
@@ -110,14 +182,14 @@ func buildAndZip(osname, arch string) error {
 	gitRef := "refs/heads/master"
 	if *releaseTag != "" {
 		if tag, _ := runCmd(nil, "git", "describe", "--exact-match", "--tags"); strings.TrimSpace(tag) != *releaseTag {
-			return fmt.Errorf("The git repository is not at tag '%s'", *releaseTag)
+			return "", fmt.Errorf("the git repository is not at tag '%s'", *releaseTag)
 		}
 		gitRef = fmt.Sprintf("refs/tags/%s", *releaseTag)
 	}
 
 	sha, err := runCmd(nil, "git", "show-ref", "-s", gitRef)
 	if err != nil {
-		return err
+		return "", err
 	}
 
 	buildFor := "targz"
@@ -138,69 +210,111 @@ func buildAndZip(osname, arch string) error {
 	ldflags := fmt.Sprintf("-ldflags=-s -w %s", buildInfo)
 
 	if _, err := runCmd(env, "go", "build", "-o", artefactPath, ldflags); err != nil {
-		return err
+		return "", err
 	}
+
+	archiveName := fmt.Sprintf("%s-%s-%s", strings.Split(binName, ".")[0], osname, arch)
 
 	switch buildFor {
 	case "brew": //No zipping
 		fmt.Println("DO NOT forget to update the brew formula.")
-		return os.Rename(artefactPath, "awless-ro")
+		return "", os.Rename(artefactPath, "awless-ro")
 	case "zip":
-		zipFile, err := os.OpenFile(fmt.Sprintf("%s-%s-%s.zip", strings.Split(binName, ".")[0], osname, arch), os.O_WRONLY|os.O_TRUNC|os.O_CREATE, 0600)
-		if err != nil {
-			return err
+		name := archiveName + ".zip"
+		if err := writeZip(name, binName, artefactPath); err != nil {
+			return "", err
 		}
-
-		w := zip.NewWriter(zipFile)
-
-		f, err := w.Create(binName)
-		if err != nil {
-			return err
-		}
-
-		content, err := os.ReadFile(artefactPath)
-		if err != nil {
-			return err
-		}
-
-		if _, err = f.Write(content); err != nil {
-			return err
-		}
-
-		return w.Close()
+		return name, nil
 	case "targz":
-		tarball, err := os.Create(fmt.Sprintf("%s-%s-%s.tar.gz", strings.Split(binName, ".")[0], osname, arch))
-		if err != nil {
-			return err
+		name := archiveName + ".tar.gz"
+		if err := writeTarGz(name, artefactPath); err != nil {
+			return "", err
 		}
-		defer tarball.Close()
-
-		gw := gzip.NewWriter(tarball)
-		defer gw.Close()
-
-		tw := tar.NewWriter(gw)
-		defer tw.Close()
-
-		binFile, err := os.Open(artefactPath)
-		if err != nil {
-			return err
-		}
-		defer binFile.Close()
-
-		if stat, err := binFile.Stat(); err != nil {
-			return err
-		} else if tarHeader, err := tar.FileInfoHeader(stat, ""); err == nil {
-			if err := tw.WriteHeader(tarHeader); err != nil {
-				return err
-			}
-			if _, err := io.Copy(tw, binFile); err != nil {
-				return err
-			}
-		}
-		return nil
+		return name, nil
 	default:
-		return errors.New("missing packaging method")
+		return "", errors.New("missing packaging method")
 	}
+}
+
+// Both packagers close everything explicitly and report the error from doing so. A
+// close that fails on an archive writer means the archive is truncated, and the
+// previous code both leaked the zip file's descriptor and returned before the
+// deferred closes could say anything went wrong — which matters now that the file is
+// hashed straight afterwards.
+func writeZip(name, entryName, binaryPath string) error {
+	out, err := os.OpenFile(name, os.O_WRONLY|os.O_TRUNC|os.O_CREATE, 0600)
+	if err != nil {
+		return err
+	}
+
+	w := zip.NewWriter(out)
+
+	entry, err := w.Create(entryName)
+	if err != nil {
+		out.Close()
+		return err
+	}
+
+	binary, err := os.Open(binaryPath)
+	if err != nil {
+		out.Close()
+		return err
+	}
+	if _, err := io.Copy(entry, binary); err != nil {
+		binary.Close()
+		out.Close()
+		return err
+	}
+	binary.Close()
+
+	if err := w.Close(); err != nil {
+		out.Close()
+		return err
+	}
+	return out.Close()
+}
+
+func writeTarGz(name, binaryPath string) error {
+	out, err := os.Create(name)
+	if err != nil {
+		return err
+	}
+
+	gw := gzip.NewWriter(out)
+	tw := tar.NewWriter(gw)
+
+	binary, err := os.Open(binaryPath)
+	if err != nil {
+		out.Close()
+		return err
+	}
+	defer binary.Close()
+
+	stat, err := binary.Stat()
+	if err != nil {
+		out.Close()
+		return err
+	}
+	header, err := tar.FileInfoHeader(stat, "")
+	if err != nil {
+		out.Close()
+		return err
+	}
+	if err := tw.WriteHeader(header); err != nil {
+		out.Close()
+		return err
+	}
+	if _, err := io.Copy(tw, binary); err != nil {
+		out.Close()
+		return err
+	}
+
+	for _, closer := range []io.Closer{tw, gw, out} {
+		if err := closer.Close(); err != nil {
+			return err
+		}
+	}
+	return nil
 }
 
 type environment []string

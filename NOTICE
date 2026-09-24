@@ -1,0 +1,16 @@
+awless-ro
+Copyright 2026 The awless-ro authors
+
+This product includes software developed at WALLIX.
+
+    awless
+    Copyright 2016-2018 WALLIX
+    https://github.com/wallix/awless
+
+awless-ro is a fork of awless, taken from the state of that project at its last
+release and reduced to its read-only functionality. Substantial portions of this
+product remain the original work of WALLIX, and files derived from it carry the
+original copyright notice.
+
+Both the original and this fork are distributed under the Apache License,
+Version 2.0. See the LICENSE file for the full text.

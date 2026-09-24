@@ -30,6 +30,12 @@ jobs:
             exit 1
           fi
 
+      # Checks every module in the cache against go.sum. CONTRIBUTING forbids
+      # disabling checksum verification; this is the part that notices if someone
+      # does it anyway, or if a hash changes under us.
+      - name: go mod verify
+        run: go mod verify
+
       - name: go vet
         run: go vet ./...
 
