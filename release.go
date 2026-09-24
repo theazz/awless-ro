@@ -61,6 +61,15 @@ func main() {
 	}
 
 	if *releaseTag != "" && !*brew {
+		// A release is built from the working tree, while the commit baked into the
+		// binary comes from the tag. If the tree has uncommitted changes those two
+		// are different things, and `awless-ro version` then names a commit that does
+		// not contain the code it is running. Nothing downstream can detect that:
+		// the checksums would be self-consistent and wrong.
+		if err := refuseDirtyTree(); err != nil {
+			printKo("%s", err)
+			os.Exit(1)
+		}
 		allBuild = builds
 		printInfo("RELEASING")
 	}
@@ -108,6 +117,42 @@ func main() {
 			os.Exit(1)
 		}
 	}
+}
+
+// refuseDirtyTree reports uncommitted or untracked changes, naming them, so that a
+// release cannot be cut from a tree that differs from the commit it claims.
+func refuseDirtyTree() error {
+	out, err := runCmd(nil, "git", "status", "--porcelain")
+	if err != nil {
+		return fmt.Errorf("cannot determine whether the tree is clean: %s", err)
+	}
+
+	var dirty []string
+	for _, line := range strings.Split(strings.TrimSpace(out), "\n") {
+		line = strings.TrimSpace(line)
+		// The release artefacts themselves are written into the working directory,
+		// so they are not evidence of a modified tree.
+		if line == "" || isReleaseArtefact(line) {
+			continue
+		}
+		dirty = append(dirty, line)
+	}
+
+	if len(dirty) > 0 {
+		return fmt.Errorf("the working tree has uncommitted changes, so the commit recorded in the "+
+			"binary would not be the code in it:\n\t%s\ncommit or stash them first",
+			strings.Join(dirty, "\n\t"))
+	}
+	return nil
+}
+
+func isReleaseArtefact(statusLine string) bool {
+	for _, suffix := range []string{".tar.gz", ".zip", "/" + checksumFile, " " + checksumFile} {
+		if strings.HasSuffix(statusLine, suffix) {
+			return true
+		}
+	}
+	return strings.HasSuffix(statusLine, checksumFile)
 }
 
 const checksumFile = "SHA256SUMS"
@@ -187,7 +232,12 @@ func buildAndZip(osname, arch string) (string, error) {
 		gitRef = fmt.Sprintf("refs/tags/%s", *releaseTag)
 	}
 
-	sha, err := runCmd(nil, "git", "show-ref", "-s", gitRef)
+	// The commit, resolved through the ref rather than read off it. `show-ref -s` on
+	// an annotated tag returns the tag object's sha, not the commit's, so
+	// `awless-ro version` reported an id that matches no commit in the repository —
+	// which is the one thing that field is for. ^{commit} peels the tag; for a branch
+	// or a lightweight tag it changes nothing.
+	sha, err := runCmd(nil, "git", "rev-parse", gitRef+"^{commit}")
 	if err != nil {
 		return "", err
 	}
