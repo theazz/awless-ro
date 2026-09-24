@@ -1,15 +1,15 @@
 package ssh
 
 import (
+	"errors"
 	"fmt"
 	"net"
 	"os"
-	"strings"
 	"syscall"
 
 	"golang.org/x/crypto/ssh"
 	"golang.org/x/crypto/ssh/agent"
-	"golang.org/x/crypto/ssh/terminal"
+	"golang.org/x/term"
 )
 
 func agentAuth() (ssh.AuthMethod, error) {
@@ -23,7 +23,12 @@ func agentAuth() (ssh.AuthMethod, error) {
 func privateKeyAuth(priv privateKey) (ssh.AuthMethod, error) {
 	signer, err := ssh.ParsePrivateKey(priv.body)
 	if err != nil {
-		if strings.Contains(err.Error(), "cannot decode encrypted private keys") {
+		// x/crypto reports a missing passphrase with a dedicated type. Upstream
+		// matched on the text of the message instead, which silently stops working
+		// the day that wording changes — and it already had: the string it looked
+		// for belongs to an older release.
+		var needsPassphrase *ssh.PassphraseMissingError
+		if errors.As(err, &needsPassphrase) {
 			return encryptedPrivKeyAuth(priv)
 		}
 		return nil, err
@@ -31,15 +36,22 @@ func privateKeyAuth(priv privateKey) (ssh.AuthMethod, error) {
 	return ssh.PublicKeys(signer), nil
 }
 
+// encryptedPrivKeyAuth prompts for the passphrase and decrypts the key.
+//
+// Decryption is left to ssh.ParsePrivateKeyWithPassphrase. Upstream rolled its own
+// on x509.DecryptPEMBlock, which the standard library documents as insecure — the
+// encryption it implements is unauthenticated, so the ciphertext can be tampered
+// with undetected — and which only ever understood PKCS#1 RSA. That excluded the
+// modern OpenSSH format and every ed25519 key, so those simply failed to load.
 func encryptedPrivKeyAuth(priv privateKey) (ssh.AuthMethod, error) {
 	fmt.Fprintf(os.Stderr, "This SSH key is encrypted. Please enter passphrase for key '%s':", priv.path)
-	passphrase, err := terminal.ReadPassword(int(syscall.Stdin))
+	passphrase, err := term.ReadPassword(int(syscall.Stdin))
 	if err != nil {
 		return nil, err
 	}
 	fmt.Fprintln(os.Stderr)
 
-	signer, err := DecryptSSHKey(priv.body, passphrase)
+	signer, err := ssh.ParsePrivateKeyWithPassphrase(priv.body, passphrase)
 	if err != nil {
 		return nil, err
 	}

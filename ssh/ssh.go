@@ -2,8 +2,6 @@ package ssh
 
 import (
 	"bytes"
-	"crypto/x509"
-	"encoding/pem"
 	"errors"
 	"fmt"
 	"net"
@@ -290,24 +288,19 @@ func shellQuote(s string) string {
 	return "'" + strings.ReplaceAll(s, "'", `'\''`) + "'"
 }
 
-func DecryptSSHKey(key []byte, password []byte) (gossh.Signer, error) {
-	block, _ := pem.Decode(key)
-	pem, err := x509.DecryptPEMBlock(block, password)
-	if err != nil {
-		return nil, err
-	}
-	sshkey, err := x509.ParsePKCS1PrivateKey(pem)
-	if err != nil {
-		return nil, err
-	}
-	return gossh.NewSignerFromKey(sshkey)
-}
-
 type privateKey struct {
 	path string
 	body []byte
 }
 
+// findPrivateKeyFromName locates a private key by name, trying the name as given
+// and then inside each of keyFolders, with and without a .pem suffix.
+//
+// keyname is not necessarily something the user typed: when `ssh` is called without
+// -i it comes from the instance's KeyPair attribute, that is to say from the AWS
+// API. So a relative name is confined to keyFolders — otherwise a key named
+// "../../../etc/shadow" would send us reading outside them. An absolute path is
+// still honoured, because that is the user passing -i explicitly.
 func findPrivateKeyFromName(keyname string, keyFolders ...string) (privateKey, bool) {
 	var priv privateKey
 
@@ -335,8 +328,13 @@ func findPrivateKeyFromName(keyname string, keyFolders ...string) (privateKey, b
 	}
 
 	for _, path := range keyPaths {
+		if !filepath.IsAbs(keyname) && escapesFolders(path, keyFolders) {
+			logger.Verbosef("ignoring key path %q: it resolves outside %v", path, keyFolders)
+			continue
+		}
 		b, err := os.ReadFile(path)
 		if err == nil {
+			warnOnLooseKeyPermissions(path)
 			priv.path = path
 			priv.body = b
 			return priv, true
@@ -347,6 +345,48 @@ func findPrivateKeyFromName(keyname string, keyFolders ...string) (privateKey, b
 	}
 
 	return priv, false
+}
+
+// escapesFolders reports whether path, once ".." is resolved, still sits inside one
+// of folders. A bare name with no separators is also accepted: that is the common
+// case of looking in the current directory.
+func escapesFolders(path string, folders []string) bool {
+	if filepath.Clean(path) == filepath.Base(path) {
+		return false
+	}
+	abs, err := filepath.Abs(path)
+	if err != nil {
+		return true
+	}
+	for _, folder := range folders {
+		absFolder, err := filepath.Abs(folder)
+		if err != nil {
+			continue
+		}
+		rel, err := filepath.Rel(absFolder, abs)
+		if err != nil {
+			continue
+		}
+		if rel != ".." && !strings.HasPrefix(rel, ".."+string(filepath.Separator)) {
+			return false
+		}
+	}
+	return true
+}
+
+// warnOnLooseKeyPermissions mirrors what openssh does when a private key is
+// readable by anyone besides its owner, except that it warns instead of refusing:
+// the key may still be usable, and a read-only tool failing to connect is worse
+// than a noisy one. Directory and symlink modes are not inspected — os.Stat follows
+// the link, which is the file that actually gets read.
+func warnOnLooseKeyPermissions(path string) {
+	info, err := os.Stat(path)
+	if err != nil {
+		return
+	}
+	if mode := info.Mode().Perm(); mode&0o077 != 0 {
+		logger.Warningf("permissions %#o on private key %q are too open; it is readable by others. openssh would refuse this key", mode, path)
+	}
 }
 
 func checkHostKey(hostname string, remote net.Addr, key gossh.PublicKey) error {
