@@ -139,6 +139,12 @@ var listAllResourceInServiceCmd = func(srvName string) *cobra.Command {
 			displayer, err := console.BuildOptions(
 				console.WithFormat(listingFormat),
 				console.WithMaxWidth(console.GetTerminalWidth()),
+				// --columns was accepted and ignored here, so asking a
+				// service-wide listing for particular columns silently got the
+				// default ones. There is no single resource type to look the
+				// columns up for, so each name is read as a property, which is
+				// what every resource has in common.
+				console.WithColumns(listingColumnsFlag),
 				console.WithIDsOnly(listOnlyIDs),
 			).SetSource(g).Build()
 			exitOn(err)

@@ -18,6 +18,9 @@ package console
 
 import (
 	"bytes"
+	"reflect"
+	"sort"
+	"strings"
 	"testing"
 	"time"
 
@@ -313,23 +316,22 @@ vpc_2`
 		t.Fatalf("got \n%s\n\nwant\n\n%s\n", got, want)
 	}
 
+	// --ids is ids, one per line, and nothing else. It used to emit each resource's
+	// name too, on its own line between the ids, so anything reading the stream got a
+	// mixture of two kinds of string with no way to tell them apart — and this is the
+	// flag whose entire purpose is being read by a program: it forces porcelain.
 	displayer, _ = BuildOptions(
 		WithFormat("porcelain"),
 		WithIDsOnly(true),
 	).SetSource(g).Build()
 
 	expected = `inst_1
-redis
 inst_2
-django
 inst_3
-apache
 sub_1
-my_subnet
 sub_2
 vpc_1
-vpc_2
-my_vpc_2`
+vpc_2`
 
 	w.Reset()
 	if err := displayer.Print(&w); err != nil {
@@ -337,6 +339,138 @@ my_vpc_2`
 	}
 	if got, want := w.String(), expected; got != want {
 		t.Fatalf("got \n%s\n\nwant\n\n%s\n", got, want)
+	}
+}
+
+// Listing a whole service in porcelain used to crash: the columns are chosen per
+// resource type and a service has no single type, so the rows came out empty and the
+// sorter indexed past the end of them. `list infra --format porcelain` was a panic.
+func TestPorcelainAcrossTypesPrintsIdsInsteadOfCrashing(t *testing.T) {
+	g := graph.NewGraph()
+	g.AddResource(
+		resourcetest.Instance("inst_1").Prop(p.Name, "redis").Build(),
+		resourcetest.Instance("inst_2").Prop(p.Name, "django").Build(),
+		resourcetest.Subnet("sub_1").Prop(p.Name, "my_subnet").Build(),
+		resourcetest.VPC("vpc_1").Build(),
+	)
+
+	// No rdfType and no columns, which is exactly how the service-level listing
+	// builds its displayer.
+	displayer, err := BuildOptions(WithFormat("porcelain")).SetSource(g).Build()
+	if err != nil {
+		t.Fatal(err)
+	}
+
+	var w bytes.Buffer
+	if err := displayer.Print(&w); err != nil {
+		t.Fatal(err)
+	}
+
+	got := strings.Split(w.String(), "\n")
+	sort.Strings(got)
+	want := []string{"inst_1", "inst_2", "sub_1", "vpc_1"}
+	if !reflect.DeepEqual(got, want) {
+		t.Errorf("got %v, want %v: ids are what porcelain is for", got, want)
+	}
+}
+
+// A column naming no declared column is read as a property name, and that lookup is
+// case sensitive. The name used to be guessed with strings.Title, so "id" became "Id"
+// while the property is "ID", and the column came out blank. Per-type listings hid it
+// because ID is a declared column there; `list infra --columns id,name` printed names
+// and nothing else.
+func TestRequestedColumnsResolveToRealPropertyNames(t *testing.T) {
+	cases := map[string]string{
+		"id":        "ID",
+		"ID":        "ID",
+		"Id":        "ID",
+		"name":      "Name",
+		"publicip":  "PublicIP",
+		"PUBLICIP":  "PublicIP",
+		"privateip": "PrivateIP",
+		"cidr":      "CIDR",
+		"arn":       "Arn",
+		// Not a property of anything: left exactly as typed, because altering it
+		// could only turn a name that would have matched into one that cannot.
+		"nosuchproperty": "nosuchproperty",
+	}
+
+	for requested, want := range cases {
+		if got := canonicalPropertyName(requested); got != want {
+			t.Errorf("%q resolved to %q, want %q", requested, got, want)
+		}
+	}
+}
+
+// The same thing end to end: a listing with no single resource type, where every
+// requested column goes through that lookup.
+func TestColumnsWorkForAServiceWideListing(t *testing.T) {
+	g := graph.NewGraph()
+	g.AddResource(
+		resourcetest.Instance("inst_1").Prop(p.Name, "redis").Build(),
+		resourcetest.VPC("vpc_1").Prop(p.Name, "my_vpc").Build(),
+	)
+
+	displayer, err := BuildOptions(
+		WithFormat("porcelain"),
+		WithColumns([]string{"id", "name"}),
+	).SetSource(g).Build()
+	if err != nil {
+		t.Fatal(err)
+	}
+
+	var w bytes.Buffer
+	if err := displayer.Print(&w); err != nil {
+		t.Fatal(err)
+	}
+
+	got := strings.Split(w.String(), "\n")
+	sort.Strings(got)
+	want := []string{"inst_1", "my_vpc", "redis", "vpc_1"}
+	if !reflect.DeepEqual(got, want) {
+		t.Errorf("got %v, want %v: the ids are missing if 'id' does not resolve to the ID property", got, want)
+	}
+}
+
+// A displayer building rows narrower than the column the sorter was pointed at must
+// not take the process down. A row with no such column has no value for it, which is
+// what nil means everywhere else here.
+func TestSorterToleratesRowsWithoutTheSortColumn(t *testing.T) {
+	sorter := &defaultSorter{sortBy: []int{0, 2}}
+
+	lines := table{
+		{},
+		{"b"},
+		{"a", "x", "z"},
+		{},
+		{"a", "x", "y"},
+	}
+
+	// The assertion is that this returns at all; before, it panicked.
+	sorter.sort(lines)
+
+	if len(lines) != 5 {
+		t.Errorf("sorting changed the number of rows to %d", len(lines))
+	}
+
+	// The two full rows still order by the second sort column.
+	var full [][]interface{}
+	for _, row := range lines {
+		if len(row) == 3 {
+			full = append(full, row)
+		}
+	}
+	if len(full) != 2 {
+		t.Fatalf("expected the two full rows, got %d", len(full))
+	}
+	if full[0][2] != "y" {
+		t.Errorf("full rows sorted to %v, want the one ending in y first", full)
+	}
+
+	// And descending is the same order reversed, not a crash either.
+	(&defaultSorter{sortBy: []int{0, 2}, descending: true}).sort(lines)
+	if len(lines) != 5 {
+		t.Errorf("descending sort changed the number of rows to %d", len(lines))
 	}
 }
 

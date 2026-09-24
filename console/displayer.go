@@ -31,6 +31,7 @@ import (
 	"github.com/olekukonko/tablewriter"
 	"github.com/theazz/awless-ro/cloud"
 	"github.com/theazz/awless-ro/cloud/match"
+	"github.com/theazz/awless-ro/cloud/rdf"
 	"github.com/theazz/awless-ro/graph"
 )
 
@@ -238,19 +239,44 @@ func WithColumns(properties []string) optsFn {
 		for _, p := range properties {
 			var found bool
 			for _, definition := range DefaultsColumnDefinitions[b.rdfType] {
-				if strings.ToLower(p) == strings.ToLower(definition.propKey()) || strings.ToLower(p) == strings.ToLower(definition.title()) {
+				if strings.EqualFold(p, definition.propKey()) || strings.EqualFold(p, definition.title()) {
 					found = true
 					columns = append(columns, definition)
 					continue
 				}
 			}
 			if !found {
-				columns = append(columns, StringColumnDefinition{Prop: strings.Title(p)})
+				columns = append(columns, StringColumnDefinition{Prop: canonicalPropertyName(p)})
 			}
 		}
 		b.columnDefinitions = columns
 		return b
 	}
+}
+
+// canonicalPropertyName maps what a user typed to the property name resources
+// actually carry, matching case insensitively the way the declared columns above do.
+//
+// A column naming no declared column is read as a property name, which is the only
+// way to reach the many properties no listing declares a column for — an instance's
+// Architecture or Lifecycle, say. That lookup is case sensitive, and the name used to
+// be guessed with strings.Title: "id" became "Id", and the property is "ID", so
+// `--columns id` produced a blank column. Per-type listings hid it, because there ID
+// is a declared column and never reaches this path; `list infra --columns id,name`
+// printed nothing but names.
+//
+// rdf.Labels is keyed by the canonical names, and is generated from the same
+// definitions the fetchers fill in, so it cannot drift from what resources hold.
+func canonicalPropertyName(requested string) string {
+	for label := range rdf.Labels {
+		if strings.EqualFold(requested, label) {
+			return label
+		}
+	}
+	// Not a known property. Left exactly as typed: it may be something only some
+	// resources carry, and altering it could only turn a name that would have
+	// matched into one that cannot.
+	return requested
 }
 
 func WithColumnDefinitions(definitions []ColumnDefinition) optsFn {
@@ -288,12 +314,18 @@ func WithTagValueFilters(fs []string) optsFn {
 	}
 }
 
+// WithIDsOnly reduces the output to one id per line.
+//
+// It used to emit the name as well, on its own line, interleaved with the ids. The
+// flag is called --ids and documented "List only ids", and its whole point is being
+// read by something other than a person — it forces the porcelain format — so a name
+// in that stream is a value a script will use as an id and fail on. The one caller
+// that wanted both was the shell completion, which now asks for both by name.
 func WithIDsOnly(only bool) optsFn {
 	return func(b *Builder) *Builder {
 		if only {
 			b.columnDefinitions = []ColumnDefinition{
 				&StringColumnDefinition{Prop: "ID"},
-				&StringColumnDefinition{Prop: "Name"},
 			}
 			b.format = "porcelain"
 		}
@@ -611,6 +643,16 @@ func (d *porcelainDisplayer) Print(w io.Writer) error {
 		types = append(types, d.rdfType)
 	}
 
+	// Listing a whole service rather than one resource type arrives here with no
+	// columns at all: the columns are chosen per type, and there is no single type.
+	// That produced rows of width zero, and `list infra --format porcelain` then
+	// crashed in the sorter with an index out of range. Ids are what porcelain is
+	// for, so that is the column.
+	columns := d.columnDefinitions
+	if len(columns) == 0 {
+		columns = []ColumnDefinition{&StringColumnDefinition{Prop: "ID"}}
+	}
+
 	var values table
 	for _, t := range types {
 		resources, err := d.g.Find(cloud.NewQuery(t))
@@ -619,8 +661,8 @@ func (d *porcelainDisplayer) Print(w io.Writer) error {
 		}
 
 		for _, res := range resources {
-			var row = make([]interface{}, len(d.columnDefinitions))
-			for j, h := range d.columnDefinitions {
+			var row = make([]interface{}, len(columns))
+			for j, h := range columns {
 				row[j] = res.Properties()[h.propKey()]
 			}
 			values = append(values, row)
@@ -632,7 +674,7 @@ func (d *porcelainDisplayer) Print(w io.Writer) error {
 	var lines []string
 
 	for i := range values {
-		for j := range d.columnDefinitions {
+		for j := range columns {
 			v := values[i][j]
 			if v != nil {
 				val := fmt.Sprint(v)
@@ -901,28 +943,33 @@ type defaultSorter struct {
 }
 
 func (d *defaultSorter) sort(lines table) {
-	var compare func(i, j int) bool
-	if d.descending {
-		compare = func(j, i int) bool {
-			for _, col := range d.sortBy {
-				if reflect.DeepEqual(lines[i][col], lines[j][col]) {
-					continue
-				}
-				return valueLowerOrEqual(lines[i][col], lines[j][col])
-			}
-			return false
+	// The sort column defaults to 0 and the rows are built by each displayer, so a
+	// displayer producing narrower rows than the sorter expects used to take the
+	// process down with an index out of range. A row too short to have the column
+	// simply has no value for it, which is what nil means here everywhere else.
+	cell := func(i, col int) interface{} {
+		if col >= len(lines[i]) {
+			return nil
 		}
-	} else {
-		compare = func(i, j int) bool {
-			for _, col := range d.sortBy {
-				if reflect.DeepEqual(lines[i][col], lines[j][col]) {
-					continue
-				}
-				return valueLowerOrEqual(lines[i][col], lines[j][col])
-			}
-			return false
-		}
+		return lines[i][col]
 	}
+
+	compare := func(i, j int) bool {
+		for _, col := range d.sortBy {
+			a, b := cell(i, col), cell(j, col)
+			if reflect.DeepEqual(a, b) {
+				continue
+			}
+			return valueLowerOrEqual(a, b)
+		}
+		return false
+	}
+	if d.descending {
+		// Descending is the same comparison with the operands swapped.
+		asc := compare
+		compare = func(i, j int) bool { return asc(j, i) }
+	}
+
 	sort.Slice(lines, compare)
 }
 

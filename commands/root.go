@@ -119,17 +119,20 @@ var bash_completion_func = fmt.Sprintf(bashCompletionTempl, strings.Join(awsconf
 
 const (
 	bashCompletionTempl = `
+# Completion offers ids and names both, because a resource reference accepts
+# either. It asks for them by name rather than through --ids, which is only ids:
+# a flag read by scripts must not mix the two.
 __awless_ro_get_all_ids()
 {
 		local all_ids_output
-		if all_ids_output=$(awless-ro list infra --local --ids 2>/dev/null; awless-ro list access --local --ids 2>/dev/null); then
+		if all_ids_output=$(awless-ro list infra --local --format porcelain --columns id,name 2>/dev/null; awless-ro list access --local --format porcelain --columns id,name 2>/dev/null); then
 		COMPREPLY=( $( compgen -W "${all_ids_output[*]}" -- "$cur" ) )
 		fi
 }
 __awless_ro_get_instances_ids()
 {
 		local all_ids_output
-		if all_ids_output=$(awless-ro list instances --local --ids 2>/dev/null); then
+		if all_ids_output=$(awless-ro list instances --local --format porcelain --columns id,name 2>/dev/null); then
 		COMPREPLY=( $( compgen -W "${all_ids_output[*]}" -- "$cur" ) )
 		fi
 }
