@@ -1,3 +1,274 @@
+# Changelog
+
+## v0.1.0 — first release of awless-ro
+
+Fork of [wallix/awless](https://github.com/wallix/awless) at `44e892b4`, unmaintained
+since 2018. The version number restarts: continuing upstream's `v0.1.11` would imply a
+compatibility that does not exist.
+
+Upstream's own changelog is kept below, unchanged, as the provenance of everything
+this inherits.
+
+Everything in this entry is a difference from `44e892b4`. Where a defect was inherited
+rather than introduced here, it says so — the distinction matters, because an
+inherited defect means the same bug is in the last released `awless` binary.
+
+### Removed
+
+The write half is gone. It was both the larger maintenance burden and the part least
+safe to run unmaintained against a live account: six years of AWS API drift sits
+between that code and reality, and its failure mode is not a wrong listing but a wrong
+change.
+
+- The templating language, the `.aws` template format, its lexer, parser, compiler and
+  runner.
+- Every `create`, `update`, `delete`, `attach`, `detach`, `start`, `stop`, `restart`,
+  `check` and `copy` command, and the generated one-liner CLI behind them.
+- `awless log` and `awless revert`, and the BoltDB tables backing them. The database
+  remains for configuration.
+- The scheduler integration, and with it the `github.com/wallix/awless-scheduler`
+  dependency.
+- `awless web` and the embedded HTTP server.
+- `gopkg.in/src-d/go-git.v4`: the sync kept the local graph in a git repository and
+  committed each sync. Nothing read the history.
+- The `pricer` inspector. It sent an inventory of the account's EC2 instances to
+  `ec2-price.com` over plain HTTP. That domain **was not registered** when this fork
+  was made — `whois` returned no match — so anyone could have taken the name and
+  started collecting. Removed rather than repointed.
+- The `defaultsDefinitions` config store. Every entry in it — `instance.type`,
+  `instance.count`, `securitygroup.protocol`, `volume.device` and the rest — supplied
+  a default parameter to one of the removed commands, so nothing read them any more. A
+  setting the user can change with no effect is worse than no setting. The store
+  itself is kept, because older local databases may hold the legacy `region` and
+  `sync.auto` keys.
+
+`awless-ro switch` and `awless-ro config set` remain: they write to your
+configuration, not to AWS.
+
+Not yet working:
+
+- **`awless-ro ssh`** is disabled. The resolution and connection logic is largely
+  sound — against a live account it resolved an instance name to its private IP
+  through the local graph and reached the host — but `--local` panics, `--print-cli`
+  connects instead of printing, and the host key prompt loops when there is no
+  terminal. The command explains this rather than running.
+
+### Read-only is enforced, not intended
+
+Every AWS call goes through a narrow per-service interface; nothing else in the tree
+holds an SDK client. `TestEveryAWSOperationIsARead` reflects over those interfaces and
+fails if any method name does not begin with `Describe`, `Get`, `List` or `Head`, or
+if a field is a concrete client rather than an interface. Currently 62 operations
+across 18 services. Reflecting over the struct rather than a hand-written list means a
+service added later is covered without anyone remembering.
+
+This constrains the tool, not your credentials. An administrative profile is still an
+administrative profile.
+
+### Platform
+
+- Go modules instead of `dep`; no `vendor/` directory. Module path
+  `github.com/theazz/awless-ro`.
+- Go 1.26.
+- **AWS SDK v2**, from v1.10.27 (2017). The migration is behind a test written first:
+  SDK v2 changes the value semantics the reflective property extraction assumes —
+  scalars stop being pointers, list elements stop being pointers, enums become named
+  string types — and none of that is a compile error. Without it the binary would have
+  built, run, and listed resources with silently empty columns.
+- `go.etcd.io/bbolt` instead of the archived `github.com/boltdb/bolt`.
+- `golang.org/x/crypto` at v0.57.0, from a 2018 revision carrying three CVEs
+  reachable from this code: CVE-2020-9283, CVE-2021-43565 and CVE-2022-27191, all in
+  the SSH client path.
+- `github.com/wallix/triplestore` replaced by an in-tree `triplestore/` package. The
+  dependency was unmaintained and most of it was unused; a quarter of it covered what
+  this tool needs. The replacement is 1246 lines at 86% coverage, and writing it
+  surfaced six defects in the original, listed below.
+- Binary, module and state directory renamed to `awless-ro` / `~/.awless-ro`.
+  Sharing `~/.awless` with an installed upstream `awless` would mean sharing its
+  graph, database and key directory.
+
+### Defects fixed
+
+**Wrong answers about your account.** All nine of these were found by running against
+a live account; none was visible to a unit test, because each turns on something a
+test cannot know about AWS. See [docs/live-check.md](docs/live-check.md).
+
+- `search images <vendor> --latest-id` returned a **specialised build instead of the
+  ordinary image** for three of the six vendors: `al2023-ami-minimal-`,
+  `debian-13-backports-`, `suse-…-sp6-chost-byos-`. Vendors publish these alongside
+  the ordinary image, under a name sharing its prefix and sometimes seconds newer, and
+  the newest match won. The SUSE case is the damaging one: `byos` means bring your own
+  subscription, so that instance comes up unregistered, and `chost` is a container host
+  rather than a general-purpose server — none of it visible in the printed id. The EC2
+  name filter cannot express the difference, because its only wildcard matches hyphens
+  too, so each vendor now also declares an anchored expression applied after the
+  fetch. (Inherited: upstream's patterns had the same shape.)
+- **Image ordering turned on a one-second publication gap.** Amazon Linux publishes
+  kernel 6.1, 6.12 and 6.18 builds of one release within seconds, and the 6.1 build
+  happened to land last, so it was reported as the latest while AWS's own
+  `al2023-ami-kernel-default` pointer named 6.18. Images of one release are now ranked
+  among themselves by name, and a release is dated by its newest image.
+- **Every failure exited 0.** `main` discarded the error from the root command. For
+  output built to be read by a program — `id=$(awless-ro search images canonical
+  --latest-id)` — a failed lookup was indistinguishable from success with an empty id.
+  (Inherited.)
+- **The flag list printed over the error message.** cobra prints usage whenever a
+  command returns an error, which is right for a mistyped flag and wrong for "no image
+  matched": the message a person needs scrolled off the top. Usage is now silenced
+  once the command line has parsed. (Inherited.)
+- **`show <sns-topic>` exited 1 with an internal message.** SNS subscriptions were
+  keyed by their endpoint, and for the `lambda` and `sqs` protocols an endpoint *is*
+  another resource's ARN — so the subscription and the function became one graph node
+  carrying two `rdf:type` triples, and everything holding only an id failed.
+  `list subscriptions` kept working because it resolves by type first, which is how
+  this survived to a live account. The same key also merged distinct subscriptions:
+  one queue subscribed to two topics is two subscriptions and was one node.
+  (Inherited.)
+- **A disabled resource type was reported as `0`.** `-> dns: 2 zones, 0 record`
+  against an account holding 84 records. Two types are off by default because they
+  cost an API call per parent; zero is an answer about the account, and nothing had
+  been looked at. Now `records: off (aws.dns.record.sync)`. The help text for those
+  keys also said `(when empty: true)` while sitting beside the value `false`.
+  (Inherited.)
+- **`list infra --format porcelain` panicked.** Columns are chosen per resource type,
+  a whole-service listing has no single type, so rows were built zero cells wide while
+  the sorter ordered by column 0. (Inherited.)
+- **`--columns id` produced a blank column** for whole-service listings. A name
+  matching no declared column is read as a property name — the only way to reach
+  properties no listing declares a column for, such as an instance's `Architecture` —
+  and the name was guessed with `strings.Title`, so `id` became `Id` while the
+  property is `ID`. Names now resolve through the generated property registry.
+  (Inherited.)
+- **A relation pointing outside the local graph stopped the traversal.** A node named
+  by a relation but never fetched has no type, which is ordinary: relations cross
+  services, and a service may be off, refused for want of permissions, or not synced.
+  One security group applying to something unsynced was enough to end
+  `inspect -i port_scanner` with "resource type not found" and no output at all. The
+  direct listing methods already answered with `NotFoundResource`, so the same graph
+  was fine through one door and fatal through another. (Inherited.)
+
+**Data integrity.**
+
+- **Composite ids merged distinct resources.** The id for a Route53 record or a
+  CloudWatch metric is a hash of its fields, and the fields were concatenated without
+  a separator and hashed with adler32. `("AWS/EC2", "CPUUtilization")` and
+  `("AWS/EC2C", "PUUtilization")` produced the same id. Now NUL-separated and hashed
+  with truncated SHA-256. (Inherited.)
+- Six defects in the triple store, found while replacing it: N-Triples escaping
+  handled only `\n` and `\r`, so a literal backslash-n in a value was written as a
+  real newline and read back changed, and a language tag could truncate the value;
+  the object of a triple was parsed from the left, which mis-split values containing
+  the delimiter; `clone()` dropped a blank node's sub-node flag; `Resource()`
+  reported blank nodes as resources; `Equal()` did not distinguish blank nodes;
+  `TraverseDFS` swallowed the error from its visitor. The on-disk format was pinned by
+  a golden-file test before the replacement, and both the pre-existing and current
+  files are checked against it. (Inherited.)
+- `inspect -i bucket_sizer` read properties with unchecked type assertions, so an
+  object carrying no `Bucket`, or a `Size` that did not arrive as an `int`, took the
+  process down. Its output was also ordered by map iteration, so the same data printed
+  differently on every run. (Inherited.)
+
+**Security.**
+
+- The SSH `ProxyCommand` path wrote an executable shell script into the shared `/tmp`
+  on every connection, at a predictable path, and then ran it — a symlink and a race
+  away from executing someone else's code, and the script interpolated a hostname into
+  a shell command line. Removed; the workaround it implemented was for an OpenSSH CVE
+  fixed in 2016. Verified against `ssh -G` and `sh -c` that quoting now behaves.
+- `awless-ro whoami`'s public-IP lookup went to an HTTP endpoint; now HTTPS.
+- Private key handling: `x509.DecryptPEMBlock`, deprecated and not
+  authenticated, replaced with `ssh.ParsePrivateKeyWithPassphrase`. Key files with
+  permissions other than 0600 are refused rather than used. A keypair name containing
+  `..` can no longer escape the keys directory.
+- Directory creation errors were discarded, turning a permissions problem into a
+  confusing failure to open a file in a directory that was never created. Modes are
+  now explicit: 0700 for directories holding keys or an account's synced picture, 0600
+  for the files.
+- `show` on an instance no longer prints its `UserData`. Bootstrap scripts routinely
+  carry tokens, and it was displayed in full, in a table, by default.
+
+**Correctness of the credentials path.** (The prompt and cache are new here; upstream
+resolved credentials differently.)
+
+- The first run did not reach credential resolution at all when `~/.aws` was absent —
+  exactly the case the prompt exists for — because a profile not being defined was
+  treated as an error.
+- The prompt echoed the secret access key as it was typed.
+- With no terminal it looped forever instead of failing with a message.
+- An existing profile section was appended to rather than left alone, producing a
+  duplicate section that breaks the file for every reader.
+- `errors.As` against `*SharedConfigProfileNotExistError` never matched, because the
+  SDK declares `Error()` on the value and returns a value. The first version of the
+  fix above looked right and silently did nothing.
+
+### Behaviour changes worth knowing
+
+- `--ids` prints ids only. It used to print each resource's name as well, on its own
+  line between the ids, which a script cannot tell apart from an id. Shell completion,
+  which wants both, now asks for both explicitly.
+- `--columns` is honoured for whole-service listings, where it was accepted and
+  ignored.
+- `search images` is no longer a hidden command, and its deprecated `--id-only` flag
+  is gone in favour of `--latest-id`.
+- AMI search pins the publishing account with the `Owners` request parameter rather
+  than an `owner-id` filter, and refuses a search that names no account
+  (`ErrNoOwner`) before sending a request. Both are controls against the
+  [whoAMI name confusion attack](https://securitylabs.datadoghq.com/articles/whoami-a-cloud-image-name-confusion-attack/),
+  disclosed in 2025, which turned exactly this into code execution for tooling that
+  fed the result to `run-instances`. This tool launches nothing, but it prints an id
+  that a person will paste somewhere.
+- AMI matching happens on the AWS side. Upstream fetched every public image an owner
+  had ever published and filtered in Go with `strings.HasPrefix`; Canonical alone has
+  tens of thousands.
+- AMI vendors `coreos` and `centos` removed. CoreOS Container Linux reached end of
+  life in 2020. CentOS Linux 7 did so in June 2024, and the account publishing CentOS
+  Stream images could not be confirmed from a source belonging to the project or to
+  AWS — the Marketplace listings under that name are third-party rebuilds. Shipping an
+  unverified account id is the whoAMI mistake. Both are named in the error, with the
+  `--owner`/`--name` escape hatch.
+- `search images` accepts `arm64`. Upstream accepted only `i386` and `x86_64`;
+  Graviton did not exist when that list was written.
+- Vendor account ids and name patterns were re-verified, and two had drifted: Debian
+  now publishes from `136693071363`, not `379101102735`, and Canonical's image names
+  gained a storage-class segment (`hvm-ssd` became `hvm-ssd-gp3`).
+- Region defaults, sync toggles and profile handling are unchanged, but settings that
+  only affected removed commands are gone from `config list`.
+
+### Supply chain and tooling
+
+- CI pins every action to a commit SHA, declares least-privilege `permissions`, runs
+  `go mod verify` and `govulncheck`, and gates on generated files being current. Each
+  gate was checked by mutation — a deliberately broken tree must fail it.
+- Releases publish `SHA256SUMS`, in a format `sha256sum -c` and `shasum -a 256 -c`
+  both accept. Release artefacts are built for darwin and linux on amd64 and arm64,
+  and windows on amd64; 386 was dropped.
+- The release tool used to exit 0 having produced a partial release when a build
+  failed, and replaced the environment wholesale so the module cache could not be
+  found.
+- [CONTRIBUTING.md](CONTRIBUTING.md) records the supply-chain rules for adding a
+  dependency.
+- Code generation is idempotent and verified as such in CI.
+
+### Tests
+
+`go test ./... -race` is green and no test requires AWS credentials, which is checked
+by running with an empty `HOME` and no `AWS_*` variables.
+
+Coverage where it matters: `aws/image` 98%, `cloud/match` 96%, `sync` 92%,
+`triplestore` 86%, `aws/credentials` 80%, `aws/conv` 80%. The `commands` package had
+no tests at all and now has some.
+
+Every fix above is pinned by a test that was checked by mutation: restoring the old
+behaviour must fail it. Several of these fixes exist *because* writing the test
+surfaced the defect — the composite id collision and the N-Triples escaping both came
+out that way.
+
+---
+
+# Upstream changelog (wallix/awless)
+
+Everything below is upstream's changelog as of `44e892b4`, kept unchanged.
+
 ## v0.1.11 [2018-06-21]
 
 **Check out our new article** on [Simplified Multi-Factor Authentication](https://medium.com/@awlessCLI/simplified-multi-factor-authentication-for-aws-d703e8d9f332) with `awless`
