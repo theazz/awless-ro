@@ -89,9 +89,9 @@ func TestProfileValid(t *testing.T) {
 		os.RemoveAll(awsHomeTmp)
 	}()
 
-	awsHomeFunc = func() string {
-		return awsHomeTmp
-	}
+	previousHome := AWSHomeDir
+	AWSHomeDir = func() string { return awsHomeTmp }
+	t.Cleanup(func() { AWSHomeDir = previousHome })
 
 	os.WriteFile(filepath.Join(awsHomeTmp, "config"), []byte(`[profile mfa]
 region = us-west-1

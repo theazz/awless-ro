@@ -18,6 +18,7 @@ package commands
 
 import (
 	"context"
+	"errors"
 	"fmt"
 	"os"
 	"strings"
@@ -217,11 +218,24 @@ func firstInstallDoneHook(cmd *cobra.Command, args []string) error {
 // pins in ~/.aws/{config,credentials}, if any. It is loaded without credential
 // resolution because only the region is wanted here; asking for credentials
 // would prompt for an MFA code just to answer a question about a config file.
+//
+// A profile that is not defined is not a failure, it is the answer "no region".
+// Treating it as an error made the very first run fail before it got anywhere near
+// resolving credentials: with no ~/.aws at all, the SDK reports that the default
+// profile does not exist, and the command died there instead of offering to create
+// one.
 func hasEmbeddedRegionInSharedConfigForProfile(profile string) (string, bool, error) {
 	cfg, err := awsconfigv2.LoadDefaultConfig(context.Background(),
 		awsconfigv2.WithSharedConfigProfile(profile),
 	)
 	if err != nil {
+		// Matched by value, not by pointer: the SDK declares Error() on the value
+		// receiver and returns the struct itself, so errors.As with a **T target
+		// silently never matches.
+		var missing awsconfigv2.SharedConfigProfileNotExistError
+		if errors.As(err, &missing) {
+			return "", false, nil
+		}
 		return "", false, fmt.Errorf("cannot check profile '%s' has embedded region in shared config file: %s", profile, err)
 	}
 	return cfg.Region, cfg.Region != "", nil

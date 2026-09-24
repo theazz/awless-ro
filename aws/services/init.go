@@ -17,8 +17,10 @@ limitations under the License.
 package awsservices
 
 import (
+	"context"
 	"errors"
 
+	awscredentials "github.com/theazz/awless-ro/aws/credentials"
 	"github.com/theazz/awless-ro/cloud"
 	"github.com/theazz/awless-ro/logger"
 )
@@ -32,14 +34,18 @@ func Init(profile, region string, extraConf map[string]interface{}, log *logger.
 		return errors.New("empty AWS region. Set it with `awless config set aws.region`")
 	}
 
-	resolver := newConfigResolver().
-		withRegion(region).
-		withProfile(profile).
-		withNetworkMonitor(enableNetworkMonitor).
-		withLogger(log).
-		withCredentialResolvers()
+	params := awscredentials.Params{
+		Profile:     profile,
+		Region:      region,
+		CacheDir:    awscredentials.CacheDir(),
+		AllowPrompt: true,
+		Log:         log,
+	}
+	if enableNetworkMonitor {
+		params.APIOptions = DefaultNetworkMonitor.APIOptions()
+	}
 
-	cfg, err := resolver.resolve()
+	cfg, err := awscredentials.Resolve(context.Background(), params)
 	if err != nil {
 		return err
 	}

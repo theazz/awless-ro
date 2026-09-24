@@ -186,12 +186,14 @@ func IsValidProfile(given string) bool {
 	return stringInSlice(given, AllProfiles())
 }
 
-var awsHomeFunc func() string = AWSHomeDir
-
 var profileNameRegex = regexp.MustCompile(`\[(.*)\]`)
 
+// AllProfiles reads AWSHomeDir at call time rather than through a copy taken at
+// package initialisation. The copy meant that replacing AWSHomeDir — which is a
+// variable precisely so it can be replaced — moved some lookups and not this one, so
+// two places in the same run disagreed about where ~/.aws was.
 func AllProfiles() (profiles []string) {
-	awsHome := awsHomeFunc()
+	awsHome := AWSHomeDir()
 	files := []string{filepath.Join(awsHome, "config"), filepath.Join(awsHome, "credentials")}
 	for _, f := range files {
 		if _, err := os.Stat(f); err != nil {
