@@ -42,6 +42,7 @@ import (
 	route53types "github.com/aws/aws-sdk-go-v2/service/route53/types"
 	s3types "github.com/aws/aws-sdk-go-v2/service/s3/types"
 	snstypes "github.com/aws/aws-sdk-go-v2/service/sns/types"
+	awsconv "github.com/theazz/awless-ro/aws/conv"
 	"github.com/theazz/awless-ro/aws/fetch"
 	"github.com/theazz/awless-ro/cloud"
 	p "github.com/theazz/awless-ro/cloud/properties"
@@ -913,11 +914,38 @@ func TestBuildNotificationGraph(t *testing.T) {
 		{TopicArn: awssdk.String("topic_arn_3")},
 	}
 
+	// ListSubscriptions always carries a SubscriptionArn: a real one, or the literal
+	// "PendingConfirmation" until the endpoint owner accepts. The fixture used to
+	// leave it unset on two of the three, which no account ever returns.
+	//
+	// The lambda one is the case that matters. Its endpoint is the function's arn, so
+	// keying a subscription by its endpoint put the subscription and the function on
+	// one graph node under two types, and every lookup with only an id to go on then
+	// failed: `show <topic>` died on "cannot resolve unique type for resource".
 	subscriptions := []snstypes.Subscription{
-		{Endpoint: awssdk.String("endpoint_1")},
-		{Endpoint: awssdk.String("endpoint_2"), Owner: awssdk.String("subscr_owner"), Protocol: awssdk.String("subscr_prot"), SubscriptionArn: awssdk.String("subscr_arn"), TopicArn: awssdk.String("topic_arn_2")},
-		{Endpoint: awssdk.String("endpoint_3"), TopicArn: awssdk.String("topic_arn_2")},
+		{
+			Endpoint:        awssdk.String("arn:aws:lambda:eu-west-1:123456789012:function:notify"),
+			Protocol:        awssdk.String("lambda"),
+			SubscriptionArn: awssdk.String("arn:aws:sns:eu-west-1:123456789012:topic_arn_1:sub-uuid-1"),
+			TopicArn:        awssdk.String("topic_arn_1"),
+		},
+		{
+			Endpoint:        awssdk.String("endpoint_2"),
+			Owner:           awssdk.String("subscr_owner"),
+			Protocol:        awssdk.String("subscr_prot"),
+			SubscriptionArn: awssdk.String("subscr_arn"),
+			TopicArn:        awssdk.String("topic_arn_2"),
+		},
+		// Awaiting confirmation, so it has no arn of its own yet.
+		{
+			Endpoint:        awssdk.String("ops@example.com"),
+			Protocol:        awssdk.String("email"),
+			SubscriptionArn: awssdk.String("PendingConfirmation"),
+			TopicArn:        awssdk.String("topic_arn_2"),
+		},
 	}
+	// The identity a pending subscription falls back on: what it was created from.
+	pendingID := awsconv.HashFields("topic_arn_2", "email", "ops@example.com")
 	queues := []string{"queue_1", "queue_2", "queue_3"}
 	attributes := map[string]map[string]string{
 		"queue_2": {
@@ -950,17 +978,26 @@ func TestBuildNotificationGraph(t *testing.T) {
 		t.Fatal(err)
 	}
 
+	const lambdaSubArn = "arn:aws:sns:eu-west-1:123456789012:topic_arn_1:sub-uuid-1"
+
 	expected := map[string]cloud.Resource{
-		"endpoint_1":  resourcetest.Subscription("endpoint_1").Prop(p.Endpoint, "endpoint_1").Build(),
-		"endpoint_2":  resourcetest.Subscription("endpoint_2").Prop(p.Endpoint, "endpoint_2").Prop(p.Owner, "subscr_owner").Prop(p.Protocol, "subscr_prot").Prop(p.Arn, "subscr_arn").Prop(p.Topic, "topic_arn_2").Build(),
-		"endpoint_3":  resourcetest.Subscription("endpoint_3").Prop(p.Endpoint, "endpoint_3").Prop(p.Topic, "topic_arn_2").Build(),
+		lambdaSubArn: resourcetest.Subscription(lambdaSubArn).
+			Prop(p.Endpoint, "arn:aws:lambda:eu-west-1:123456789012:function:notify").
+			Prop(p.Protocol, "lambda").Prop(p.Arn, lambdaSubArn).Prop(p.Topic, "topic_arn_1").Build(),
+		"subscr_arn": resourcetest.Subscription("subscr_arn").Prop(p.Endpoint, "endpoint_2").
+			Prop(p.Owner, "subscr_owner").Prop(p.Protocol, "subscr_prot").
+			Prop(p.Arn, "subscr_arn").Prop(p.Topic, "topic_arn_2").Build(),
+		pendingID: resourcetest.Subscription(pendingID).Prop(p.Endpoint, "ops@example.com").
+			Prop(p.Protocol, "email").Prop(p.Arn, "PendingConfirmation").
+			Prop(p.Topic, "topic_arn_2").Build(),
 		"topic_arn_1": resourcetest.Topic("topic_arn_1").Prop(p.Arn, "topic_arn_1").Build(),
 		"topic_arn_2": resourcetest.Topic("topic_arn_2").Prop(p.Arn, "topic_arn_2").Build(),
 		"topic_arn_3": resourcetest.Topic("topic_arn_3").Prop(p.Arn, "topic_arn_3").Build(),
 	}
 	expectedChildren := map[string][]string{
 		"eu-west-1":   {"topic_arn_1", "topic_arn_2", "topic_arn_3"},
-		"topic_arn_2": {"endpoint_2", "endpoint_3"},
+		"topic_arn_1": {lambdaSubArn},
+		"topic_arn_2": {pendingID, "subscr_arn"},
 	}
 	expectedAppliedOn := map[string][]string{}
 

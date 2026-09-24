@@ -164,8 +164,13 @@ var sdkPrototypes = map[string][]func() interface{}{
 	cloud.S3Object: {func() interface{} { return s3types.Object{Key: awssdk.String("my/object")} }},
 
 	// Messaging
-	cloud.Subscription: {func() interface{} { return snstypes.Subscription{Endpoint: awssdk.String("me@example.com")} }},
-	cloud.Topic:        {func() interface{} { return snstypes.Topic{TopicArn: awssdk.String("arn:aws:sns:topic/1")} }},
+	cloud.Subscription: {func() interface{} {
+		return snstypes.Subscription{
+			Endpoint:        awssdk.String("me@example.com"),
+			SubscriptionArn: awssdk.String("arn:aws:sns:eu-west-1:123456789012:alerts:sub-uuid"),
+		}
+	}},
+	cloud.Topic: {func() interface{} { return snstypes.Topic{TopicArn: awssdk.String("arn:aws:sns:topic/1")} }},
 
 	// DNS
 	cloud.Zone: {func() interface{} { return route53types.HostedZone{Id: awssdk.String("/hostedzone/Z1")} }},

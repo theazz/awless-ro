@@ -170,7 +170,27 @@ func InitResource(source interface{}) (*graph.Resource, error) {
 		res = graph.InitResource(cloud.S3Object, awssdk.ToString(ss.Key))
 	// SNS
 	case snstypes.Subscription:
-		res = graph.InitResource(cloud.Subscription, awssdk.ToString(ss.Endpoint))
+		// The subscription's own arn, not its endpoint.
+		//
+		// An endpoint is not an identity of the subscription: it is a reference to
+		// something else, and for the lambda and sqs protocols it is that thing's
+		// arn. So a lambda subscription produced a graph node sharing an id with the
+		// function, giving one node two rdf:type triples, and every lookup that has
+		// only an id to go on then failed outright — `show <topic>` printed the
+		// topic's properties and died on "cannot resolve unique type for resource",
+		// which is how this was found against a live account.
+		//
+		// Keying by endpoint also merged distinct subscriptions: the same queue
+		// subscribed to two topics is two subscriptions and was one node.
+		id := awssdk.ToString(ss.SubscriptionArn)
+		if id == "" || id == pendingConfirmation {
+			// A subscription awaiting confirmation has no arn yet — AWS returns the
+			// literal "PendingConfirmation" for all of them, so it cannot be an id.
+			// Its natural key is what it was created from, and that is stable across
+			// syncs, which a generated id would not be.
+			id = HashFields(awssdk.ToString(ss.TopicArn), awssdk.ToString(ss.Protocol), awssdk.ToString(ss.Endpoint))
+		}
+		res = graph.InitResource(cloud.Subscription, id)
 	case snstypes.Topic:
 		res = graph.InitResource(cloud.Topic, awssdk.ToString(ss.TopicArn))
 	// DNS
@@ -843,6 +863,10 @@ func notEmpty(str *string) bool {
 // badly; the two together made accidental collisions likelier than the identifier
 // length suggested. Six bytes is ample here: these are per-account resource counts,
 // not internet scale.
+// pendingConfirmation is what SNS puts in SubscriptionArn until the endpoint owner
+// confirms. It is the same string for every such subscription, so it is not an id.
+const pendingConfirmation = "PendingConfirmation"
+
 func HashFields(fields ...interface{}) string {
 	h := sha256.New()
 	for _, field := range fields {
