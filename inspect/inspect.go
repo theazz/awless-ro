@@ -25,9 +25,16 @@ import (
 
 var InspectorsRegister map[string]Inspector
 
+// Every inspector here reads the local graph and nothing else. An inspector must
+// not call out to a third-party host: the upstream `pricer` did exactly that,
+// POSTing the account's instance types and region to ec2-price.com over plaintext
+// HTTP, and by 2026 that domain was no longer registered — anyone could have
+// claimed it, harvested the inventory and dictated the numbers we printed as
+// fact. It is removed rather than repaired. Pricing belongs to the AWS Pricing
+// API, as its own feature, if it is wanted at all.
 func init() {
 	all := []Inspector{
-		&inspectors.Pricer{}, &inspectors.BucketSizer{},
+		&inspectors.BucketSizer{},
 		&inspectors.PortScanner{}, &inspectors.OpenBuckets{},
 	}
 

@@ -130,12 +130,25 @@ var whoamiCmd = &cobra.Command{
 	},
 }
 
+// getMyIP asks AWS for the public address this machine appears to come from. It
+// is used by `whoami --ip-only` and by `ssh`, which suggests a security group
+// rule when a connection is refused.
+//
+// Over HTTPS, deliberately: upstream used plaintext HTTP, which both announced
+// use of the tool to anyone on the path and let them dictate the answer — and the
+// answer ends up in a security group suggestion. A wrong address there is advice
+// to open a port to someone else. The body is length-limited because nothing
+// forces a server to keep its reply small.
 func getMyIP() net.IP {
 	client := &http.Client{Timeout: 3 * time.Second}
-	if resp, err := client.Get("http://checkip.amazonaws.com/"); err == nil {
-		b, _ := io.ReadAll(resp.Body)
-		resp.Body.Close()
-		return net.ParseIP(strings.TrimSpace(string(b)))
+	resp, err := client.Get("https://checkip.amazonaws.com/")
+	if err != nil {
+		return nil
 	}
-	return nil
+	defer resp.Body.Close()
+	b, err := io.ReadAll(io.LimitReader(resp.Body, 64))
+	if err != nil {
+		return nil
+	}
+	return net.ParseIP(strings.TrimSpace(string(b)))
 }

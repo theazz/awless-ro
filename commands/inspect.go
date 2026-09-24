@@ -19,6 +19,7 @@ package commands
 import (
 	"fmt"
 	"os"
+	"sort"
 	"strings"
 
 	"github.com/spf13/cobra"
@@ -43,7 +44,7 @@ var inspectCmd = &cobra.Command{
 	Use:               "inspect",
 	Short:             "Analyze your infrastructure through inspectors",
 	Long:              fmt.Sprintf("Basic proof of concept inspectors to analyze your infrastructure: %s", allInspectors()),
-	Example:           "  awless inspect -i bucket_sizer\n  awless inspect -i pricer\n  awless inspect -i port_scanner",
+	Example:           "  awless-ro inspect -i bucket_sizer\n  awless-ro inspect -i open_buckets\n  awless-ro inspect -i port_scanner",
 	PersistentPreRun:  applyHooks(initLoggerHook, initAwlessEnvHook, initCloudServicesHook, initSyncerHook, firstInstallDoneHook),
 	PersistentPostRun: applyHooks(onVersionUpgrade, networkMonitorHook),
 
@@ -76,10 +77,13 @@ var inspectCmd = &cobra.Command{
 	},
 }
 
+// allInspectors is sorted because it feeds the help text, and map iteration order
+// would otherwise reshuffle it on every run.
 func allInspectors() string {
 	var all []string
 	for name := range inspect.InspectorsRegister {
 		all = append(all, name)
 	}
+	sort.Strings(all)
 	return strings.Join(all, ", ")
 }
