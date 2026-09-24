@@ -21,6 +21,7 @@ import (
 	"errors"
 
 	awscredentials "github.com/theazz/awless-ro/aws/credentials"
+	awsfetch "github.com/theazz/awless-ro/aws/fetch"
 	"github.com/theazz/awless-ro/cloud"
 	"github.com/theazz/awless-ro/logger"
 )
@@ -71,6 +72,21 @@ func Init(profile, region string, extraConf map[string]interface{}, log *logger.
 	cloud.ServiceRegistry[CloudformationService.Name()] = CloudformationService
 
 	return nil
+}
+
+// EC2API hands out the EC2 client the infra service was built with, for the one
+// command that needs to call EC2 directly instead of through a fetcher: searching for
+// images is a question about the public AMI catalogue, not about this account's
+// resources, so it has nothing to put in the graph.
+//
+// An accessor rather than letting callers reach through InfraService, so that the
+// shape of Infra stays this package's business.
+func EC2API() (awsfetch.Ec2API, error) {
+	infra, ok := InfraService.(*Infra)
+	if !ok {
+		return nil, errors.New("AWS services are not initialised")
+	}
+	return infra.Ec2API, nil
 }
 
 func getBool(m map[string]interface{}, key string, def bool) bool {
