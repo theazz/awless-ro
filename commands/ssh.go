@@ -60,9 +60,49 @@ func init() {
 
 var defaultAMIUsers = []string{"ec2-user", "ubuntu", "centos", "core", "bitnami", "admin", "root"}
 
+// sshDisabledReason is what `awless-ro ssh` says instead of running.
+//
+// The command is kept, rather than removed, so that trying it explains itself instead
+// of answering "unknown command" — a fork that quietly dropped a headline feature
+// would be worse than one that says it is not ready.
+//
+// What was found against a live account, and what has to be fixed before this comes
+// back on:
+//
+//   - `ssh <instance> --local` panics. initCloudServicesHook returns early for
+//     --local, so awsservices.InfraService is nil, and fetchConnectionInfo fetches
+//     from AWS regardless and dereferences it. The command should read the local
+//     graph when told to work offline, which is the whole point of the flag.
+//   - `--print-cli` and `--print-config` connect to the instance. They exist to print
+//     a command line and a config stanza, so they must resolve and print without
+//     opening a connection.
+//   - The host key prompt loops when there is no terminal, re-asking for every
+//     candidate login user and never reading an answer. Same defect that was fixed in
+//     credentials: a prompt has to check for a TTY and fail with a message when there
+//     is none.
+//
+// Encouragingly, the parts underneath work: the name resolved to the instance's
+// private IP through the local graph, and the connection reached it and returned a
+// real host key.
+const sshDisabledReason = `ssh is not available in this release.
+
+The connection logic works, but three things have to be fixed first: --local panics,
+--print-cli connects instead of printing, and the host key prompt loops when there is
+no terminal. Shipping it would crash on the first offline use.
+
+Meanwhile, awless-ro will tell you what to connect to:
+
+    awless-ro show %s --local
+
+and ssh does the rest:
+
+    ssh -i ~/.ssh/<key>.pem <user>@<ip>
+
+Progress: https://github.com/theazz/awless-ro/issues`
+
 var sshCmd = &cobra.Command{
 	Use:   "ssh [USER@]INSTANCE",
-	Short: "Launch a SSH session to an instance given an id or alias",
+	Short: "[not in this release] Launch a SSH session to an instance given an id or alias",
 	Long:  "Launch a SSH session to an instance given an id or alias. All connection details are derived from a given instance name/id.",
 	Example: `  awless ssh i-8d43b21b                       # using the instance id
   awless ssh redis-prod                       # using name only (other infos are derived)
@@ -91,6 +131,17 @@ var sshCmd = &cobra.Command{
 			return fmt.Errorf("instance required")
 		}
 
+		// Refused before anything else, and before any AWS call. See
+		// sshDisabledReason for what is wrong and what has to be fixed; runSSH below
+		// is the command as it stands, kept whole so that turning it back on is
+		// deleting this line.
+		return fmt.Errorf(sshDisabledReason, args[0])
+	},
+}
+
+// runSSH is the ssh command, not currently reachable. See sshDisabledReason.
+func runSSH(cmd *cobra.Command, args []string) error {
+	{
 		var err error
 		var connectionCtx *instanceConnectionContext
 
@@ -185,7 +236,7 @@ var sshCmd = &cobra.Command{
 
 		exitOn(targetClient.Connect())
 		return nil
-	},
+	}
 }
 
 func isConnectionRefusedErr(err error) bool {
