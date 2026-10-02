@@ -1,0 +1,44 @@
+name: Security
+
+on:
+  pull_request:
+  # Weekly, and not only on push. An advisory published after the last commit would
+  # otherwise go unnoticed for as long as the repository is quiet — which, for a tool
+  # that is finished rather than abandoned, could be months.
+  schedule:
+    - cron: '17 6 * * 1'
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+jobs:
+  # Blocks a dependency arriving with a known advisory, at the point where it is
+  # cheapest to refuse: the pull request that adds it. govulncheck answers a different
+  # question — whether vulnerable code is reachable — and misses a bad dependency that
+  # nothing calls yet.
+  dependency-review:
+    if: github.event_name == 'pull_request'
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+      - uses: actions/dependency-review-action@a1d282b36b6f3519aa1f3fc636f609c47dddb294 # v5.0.0
+        with:
+          fail-on-severity: low
+          # Apache-2.0 here, and a copyleft dependency would change the terms of the
+          # whole binary.
+          deny-licenses: GPL-2.0, GPL-3.0, AGPL-3.0, LGPL-2.1, LGPL-3.0
+
+  vulnerabilities:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+      - uses: actions/setup-go@b7ad1dad31e06c5925ef5d2fc7ad053ef454303e # v7.0.0
+        with:
+          go-version: '1.26'
+
+      # Unpinned deliberately, unlike the copy in ci.yml. There the pin keeps a build
+      # from turning red without a commit of ours; here the entire point is to hear
+      # about what is new, so this one tracks the latest tool and database.
+      - name: govulncheck
+        run: go run golang.org/x/vuln/cmd/govulncheck@latest ./...

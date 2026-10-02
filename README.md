@@ -43,19 +43,54 @@ That turns out to be the interesting part. A tool that provably cannot write is 
 you can point at production, hand to someone new, or run in an account you are
 nervous about — and the guarantee does not depend on how carefully you typed.
 
-## What read-only means here, exactly
+## Security checks
 
-Every AWS call goes through a narrow per-service interface. Nothing else in the tree
-holds an SDK client, so the methods on those interfaces are the complete list of
-operations the binary can perform. `TestEveryAWSOperationIsARead` reflects over them
-and fails if any name does not begin with `Describe`, `Get`, `List` or `Head`, or if
-a field is a concrete client rather than an interface. Currently 62 operations across
-18 services.
+**In place now**
 
-One thing this does **not** do: constrain your credentials. If you hand it an
-administrator profile, the account is still wide open to everything else on your
-machine — the guarantee is about this tool, not about AWS. For defence in depth, give
-it a profile with `ReadOnlyAccess`, and then two independent sides hold the line.
+- *Read-only by construction.* Every AWS call goes through a narrow per-service
+  interface and nothing else in the tree holds an SDK client, so the methods on those
+  interfaces are the complete list of operations the binary can perform — currently 62
+  across 18 services. `TestEveryAWSOperationIsARead` reflects over them and fails the
+  build if any name is not a `Describe`, `Get`, `List` or `Head`, or if a field is a
+  concrete client rather than an interface. Reflecting over the struct rather than a
+  hand-written list means a service added later is covered without anyone remembering
+  to.
+- *No third-party egress.* The binary talks to AWS and nothing else. The upstream
+  `pricer` inspector, which posted an EC2 inventory to an external host, is gone; the
+  public-IP lookup in `whoami` uses HTTPS.
+- *Secrets stay put.* `show` does not print instance `UserData`; secrets are read
+  without echo and never logged; state under `~/.awless-ro` is `0700`, files in it
+  `0600`, and nothing executable is written to a shared directory.
+- *Audited SSH and key handling.* The shared-`/tmp` script behind `ProxyCommand` was
+  removed, deprecated unauthenticated PEM decryption replaced, key files with loose
+  permissions refused, and key names from AWS data can no longer escape the keys
+  directory.
+- *AMI search pinned to publishing accounts,* so a look-alike image name cannot be
+  substituted ([whoAMI](https://securitylabs.datadoghq.com/articles/whoami-a-cloud-image-name-confusion-attack/)).
+- *CI on every push and pull request:* `gofmt`, `go vet`, `go test -race`,
+  `go mod verify` against `go.sum`, `govulncheck` for known vulnerabilities in
+  reachable code, and a check that generated code matches its definitions.
+- *Dependency review on pull requests,* blocking a new dependency that arrives with a
+  known advisory or a copyleft licence. `govulncheck` answers a different question —
+  whether vulnerable code is reachable — and misses a bad dependency nothing calls yet.
+- *A weekly scan independent of any commit,* because an advisory published after the
+  last push would otherwise go unnoticed for as long as the repository is quiet.
+- *Releases built by GitHub Actions from the tag,* not on a workstation, re-running the
+  test and vulnerability gates first — a tag can be pushed to a commit that never
+  passed CI — and verifying the published checksums against the published files.
+- *Supply chain:* GitHub Actions pinned by commit SHA, workflow token read-only,
+  Dependabot updates for Go modules and actions, GitHub secret scanning with push
+  protection, Dependabot security updates, and a `SHA256SUMS` file with every release.
+
+**Planned, to run automatically**
+
+- Static analysis (CodeQL and `gosec`) on every pull request.
+- OpenSSF Scorecard for the repository's own security posture.
+- Build provenance attestations and an SBOM attached to every release.
+
+Found something exploitable? Please report it through
+[Security → Report a vulnerability](https://github.com/theazz/awless-ro/security/advisories/new),
+which is private between you and the maintainer, rather than in a public issue.
 
 ## Install
 
@@ -168,7 +203,7 @@ Not yet working:
 - **`awless-ro ssh`**. The resolution and connection logic is there and mostly
   works, but `--local` panics, `--print-cli` connects instead of printing, and the
   host key prompt loops when there is no terminal. The command explains this instead
-  of running.
+  of running. Tracked in [#1](https://github.com/theazz/awless-ro/issues/1).
 
 ## Differences you will notice if you used awless
 
@@ -189,18 +224,32 @@ The full accounting is in [CHANGELOG.md](CHANGELOG.md).
 
 ## Status and caveats
 
-This is a fork maintained for its own purposes, not a community project seeking
-feature parity with anything.
-
-It has been run against one live AWS account, in one region, with a few hundred
-resources — which is how nine defects were found and fixed; see
-[docs/live-check.md](docs/live-check.md) for the checklist and what to look for. That
-is one account, not many: if you point it at yours and something is wrong, the
-finding is useful.
+The tool is checked against live AWS accounts using
+[docs/live-check.md](docs/live-check.md) — the checklist and what to look for. If you
+point it at yours and something is wrong, the finding is useful: please open an issue.
 
 `go test ./... -race` is green and no test needs AWS credentials.
 
+## Versioning
+
+Releases follow [Semantic Versioning 2.0.0](https://semver.org/) and are tagged
+`vMAJOR.MINOR.PATCH`. The public API is the command line: commands, flags, output
+formats (`csv`, `tsv`, `json`, `porcelain`, `--ids`) and exit codes.
+
+- **PATCH** — bug fixes that do not change documented behaviour.
+- **MINOR** — new commands, flags, resource types or services, backwards compatible.
+- **MAJOR** — anything that breaks a documented command, flag or output format.
+
+While the version is `0.y.z`, a breaking change bumps the **minor** version instead,
+as SemVer allows. Every release has an entry in [CHANGELOG.md](CHANGELOG.md).
+
 ## Contributing
+
+Feature requests and pull requests with improvements are very welcome — open an
+[issue](https://github.com/theazz/awless-ro/issues) to suggest something or to
+discuss a change before writing it. Bugs get fixed as time allows, on a best-effort
+basis. The one thing that will not be accepted is anything that makes the tool
+write: see the scope section in CONTRIBUTING.
 
 [CONTRIBUTING.md](CONTRIBUTING.md) covers the layout, how code generation works, and
 the supply-chain rules for dependencies.

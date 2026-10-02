@@ -98,7 +98,7 @@ and ssh does the rest:
 
     ssh -i ~/.ssh/<key>.pem <user>@<ip>
 
-Progress: https://github.com/theazz/awless-ro/issues`
+Progress: https://github.com/theazz/awless-ro/issues/2`
 
 var sshCmd = &cobra.Command{
 	Use:   "ssh [USER@]INSTANCE",

@@ -85,12 +85,11 @@ The write half is gone for good: templates, `create`/`delete`/`attach`/…, `log
 Every AWS call goes through a narrow per-service interface. Nothing else in the tree
 holds an SDK client, so the methods on those interfaces are the complete list of
 operations the binary can perform — currently 62 across 18 services.
-`TestEveryAWSOperationIsARead` reflects over them and fails if a name is not a read,
-or if a field is a concrete client rather than an interface.
+`TestEveryAWSOperationIsARead` reflects over them and fails the build if a name is not
+a read, or if a field is a concrete client rather than an interface.
 
-This constrains the tool, not your credentials. Hand it an administrative profile and
-the account is still open to everything else on your machine. For defence in depth,
-give it a profile with `ReadOnlyAccess`.
+The rest of the security posture, and what is checked automatically, is in the
+[README](https://github.com/theazz/awless-ro#security-checks).
 
 ## Notable if you used awless
 
@@ -128,12 +127,15 @@ if building from source.
 
 ## Status
 
-A fork maintained for its own purposes, not a project seeking feature parity with
-anything. `go test ./... -race` is green and no test needs AWS credentials.
+`go test ./... -race` is green and no test needs AWS credentials. The tool is checked
+against live accounts with
+[docs/live-check.md](https://github.com/theazz/awless-ro/blob/master/docs/live-check.md),
+which is also the list of what to look for — nine defects were found that way, and
+none of them was visible to a unit test.
 
-It has been run against **one** live account, in one region, with a few hundred
-resources — which is how those nine defects were found. The Windows and Linux
-binaries are cross-compiled and have not been exercised on those platforms. If you
-point it at your account and something is wrong, that finding is useful; see
-[docs/live-check.md](https://github.com/theazz/awless-ro/blob/master/docs/live-check.md)
-for what to look for.
+The Windows and Linux binaries here are cross-compiled and have not been exercised on
+those platforms.
+
+Feature requests and pull requests are welcome, and bugs get fixed as time allows. If
+you point this at your account and something looks wrong, that finding is useful —
+please open an [issue](https://github.com/theazz/awless-ro/issues).

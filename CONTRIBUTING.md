@@ -111,13 +111,32 @@ all.
 
 ## Security
 
-Report anything exploitable privately rather than in an issue.
+Report anything exploitable through
+[**Security → Report a vulnerability**](https://github.com/theazz/awless-ro/security/advisories/new),
+which is a private channel between you and the maintainer, rather than in an issue.
+Private reporting is enabled on this repository for exactly this.
+
+A reply may take a few days. If the finding is already public elsewhere, say so in the
+report — that changes how urgent it is.
 
 When touching code that handles credentials, keys or the synced graph, the existing
 expectations are: state under `~/.awless-ro` is `0700`, files in it are `0600`,
 secrets are read without echo and never logged, and nothing executable is written to a
 shared directory. `sync/permissions_test.go` and the tests in `aws/credentials` pin
 most of that.
+
+## Versioning and releases
+
+[Semantic Versioning 2.0.0](https://semver.org/), tags `vMAJOR.MINOR.PATCH`. The
+public API is the command line — commands, flags, output formats and exit codes — so a
+change that breaks any of those is a major bump (a minor one while the version is
+`0.y.z`). A pull request that changes user-visible behaviour adds a line to
+`CHANGELOG.md` under an `Unreleased` heading at the top, created if absent.
+
+A release: set `Version` in `config/version.go`, move the changelog entries under the
+new version, commit, tag `vX.Y.Z` on that commit, then build with `release.go`, which
+refuses a dirty tree. The tag is what `go install …@latest` resolves, so never move or
+reuse one: a mistake gets a new patch version.
 
 ## Licence
 

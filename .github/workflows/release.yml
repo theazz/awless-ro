@@ -1,0 +1,71 @@
+name: Release
+
+# Pushing a tag is the whole trigger. Building on a workstation meant the binaries
+# people download came from one machine's toolchain and environment, which nobody but
+# its owner can reproduce or audit; this builds them from the tag, in the open, with
+# the logs kept.
+on:
+  push:
+    tags:
+      - 'v*'
+
+permissions:
+  contents: read
+
+jobs:
+  release:
+    runs-on: ubuntu-latest
+    permissions:
+      # To create the release and attach the artefacts. Nothing else.
+      contents: write
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          # release.go asks git which tag it is on and derives the commit recorded in
+          # the binary from it, so the tags and the full history have to be present.
+          fetch-depth: 0
+      - uses: actions/setup-go@b7ad1dad31e06c5925ef5d2fc7ad053ef454303e # v7.0.0
+        with:
+          go-version: '1.26'
+
+      # The gates from CI, repeated rather than assumed. A tag can be pushed to a
+      # commit that never passed CI, and a release is the one artefact where finding
+      # that out afterwards is expensive.
+      - name: go mod verify
+        run: go mod verify
+
+      - name: go vet
+        run: go vet ./...
+
+      - name: go test
+        run: go test ./... -race
+
+      - name: govulncheck
+        run: go run golang.org/x/vuln/cmd/govulncheck@v1.8.0 ./...
+
+      - name: build release artefacts
+        run: go run release.go -tag "${GITHUB_REF_NAME}"
+
+      # Proves the published checksums match the published files, before anyone
+      # downloads them to find out.
+      - name: verify checksums
+        run: sha256sum -c SHA256SUMS
+
+      - name: create the release
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          notes="docs/release-${GITHUB_REF_NAME}.md"
+          if [ -f "$notes" ]; then
+            gh release create "${GITHUB_REF_NAME}" \
+              --title "awless-ro ${GITHUB_REF_NAME}" \
+              --notes-file "$notes" \
+              awless-ro-*.tar.gz awless-ro-*.zip SHA256SUMS
+          else
+            # No hand-written notes for this tag: generate them from the commits
+            # rather than publishing an empty release.
+            gh release create "${GITHUB_REF_NAME}" \
+              --title "awless-ro ${GITHUB_REF_NAME}" \
+              --generate-notes \
+              awless-ro-*.tar.gz awless-ro-*.zip SHA256SUMS
+          fi
