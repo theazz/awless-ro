@@ -127,11 +127,9 @@ if building from source.
 
 ## Status
 
-`go test ./... -race` is green and no test needs AWS credentials. The tool is checked
-against live accounts with
-[docs/live-check.md](https://github.com/theazz/awless-ro/blob/master/docs/live-check.md),
-which is also the list of what to look for — nine defects were found that way, and
-none of them was visible to a unit test.
+`go test ./... -race` is green and no test needs AWS credentials. The tool is also
+checked against live accounts, which is where the defects that matter turn up: nine
+were found that way, and none of them was visible to a unit test.
 
 The Windows and Linux binaries here are cross-compiled and have not been exercised on
 those platforms.

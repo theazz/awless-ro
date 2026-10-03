@@ -71,10 +71,10 @@ type nameFixture struct {
 	// must not be returned in its place.
 	ordinary bool
 
-	// observed records that this exact name was returned by DescribeImages against
-	// account 123456789012 in eu-west-1 in September 2026. Constructed names are
-	// shapes the vendor documents or has published elsewhere, kept so that an
-	// expression loosened later is still caught.
+	// observed records that this exact name was returned by DescribeImages against a
+	// live account in September 2026. Constructed names are shapes the vendor
+	// documents or has published elsewhere, kept so that an expression loosened later
+	// is still caught.
 	observed bool
 }
 

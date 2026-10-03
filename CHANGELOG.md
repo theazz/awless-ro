@@ -91,7 +91,8 @@ administrative profile.
 
 **Wrong answers about your account.** All nine of these were found by running against
 a live account; none was visible to a unit test, because each turns on something a
-test cannot know about AWS. See [docs/live-check.md](docs/live-check.md).
+test cannot know about AWS: what the vendors actually name their images, what an
+account actually contains, what AWS itself considers the right answer.
 
 - `search images <vendor> --latest-id` returned a **specialised build instead of the
   ordinary image** for three of the six vendors: `al2023-ami-minimal-`,
