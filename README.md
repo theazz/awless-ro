@@ -1,16 +1,15 @@
 # awless-ro
 
-A command line tool for **looking at** an AWS account. It syncs your cloud into a
-local graph and lets you explore it — offline, by name instead of by id, with output
-you can pipe.
+A command line tool for **looking at** an AWS account: readable tables instead of
+JSON, resources by name instead of by id, how they relate to each other, and output
+you can pipe. Optionally, a local copy of the account to explore offline.
 
 It cannot change anything. Not by convention: every AWS operation it is capable of
 calling is a `Describe`, `Get`, `List` or `Head`, and a test enforces that.
 
 ```sh
-awless-ro sync
-awless-ro list instances --local
-awless-ro show my-database --local
+awless-ro list instances
+awless-ro show my-database
 awless-ro list volumes --filter state=available --format csv
 awless-ro search images canonical --latest-id
 ```
@@ -42,6 +41,139 @@ the tool rather than a promise in a README.
 That turns out to be the interesting part. A tool that provably cannot write is one
 you can point at production, hand to someone new, or run in an account you are
 nervous about — and the guarantee does not depend on how carefully you typed.
+
+## What it is good for
+
+Nothing to set up beyond the AWS profile you already have, and no step to run first:
+`list`, `search`, `whoami` and `tail` ask AWS directly, and `show` and `inspect`
+fetch what they need on their own. Keeping a local copy with `sync` is optional: it
+is there for working offline, not a prerequisite.
+
+**"What is running here, and since when?"** A table you can read, sorted and filtered,
+instead of a page of `describe-instances` JSON.
+
+```
+$ awless-ro list instances
+|        ID ▲         |    ZONE    |     NAME      |  STATE  |    TYPE    |  PUBLIC IP   | PRIVATE IP |  UPTIME  | KEYPAIR |
+|---------------------|------------|---------------|---------|------------|--------------|------------|----------|---------|
+| i-0a1b2c3d4e5f60718 | eu-west-1a | web-1         | running | t3.medium  | 34.245.17.89 | 10.0.1.21  | 5 weeks  | deploy  |
+| i-0b2c3d4e5f6071829 | eu-west-1b | web-2         | running | t3.medium  | 52.18.203.4  | 10.0.2.37  | 5 weeks  | deploy  |
+| i-0c3d4e5f607182930 | eu-west-1a | api-1         | running | m7g.large  |              | 10.0.11.8  | 9 days   | deploy  |
+| i-0d4e5f60718293a41 | eu-west-1b | worker-spot-1 | running | c7g.xlarge |              | 10.0.12.54 | 3 hours  |         |
+| i-0e5f60718293a4b52 | eu-west-1c | worker-spot-2 | running | c7g.xlarge |              | 10.0.13.19 | 50 mins  |         |
+| i-0f60718293a4b5c63 | eu-west-1a | bastion       | stopped | t3.micro   |              | 10.0.0.5   | 7 months | admin   |
+```
+
+Pick your own columns — any property an instance carries, not only the defaults. Here,
+which ones are spot (an empty `LIFECYCLE` is on-demand):
+
+```
+$ awless-ro list instances --columns name,state,type,lifecycle,uptime
+|    NAME ▲     |  STATE  |    TYPE    | LIFECYCLE |  UPTIME  |
+|---------------|---------|------------|-----------|----------|
+| api-1         | running | m7g.large  |           | 9 days   |
+| bastion       | stopped | t3.micro   |           | 7 months |
+| web-1         | running | t3.medium  |           | 5 weeks  |
+| web-2         | running | t3.medium  |           | 5 weeks  |
+| worker-spot-1 | running | c7g.xlarge | spot      | 3 hours  |
+| worker-spot-2 | running | c7g.xlarge | spot      | 50 mins  |
+```
+
+```sh
+awless-ro list instances --sort uptime
+awless-ro list instances --filter state=running --filter type=t3
+awless-ro list instances --tag Env=Production,Team=Payments
+awless-ro list databases -r eu-west-1
+```
+
+**"What is this thing, and what is it connected to?"** Ask by name. An instance comes
+with its subnet and VPC, its security groups and key pair, and the volumes attached to
+it; a security group with everything it applies to; a user with their groups and
+policies.
+
+```sh
+awless-ro show web-1
+awless-ro show i-0123456789abcdef0
+awless-ro show jsmith
+awless-ro show sg-0a1b2c3d --siblings
+```
+
+**"Is anything left lying around?"** Detached volumes, old snapshots, access keys
+nobody rotated, elastic IPs attached to nothing.
+
+```sh
+awless-ro list volumes --filter state=available
+awless-ro list snapshots --sort created
+awless-ro list accesskeys --sort created
+awless-ro list elasticips
+```
+
+**"What is exposed?"** Every security group with the ports it opens, to which
+addresses, and what it is attached to; buckets readable by anyone, or by anyone with
+an AWS account.
+
+```sh
+awless-ro inspect -i port_scanner
+awless-ro inspect -i open_buckets
+```
+
+**"Which AMI should I use?"** The current official image for a distribution in this
+region, from the vendor's own account — not from whoever named an image
+`ubuntu-latest`.
+
+```sh
+awless-ro search images canonical:ubuntu:noble --latest-id
+awless-ro search images debian:::arm64
+awless-ro search images amazonlinux
+```
+
+**"Who am I in this account?"** Before doing anything, check which identity, account
+and policies the current profile resolves to.
+
+```sh
+awless-ro whoami
+awless-ro whoami --account-only
+```
+
+**"What is this stack doing right now?"** Follow CloudFormation events or
+autoscaling activity as they happen.
+
+```sh
+awless-ro tail stack-events my-stack --follow
+awless-ro tail scaling-activities --follow
+```
+
+**Scripts and spreadsheets.** Every listing can be CSV, TSV, JSON or bare ids, and
+`show` can print a single value.
+
+```sh
+awless-ro list users --format csv > users.csv
+awless-ro list instances --filter state=stopped --ids
+ssh ec2-user@$(awless-ro show web-1 --values-for privateip)
+```
+
+**Offline, or on a slow link.** Sync once, and `list`, `show` and `inspect` answer
+instantly from the local copy with `--local`, without an AWS call — on a plane,
+behind a VPN that keeps dropping, or when you want to go through an account at your
+own pace.
+
+```sh
+awless-ro sync
+awless-ro list instances --local
+awless-ro show web-1 --local
+```
+
+**Several accounts and regions.** Your `~/.aws` profiles work as they are; switch
+once, or override a single command.
+
+```sh
+awless-ro switch staging eu-west-1
+awless-ro list instances -p production -r us-east-1
+```
+
+**Handing someone a tool.** Read-only is a property of the binary (see
+[Security checks](#security-checks)), so it is a safe thing to give a new teammate, an
+auditor, or an on-call engineer who needs to look around production at 3 am.
 
 ## Security checks
 
@@ -82,9 +214,14 @@ nervous about — and the guarantee does not depend on how carefully you typed.
   Dependabot updates for Go modules and actions, GitHub secret scanning with push
   protection, Dependabot security updates, and a `SHA256SUMS` file with every release.
 
+- *The workflows are linted,* because they are the only code here with no compiler
+  and no tests, and they are what holds the SHA pins and the least-privilege tokens.
+
 **Planned, to run automatically**
 
-- Static analysis (CodeQL and `gosec`) on every pull request.
+- Static analysis (CodeQL) on every pull request.
+- `zizmor` to audit the workflows for template injection and over-broad permissions,
+  which linting does not look for.
 - OpenSSF Scorecard for the repository's own security posture.
 - Build provenance attestations and an SBOM attached to every release.
 
@@ -120,48 +257,39 @@ State lives in `~/.awless-ro` — deliberately not `~/.awless`, so an installed
 upstream `awless` and this tool cannot overwrite each other's graph, database or
 keys.
 
-## What it does
+## Commands
 
-**Sync into a local graph.** `awless-ro sync` fetches every supported service in
-parallel and stores the result as N-Triples under `~/.awless-ro`. A service you lack
-permission for is reported and skipped; the rest still land.
-
-```
--> infra: 63 instances, 2 vpcs, 64 securitygroups, 179 networkinterfaces, ...
--> access: 8 users, 476 roles, 538 policies, 23 instanceprofiles, ...
--> storage: 76 buckets, s3objects: off (aws.storage.s3object.sync)
-```
-
-Two resource types are off by default because they cost an API call per parent — one
-per bucket, one per hosted zone. The sync says so rather than reporting zero of them.
-
-**List, offline.** 49 resource types across EC2, IAM, S3, RDS, AutoScaling, SNS, SQS,
-Route53, CloudWatch, CloudFormation, Lambda, ECS, ECR, ELB, CloudFront and ACM.
+**`list`** — 49 resource types across EC2, IAM, S3, RDS, AutoScaling, SNS, SQS,
+Route53, CloudWatch, CloudFormation, Lambda, ECS, ECR, ELB, CloudFront and ACM,
+fetched from AWS when you ask (`awless-ro list -h` shows them all; `ls` is an alias).
 
 ```sh
-awless-ro list instances --filter state=running --sort uptime --local
-awless-ro list instances --columns name,state,architecture,lifecycle --local
-awless-ro list volumes --tag-key Dept --format tsv --local
-awless-ro list users --format json --local
+awless-ro list instances --filter state=running --sort uptime
+awless-ro list instances --columns name,state,architecture,lifecycle
+awless-ro list volumes --tag-key Dept --format tsv
+awless-ro list users --format json
 ```
 
-`--columns` reaches any property a resource carries, not only the default columns.
-`--format` covers `table`, `csv`, `tsv`, `json` and `porcelain`; `--ids` prints one
-id per line and nothing else, for scripts.
+`--filter` matches any column, case-insensitively, by substring; `--tag`,
+`--tag-key` and `--tag-value` match tags. `--columns` reaches any property a resource
+carries, not only the default columns. `--format` covers `table`, `csv`, `tsv`,
+`json` and `porcelain`; `--ids` prints one id per line and nothing else, for scripts.
+`-r` and `-p` override the region and profile for one command.
 
-**Show one resource, with its relations.** By id, by name, or by `@name`. Names are
-not unique in AWS, so an ambiguous one lists the candidates.
+**`show`** — one resource by id, by name, or by `@name`, with its relations. Names
+are not unique in AWS, so an ambiguous one lists the candidates.
 
 ```sh
-awless-ro show i-0123456789abcdef0 --local
-awless-ro show my-database --local
+awless-ro show i-0123456789abcdef0
+awless-ro show my-database
+awless-ro show web-1 --values-for publicip,keypair
 ```
 
 Output is the resource's properties, then its lineage (parents and children), then
 what it applies to, depends on, and its siblings.
 
-**Find official AMIs.** By vendor, pinned to the publishing account, resolving to
-the vendor's ordinary image rather than a specialised build.
+**`search images`** — official AMIs by vendor, pinned to the publishing account,
+resolving to the vendor's ordinary image rather than a specialised build.
 
 ```sh
 awless-ro search images canonical --latest-id
@@ -169,22 +297,46 @@ awless-ro search images redhat::9
 awless-ro search images --owner 123456789012 --name 'my-base-*'
 ```
 
-**Inspect and tail.**
+**`inspect` and `tail`.**
 
 ```sh
-awless-ro inspect -i port_scanner --local     # security groups opening ports, and to what
-awless-ro inspect -i open_buckets --local
-awless-ro tail stack-events my-stack
+awless-ro inspect -i port_scanner     # security groups opening ports, and to what
+awless-ro inspect -i open_buckets
+awless-ro inspect -i bucket_sizer
+awless-ro tail stack-events my-stack --follow
+```
+
+**`whoami`** and **`switch`** — the identity behind the current profile, and a
+persistent change of region or profile.
+
+```sh
+awless-ro whoami
+awless-ro switch eu-west-1
+awless-ro switch my-profile eu-west-1
 ```
 
 **Aliases.** Reference a resource by its `Name` tag anywhere an id is accepted.
 
-**Switch region and profile.**
+### Offline mode (optional)
 
-```sh
-awless-ro switch eu-west-1
-awless-ro switch my-profile eu-west-1
+`awless-ro sync` fetches every supported service in parallel and stores the result
+as a local graph under `~/.awless-ro`. After that, any command with `--local` answers
+from that copy without calling AWS. A service you lack permission for is reported
+and skipped; the rest still land.
+
 ```
+-> infra: 12 instances, 2 vpcs, 9 securitygroups, 14 networkinterfaces, ...
+-> access: 5 users, 40 roles, 61 policies, 4 instanceprofiles, ...
+-> storage: 7 buckets, s3objects: off (aws.storage.s3object.sync)
+```
+
+Two resource types are off by default because they cost an API call per parent — one
+per bucket, one per hosted zone. The sync says so rather than reporting zero of them.
+
+You rarely need to run it by hand. `show` and `inspect` refresh the copy on their own
+for the services they touch, and choosing a new region — on first run or with
+`switch` — syncs it once. `--no-sync` skips that for one command, and
+`awless-ro config set autosync false` turns it off for good.
 
 ## What was removed
 
@@ -224,9 +376,12 @@ The full accounting is in [CHANGELOG.md](CHANGELOG.md).
 
 ## Status and caveats
 
-The tool is checked against live AWS accounts using
-[docs/live-check.md](docs/live-check.md) — the checklist and what to look for. If you
-point it at yours and something is wrong, the finding is useful: please open an issue.
+The tool is checked against live AWS accounts, which is where the defects that matter
+turn up: unit tests verify that the code does what it was meant to, and the live
+checks verify that what it was meant to do matches how AWS actually behaves. Nine
+defects were found that way, and none of them was visible to a test. If you point it
+at your account and something looks wrong, that finding is useful: please open an
+issue.
 
 `go test ./... -race` is green and no test needs AWS credentials.
 
