@@ -65,7 +65,8 @@ func init() {
 		}
 	}
 
-	listCmd.PersistentFlags().StringVar(&listingFormat, "format", "table", "Output format: table, csv, tsv, json (default to table)")
+	listCmd.PersistentFlags().StringVar(&listingFormat, "format", "table", "Output format: table, csv, tsv, json, porcelain")
+	listCmd.RegisterFlagCompletionFunc("format", fixedCompletion("table", "csv", "tsv", "json", "porcelain"))
 	listCmd.PersistentFlags().StringSliceVar(&listingFiltersFlag, "filter", []string{}, "Filter resources given key/values fields (case insensitive). Ex: --filter type=t2.micro")
 	listCmd.PersistentFlags().StringSliceVar(&listingTagFiltersFlag, "tag", []string{}, "Filter EC2 resources given tags (case sensitive!). Ex: --tag Env=Production")
 	listCmd.PersistentFlags().StringSliceVar(&listingTagKeyFiltersFlag, "tag-key", []string{}, "Filter EC2 resources given a tag key only (case sensitive!). Ex: --tag-key Env")
@@ -88,8 +89,9 @@ var listCmd = &cobra.Command{
 
 var listSpecificResourceCmd = func(resType string) *cobra.Command {
 	return &cobra.Command{
-		Use:   cloud.PluralizeResource(resType),
-		Short: fmt.Sprintf("[%s] List %s %s", awsservices.ServicePerResourceType[resType], strings.ToUpper(awsservices.APIPerResourceType[resType]), cloud.PluralizeResource(resType)),
+		ValidArgsFunction: cobra.NoFileCompletions,
+		Use:               cloud.PluralizeResource(resType),
+		Short:             fmt.Sprintf("[%s] List %s %s", awsservices.ServicePerResourceType[resType], strings.ToUpper(awsservices.APIPerResourceType[resType]), cloud.PluralizeResource(resType)),
 
 		Run: func(cmd *cobra.Command, args []string) {
 			if len(args) > 0 {
@@ -130,9 +132,10 @@ var listSpecificResourceCmd = func(resType string) *cobra.Command {
 
 var listAllResourceInServiceCmd = func(srvName string) *cobra.Command {
 	return &cobra.Command{
-		Use:    srvName,
-		Short:  fmt.Sprintf("List all %s resources", srvName),
-		Hidden: true,
+		ValidArgsFunction: cobra.NoFileCompletions,
+		Use:               srvName,
+		Short:             fmt.Sprintf("List all %s resources", srvName),
+		Hidden:            true,
 
 		Run: func(cmd *cobra.Command, args []string) {
 			g := sync.LoadLocalGraphForService(srvName, config.GetAWSProfile(), config.GetAWSRegion())

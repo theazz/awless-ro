@@ -52,7 +52,8 @@ var searchCmd = &cobra.Command{
 }
 
 var awsImagesCmd = &cobra.Command{
-	Use: "images",
+	Use:               "images",
+	ValidArgsFunction: completeImageQuery,
 	// The query is checked before anything touches AWS, so that a mistyped owner or
 	// a --name without --owner is answered immediately instead of after a credential
 	// prompt that was never going to help.
@@ -155,4 +156,13 @@ func buildImageSearch(args []string) (awsimage.Search, error) {
 	}
 	search.Query = &query
 	return search, nil
+}
+
+// completeImageQuery completes the owner, the first segment of a query. The segments
+// after it are free-form per vendor, so nothing is guessed for them.
+func completeImageQuery(cmd *cobra.Command, args []string, toComplete string) ([]cobra.Completion, cobra.ShellCompDirective) {
+	if len(args) > 0 || strings.Contains(toComplete, ":") {
+		return nil, cobra.ShellCompDirectiveNoFileComp
+	}
+	return completeWith(awsimage.SupportedOwners(), toComplete)
 }

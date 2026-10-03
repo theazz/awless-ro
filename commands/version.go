@@ -30,8 +30,9 @@ func init() {
 }
 
 var versionCmd = &cobra.Command{
-	Use:   "version",
-	Short: "Show awless-ro version",
+	Use:               "version",
+	ValidArgsFunction: cobra.NoFileCompletions,
+	Short:             "Show awless-ro version",
 
 	Run: printVersion,
 }

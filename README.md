@@ -238,7 +238,7 @@ brew install theazz/tap/awless-ro
 ```
 
 The formula installs the binary published with each release, checked against its
-SHA-256, and bash completion. Upgrade with `brew upgrade awless-ro`.
+SHA-256, and shell completion. Upgrade with `brew upgrade awless-ro`.
 
 With Go:
 
@@ -267,6 +267,26 @@ prompted for on first run.
 State lives in `~/.awless-ro` — deliberately not `~/.awless`, so an installed
 upstream `awless` and this tool cannot overwrite each other's graph, database or
 keys.
+
+### Shell completion
+
+Homebrew sets it up for you. Otherwise:
+
+```sh
+# bash (needs the bash-completion package; eval rather than source <(...),
+# which the bash 3.2 shipped with macOS does not support)
+echo 'eval "$(awless-ro completion bash)"' >> ~/.bashrc
+
+# zsh
+awless-ro completion zsh > "${fpath[1]}/_awless-ro"
+
+# fish
+awless-ro completion fish > ~/.config/fish/completions/awless-ro.fish
+```
+
+Completion covers commands and flags, regions and profiles, config keys and their
+values, and — from the local copy, once you have synced — resource ids and names
+for `show`. It never calls AWS: a Tab press does not wait on the network.
 
 ## Commands
 

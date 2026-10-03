@@ -46,6 +46,7 @@ func init() {
 
 var whoamiCmd = &cobra.Command{
 	Use:               "whoami",
+	ValidArgsFunction: cobra.NoFileCompletions,
 	Aliases:           []string{"who"},
 	PersistentPreRun:  applyHooks(initAwlessEnvHook, initLoggerHook, initCloudServicesHook, firstInstallDoneHook),
 	PersistentPostRun: applyHooks(onVersionUpgrade, networkMonitorHook),
