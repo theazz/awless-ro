@@ -8,5 +8,5 @@ generate:
 
 build: generate test
 	@echo Building application binary
-	@go build -o awless-ro
+	@go build -trimpath -o awless-ro
 

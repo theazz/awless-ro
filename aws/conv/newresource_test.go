@@ -16,8 +16,7 @@ limitations under the License.
 
 package awsconv
 
-// This file is the safety net for the AWS SDK v2 migration described in
-// .kiro/specs/awless-ro/design.md, decision D3.
+// This file is the safety net for the AWS SDK v2 migration.
 //
 // The property extraction in NewResource is reflective, and SDK v2 changes the
 // value semantics it assumes: scalars stop being pointers, lists hold values

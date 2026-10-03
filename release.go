@@ -259,7 +259,11 @@ func buildAndZip(osname, arch string) (string, error) {
 
 	ldflags := fmt.Sprintf("-ldflags=-s -w %s", buildInfo)
 
-	if _, err := runCmd(env, "go", "build", "-o", artefactPath, ldflags); err != nil {
+	// -trimpath: without it every source file's absolute path on the build machine
+	// (the checkout and the module cache under the builder's home directory) is
+	// embedded in the binary, which leaks the builder's username and layout and
+	// makes two builds of the same commit differ by where they were run.
+	if _, err := runCmd(env, "go", "build", "-trimpath", "-o", artefactPath, ldflags); err != nil {
 		return "", err
 	}
 
