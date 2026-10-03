@@ -1,5 +1,18 @@
 # Changelog
 
+## Unreleased
+
+### Performance
+
+- **A first `sync` takes about half as long** ([#12](https://github.com/theazz/awless-ro/issues/12)).
+  IAM users, groups, roles and managed policies come from one
+  `GetAccountAuthorizationDetails` pagination, and its pages were fetched one after
+  another; IAM caps a page by size, so an account with ~500 roles and ~560 policies
+  took 25 sequential pages and most of the sync. Each entity type is now its own
+  pagination, run side by side. Measured from an empty home on the same account:
+  `sync` 31–47s → 15.5s, `list policies` 19s → 11–13s. Same call, same permission,
+  same result.
+
 ## v0.2.0
 
 ### Features
