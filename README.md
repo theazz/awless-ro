@@ -9,8 +9,6 @@ calling is a `Describe`, `Get`, `List` or `Head`, and a test enforces that.
 
 ![awless-ro listing instances and databases, showing a database and an instance with their relations, completing a name with Tab, and scanning security groups](docs/demo.gif)
 
-<sub>Recorded against a made-up account.</sub>
-
 ## Why this exists
 
 [`wallix/awless`](https://github.com/wallix/awless) was a genuinely good CLI, and it
