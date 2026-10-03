@@ -154,43 +154,44 @@ func addManualInfraFetchFuncs(conf *Config, funcs map[string]fetch.Func) {
 			err error
 		}
 
-		var wg sync.WaitGroup
-		resc := make(chan resStruct)
-
 		fetchDefinitionsInput := &ecs.ListTaskDefinitionsInput{}
 		if givenFamilyPrefix, hasFilter := getUserFiltersFromContext(ctx)["name"]; hasFilter {
 			fetchDefinitionsInput.FamilyPrefix = &givenFamilyPrefix
 		}
 
+		// Every active revision of every family is listed, which in an account that
+		// deploys often is thousands, and each needs its own DescribeTaskDefinition.
+		var arns []string
 		definitionsPaginator := ecs.NewListTaskDefinitionsPaginator(conf.APIs.Ecs, fetchDefinitionsInput)
 		for definitionsPaginator.HasMorePages() {
 			out, err := definitionsPaginator.NextPage(ctx)
 			if err != nil {
 				return resources, objects, err
 			}
-			for _, arn := range out.TaskDefinitionArns {
-				wg.Add(1)
-				go func(taskDefArn string) {
-					defer wg.Done()
-					tasksOut, err := conf.APIs.Ecs.DescribeTaskDefinition(ctx, &ecs.DescribeTaskDefinitionInput{
-						TaskDefinition: awssdk.String(taskDefArn),
-					})
-					if err != nil {
-						resc <- resStruct{err: err}
-						return
-					}
-					if tasksOut.TaskDefinition == nil {
-						return
-					}
-					resc <- resStruct{res: *tasksOut.TaskDefinition}
-				}(arn)
-			}
+			arns = append(arns, out.TaskDefinitionArns...)
 		}
 
-		go func() {
-			wg.Wait()
-			close(resc)
-		}()
+		// A definition that fails to describe is reported with the others rather
+		// than ending the listing, as before; so the calls never return an error.
+		var (
+			mu        sync.Mutex
+			described []resStruct
+		)
+		forEachParallel(ctx, arns, func(ctx context.Context, taskDefArn string) error {
+			tasksOut, err := conf.APIs.Ecs.DescribeTaskDefinition(ctx, &ecs.DescribeTaskDefinitionInput{
+				TaskDefinition: awssdk.String(taskDefArn),
+			})
+			mu.Lock()
+			defer mu.Unlock()
+			if err != nil {
+				described = append(described, resStruct{err: err})
+				return nil
+			}
+			if tasksOut.TaskDefinition != nil {
+				described = append(described, resStruct{res: *tasksOut.TaskDefinition})
+			}
+			return nil
+		})
 
 		var tasks []ecstypes.Task
 		if val, e := cache.Get("getAllTasks", func() (interface{}, error) {
@@ -203,7 +204,7 @@ func addManualInfraFetchFuncs(conf *Config, funcs map[string]fetch.Func) {
 
 		var errors []string
 
-		for res := range resc {
+		for _, res := range described {
 			if res.err != nil {
 				errors = appendIfNotInSlice(errors, res.err.Error())
 				continue
@@ -324,10 +325,7 @@ func addManualInfraFetchFuncs(conf *Config, funcs map[string]fetch.Func) {
 			return resources, objects, nil
 		}
 
-		errc := make(chan error)
-		resultc := make(chan elbv2types.Listener)
-		var wg sync.WaitGroup
-
+		var balancerArns []*string
 		balancers := elasticloadbalancingv2.NewDescribeLoadBalancersPaginator(conf.APIs.Elbv2,
 			&elasticloadbalancingv2.DescribeLoadBalancersInput{})
 		for balancers.HasMorePages() {
@@ -336,48 +334,37 @@ func addManualInfraFetchFuncs(conf *Config, funcs map[string]fetch.Func) {
 				return resources, objects, err
 			}
 			for _, lb := range out.LoadBalancers {
-				wg.Add(1)
-				go func(arn *string) {
-					defer wg.Done()
-					listeners := elasticloadbalancingv2.NewDescribeListenersPaginator(conf.APIs.Elbv2,
-						&elasticloadbalancingv2.DescribeListenersInput{LoadBalancerArn: arn})
-					for listeners.HasMorePages() {
-						page, err := listeners.NextPage(ctx)
-						if err != nil {
-							errc <- err
-							return
-						}
-						for _, listen := range page.Listeners {
-							resultc <- listen
-						}
-					}
-				}(lb.LoadBalancerArn)
+				balancerArns = append(balancerArns, lb.LoadBalancerArn)
 			}
 		}
 
-		go func() {
-			wg.Wait()
-			close(resultc)
-		}()
-
-		for {
-			select {
-			case err := <-errc:
+		var mu sync.Mutex
+		err := forEachParallel(ctx, balancerArns, func(ctx context.Context, arn *string) error {
+			listeners := elasticloadbalancingv2.NewDescribeListenersPaginator(conf.APIs.Elbv2,
+				&elasticloadbalancingv2.DescribeListenersInput{LoadBalancerArn: arn})
+			for listeners.HasMorePages() {
+				page, err := listeners.NextPage(ctx)
 				if err != nil {
-					return resources, objects, err
+					return err
 				}
-			case listener, ok := <-resultc:
-				if !ok {
-					return resources, objects, nil
-				}
-				objects = append(objects, listener)
-				res, err := awsconv.NewResource(listener)
-				if err != nil {
-					return resources, objects, err
-				}
-				resources = append(resources, res)
+				mu.Lock()
+				objects = append(objects, page.Listeners...)
+				mu.Unlock()
 			}
+			return nil
+		})
+		if err != nil {
+			return resources, objects, err
 		}
+
+		for _, listener := range objects {
+			res, err := awsconv.NewResource(listener)
+			if err != nil {
+				return resources, objects, err
+			}
+			resources = append(resources, res)
+		}
+		return resources, objects, nil
 	}
 }
 
@@ -593,84 +580,49 @@ func addManualAccessFetchFuncs(conf *Config, funcs map[string]fetch.Func) {
 			return resources, objects, nil
 		}
 
-		var wg sync.WaitGroup
-		resourcesC := make(chan *graph.Resource)
-		objectsC := make(chan iamtypes.AccessKeyMetadata)
-		errC := make(chan error)
-		var hasError bool
-
+		var users []iamtypes.User
 		usersPaginator := iam.NewListUsersPaginator(conf.APIs.Iam, &iam.ListUsersInput{})
-		for usersPaginator.HasMorePages() && !hasError {
+		for usersPaginator.HasMorePages() {
 			outUsers, err := usersPaginator.NextPage(ctx)
 			if err != nil {
 				return resources, objects, err
 			}
+			users = append(users, outUsers.Users...)
+		}
 
-			for _, user := range outUsers.Users {
-				wg.Add(1)
-				go func(u iamtypes.User) {
-					defer wg.Done()
-
-					userRes, err := awsconv.InitResource(u)
+		// One ListAccessKeys per user, against IAM's low rate limits. This used to
+		// stop on a hasError flag that the per-user goroutines wrote and the paging
+		// loop read without synchronisation.
+		var mu sync.Mutex
+		err := forEachParallel(ctx, users, func(ctx context.Context, u iamtypes.User) error {
+			userRes, err := awsconv.InitResource(u)
+			if err != nil {
+				return err
+			}
+			keys := iam.NewListAccessKeysPaginator(conf.APIs.Iam, &iam.ListAccessKeysInput{UserName: u.UserName})
+			for keys.HasMorePages() {
+				out, err := keys.NextPage(ctx)
+				if err != nil {
+					return err
+				}
+				for _, output := range out.AccessKeyMetadata {
+					res, err := awsconv.NewResource(output)
 					if err != nil {
-						hasError = true
-						errC <- err
-						return
+						return err
 					}
-
-					keys := iam.NewListAccessKeysPaginator(conf.APIs.Iam, &iam.ListAccessKeysInput{UserName: u.UserName})
-					for keys.HasMorePages() {
-						out, err := keys.NextPage(ctx)
-						if err != nil {
-							hasError = true
-							errC <- err
-							return
-						}
-						for _, output := range out.AccessKeyMetadata {
-							objectsC <- output
-							res, e := awsconv.NewResource(output)
-							if e != nil {
-								hasError = true
-								errC <- e
-								return
-							}
-							res.AddRelation(rdf.ChildrenOfRel, userRes)
-							resourcesC <- res
-						}
-					}
-				}(user)
+					res.AddRelation(rdf.ChildrenOfRel, userRes)
+					mu.Lock()
+					objects = append(objects, output)
+					resources = append(resources, res)
+					mu.Unlock()
+				}
 			}
-		}
-
-		go func() {
-			wg.Wait()
-			close(errC)
-			close(objectsC)
-			close(resourcesC)
-		}()
-
-		for {
-			select {
-			case e := <-errC:
-				if e != nil {
-					return resources, objects, e
-				}
-			case r, ok := <-resourcesC:
-				if !ok {
-					return resources, objects, nil
-				}
-				if r != nil {
-					resources = append(resources, r)
-				}
-			case o, ok := <-objectsC:
-				if !ok {
-					return resources, objects, nil
-				}
-				objects = append(objects, o)
-			}
-		}
+			return nil
+		})
+		return resources, objects, err
 	}
 }
+
 func addManualStorageFetchFuncs(conf *Config, funcs map[string]fetch.Func) {
 	funcs["bucket"] = func(ctx context.Context, cache fetch.Cache) ([]*graph.Resource, interface{}, error) {
 		var resources []*graph.Resource
@@ -755,101 +707,71 @@ func addManualMessagingFetchFuncs(conf *Config, funcs map[string]fetch.Func) {
 			queueUrls = append(queueUrls, out.QueueUrls...)
 		}
 
-		errC := make(chan error)
-		objectsC := make(chan string)
-		resourcesC := make(chan *graph.Resource)
-		var wg sync.WaitGroup
-
-		for _, output := range queueUrls {
-			wg.Add(1)
-			go func(url string) {
-				defer wg.Done()
-				objectsC <- url
-				res := graph.InitResource(cloud.Queue, url)
-				res.Properties()[properties.ID] = url
-				attrs, err := conf.APIs.Sqs.GetQueueAttributes(ctx, &sqs.GetQueueAttributesInput{
-					AttributeNames: []sqstypes.QueueAttributeName{sqstypes.QueueAttributeNameAll},
-					QueueUrl:       awssdk.String(url),
-				})
-				// A queue can disappear between listing and describing it; that
-				// is not a sync failure.
-				var notExist *sqstypes.QueueDoesNotExist
-				var deleted *sqstypes.QueueDeletedRecently
-				if errors.As(err, &notExist) || errors.As(err, &deleted) {
-					return
-				}
-				if err != nil {
-					errC <- err
-					return
-				}
-				for k, v := range attrs.Attributes {
-					switch k {
-					case "ApproximateNumberOfMessages":
-						count, err := strconv.Atoi(v)
-						if err != nil {
-							errC <- err
-						}
-						res.Properties()[properties.ApproximateMessageCount] = count
-					case "CreatedTimestamp":
-						if vv := v; vv != "" {
-							timestamp, err := strconv.ParseInt(vv, 10, 64)
-							if err != nil {
-								errC <- err
-							}
-							res.Properties()[properties.Created] = time.Unix(int64(timestamp), 0)
-						}
-					case "LastModifiedTimestamp":
-						if vv := v; vv != "" {
-							timestamp, err := strconv.ParseInt(vv, 10, 64)
-							if err != nil {
-								errC <- err
-							}
-							res.Properties()[properties.Modified] = time.Unix(int64(timestamp), 0)
-						}
-					case "QueueArn":
-						res.Properties()[properties.Arn] = v
-					case "DelaySeconds":
-						delay, err := strconv.Atoi(v)
-						if err != nil {
-							errC <- err
-						}
-						res.Properties()[properties.Delay] = delay
-					}
-
-				}
-				resourcesC <- res
-			}(output)
-
-		}
-
-		go func() {
-			wg.Wait()
-			close(errC)
-			close(objectsC)
-			close(resourcesC)
-		}()
-
-		for {
-			select {
-			case err := <-errC:
-				if err != nil {
-					return resources, objects, err
-				}
-			case o, ok := <-objectsC:
-				if !ok {
-					return resources, objects, nil
-				}
-				objects = append(objects, o)
-			case r, ok := <-resourcesC:
-				if !ok {
-					return resources, objects, nil
-				}
-				resources = append(resources, r)
-
+		var mu sync.Mutex
+		err := forEachParallel(ctx, queueUrls, func(ctx context.Context, url string) error {
+			res := graph.InitResource(cloud.Queue, url)
+			res.Properties()[properties.ID] = url
+			attrs, err := conf.APIs.Sqs.GetQueueAttributes(ctx, &sqs.GetQueueAttributesInput{
+				AttributeNames: []sqstypes.QueueAttributeName{sqstypes.QueueAttributeNameAll},
+				QueueUrl:       awssdk.String(url),
+			})
+			// A queue can disappear between listing and describing it; that
+			// is not a sync failure.
+			var notExist *sqstypes.QueueDoesNotExist
+			var deleted *sqstypes.QueueDeletedRecently
+			if errors.As(err, &notExist) || errors.As(err, &deleted) {
+				mu.Lock()
+				objects = append(objects, url)
+				mu.Unlock()
+				return nil
 			}
-		}
+			if err != nil {
+				return err
+			}
+			for k, v := range attrs.Attributes {
+				switch k {
+				case "ApproximateNumberOfMessages":
+					count, err := strconv.Atoi(v)
+					if err != nil {
+						return err
+					}
+					res.Properties()[properties.ApproximateMessageCount] = count
+				case "CreatedTimestamp":
+					if v != "" {
+						timestamp, err := strconv.ParseInt(v, 10, 64)
+						if err != nil {
+							return err
+						}
+						res.Properties()[properties.Created] = time.Unix(timestamp, 0)
+					}
+				case "LastModifiedTimestamp":
+					if v != "" {
+						timestamp, err := strconv.ParseInt(v, 10, 64)
+						if err != nil {
+							return err
+						}
+						res.Properties()[properties.Modified] = time.Unix(timestamp, 0)
+					}
+				case "QueueArn":
+					res.Properties()[properties.Arn] = v
+				case "DelaySeconds":
+					delay, err := strconv.Atoi(v)
+					if err != nil {
+						return err
+					}
+					res.Properties()[properties.Delay] = delay
+				}
+			}
+			mu.Lock()
+			objects = append(objects, url)
+			resources = append(resources, res)
+			mu.Unlock()
+			return nil
+		})
+		return resources, objects, err
 	}
 }
+
 func addManualDnsFetchFuncs(conf *Config, funcs map[string]fetch.Func) {
 	funcs["record"] = func(ctx context.Context, cache fetch.Cache) ([]*graph.Resource, interface{}, error) {
 		var objects []route53types.ResourceRecordSet
@@ -862,101 +784,63 @@ func addManualDnsFetchFuncs(conf *Config, funcs map[string]fetch.Func) {
 
 		zoneName, hasZoneFilter := getUserFiltersFromContext(ctx)["zone"]
 
-		errC := make(chan error)
-		zoneC := make(chan route53types.HostedZone)
-		objectsC := make(chan route53types.ResourceRecordSet)
-		resourcesC := make(chan *graph.Resource)
-
-		go func() {
-			paginator := route53.NewListHostedZonesPaginator(conf.APIs.Route53, &route53.ListHostedZonesInput{})
-			for paginator.HasMorePages() {
-				out, err := paginator.NextPage(ctx)
-				if err != nil {
-					errC <- err
-					break
-				}
-				for _, output := range out.HostedZones {
-					if hasZoneFilter && !strings.Contains(strings.ToLower(awssdk.ToString(output.Name)), strings.ToLower(zoneName)) {
-						continue
-					}
-					zoneC <- output
-				}
+		var zones []route53types.HostedZone
+		paginator := route53.NewListHostedZonesPaginator(conf.APIs.Route53, &route53.ListHostedZonesInput{})
+		for paginator.HasMorePages() {
+			out, err := paginator.NextPage(ctx)
+			if err != nil {
+				return resources, objects, err
 			}
-			close(zoneC)
-		}()
-
-		go func() {
-			var wg sync.WaitGroup
-
-			for zone := range zoneC {
-				wg.Add(1)
-				go func(z route53types.HostedZone) {
-					defer wg.Done()
-
-					// ListResourceRecordSets has no paginator in SDK v2: it pages
-					// on a record name and type pair rather than a single token,
-					// so the loop is written out here.
-					input := &route53.ListResourceRecordSetsInput{HostedZoneId: z.Id}
-					for {
-						out, err := conf.APIs.Route53.ListResourceRecordSets(ctx, input)
-						if err != nil {
-							errC <- err
-							return
-						}
-						for _, output := range out.ResourceRecordSets {
-							objectsC <- output
-							res, err := awsconv.NewResource(output)
-							if err != nil {
-								errC <- err
-								return
-							}
-							res.Properties()[properties.Zone] = awssdk.ToString(z.Name)
-
-							parent, err := awsconv.InitResource(z)
-							if err != nil {
-								errC <- err
-								return
-							}
-							res.AddRelation(rdf.ChildrenOfRel, parent)
-							resourcesC <- res
-						}
-						if !out.IsTruncated {
-							return
-						}
-						input.StartRecordName = out.NextRecordName
-						input.StartRecordType = out.NextRecordType
-						input.StartRecordIdentifier = out.NextRecordIdentifier
-					}
-				}(zone)
-			}
-
-			go func() {
-				wg.Wait()
-				close(objectsC)
-				close(resourcesC)
-			}()
-		}()
-
-		for {
-			select {
-			case err := <-errC:
-				if err != nil {
-					return resources, objects, err
+			for _, output := range out.HostedZones {
+				if hasZoneFilter && !strings.Contains(strings.ToLower(awssdk.ToString(output.Name)), strings.ToLower(zoneName)) {
+					continue
 				}
-			case o, ok := <-objectsC:
-				if !ok {
-					return resources, objects, nil
-				}
-				objects = append(objects, o)
-			case r, ok := <-resourcesC:
-				if !ok {
-					return resources, objects, nil
-				}
-				resources = append(resources, r)
+				zones = append(zones, output)
 			}
 		}
+
+		// Route 53 allows five requests a second per account, so a zone-per-goroutine
+		// burst over many zones was throttled into failure; bounded, the SDK's own
+		// retries absorb it.
+		var mu sync.Mutex
+		err := forEachParallel(ctx, zones, func(ctx context.Context, z route53types.HostedZone) error {
+			parent, err := awsconv.InitResource(z)
+			if err != nil {
+				return err
+			}
+			// ListResourceRecordSets has no paginator in SDK v2: it pages on a
+			// record name and type pair rather than a single token, so the loop is
+			// written out here.
+			input := &route53.ListResourceRecordSetsInput{HostedZoneId: z.Id}
+			for {
+				out, err := conf.APIs.Route53.ListResourceRecordSets(ctx, input)
+				if err != nil {
+					return err
+				}
+				for _, output := range out.ResourceRecordSets {
+					res, err := awsconv.NewResource(output)
+					if err != nil {
+						return err
+					}
+					res.Properties()[properties.Zone] = awssdk.ToString(z.Name)
+					res.AddRelation(rdf.ChildrenOfRel, parent)
+					mu.Lock()
+					objects = append(objects, output)
+					resources = append(resources, res)
+					mu.Unlock()
+				}
+				if !out.IsTruncated {
+					return nil
+				}
+				input.StartRecordName = out.NextRecordName
+				input.StartRecordType = out.NextRecordType
+				input.StartRecordIdentifier = out.NextRecordIdentifier
+			}
+		})
+		return resources, objects, err
 	}
 }
+
 func addManualLambdaFetchFuncs(conf *Config, funcs map[string]fetch.Func) {
 }
 func addManualMonitoringFetchFuncs(conf *Config, funcs map[string]fetch.Func) {
