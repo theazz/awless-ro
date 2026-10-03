@@ -35,7 +35,7 @@ const AWLESS_ASCII_LOGO = `
 // (no write operations), so continuing upstream's v0.1.11 numbering would imply
 // a compatibility that does not exist.
 var (
-	Version  = "v0.1.1"
+	Version  = "v0.2.0"
 	BuildFor string
 
 	buildSha, buildDate, buildArch, buildOS string
