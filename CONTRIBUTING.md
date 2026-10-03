@@ -92,6 +92,21 @@ To change generated output, change the definitions or the templates in
 `gen/aws/generators/`, then run `make generate`. The generator formats what it writes,
 so there is no separate formatting step and no need for `goimports`.
 
+## Language
+
+English, everywhere a person reads: documentation, code comments, commit messages,
+issues, pull requests, and the strings the tool prints. Not a preference about
+English — a repository where some of the explanation is in a language a reader does
+not have is worse than one with less explanation, because the reader can see that
+something is being withheld and cannot tell whether it mattered.
+
+The exception is test data. `graph/testdata/*.nt` and the literal tables in
+`graph/ntformat_test.go` and `triplestore/ntriples_test.go` carry non-ASCII strings in
+several scripts on purpose: they exist to prove that multi-byte UTF-8 survives being
+written to N-Triples and read back. Changing which scripts appear there would weaken
+the test, and `testdata/legacy.nt` cannot be changed at all — it is a captured
+artifact of the old triple store, and nothing can regenerate it.
+
 ## Code style
 
 `gofmt -s`, and the standard library's sense of naming. Two things this project cares
