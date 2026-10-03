@@ -153,7 +153,7 @@ func (c *Client) Connect() (err error) {
 		c.logger.Infof("Login as '%s' on '%s'; client '%s'", c.User, c.IP, args[0])
 		c.logger.ExtraVerbosef("running locally %s", args)
 		if err := c.CloseAll(); err != nil {
-			c.logger.Warning("could not close properly SSH awless client before delegating")
+			c.logger.Warning("could not close properly SSH awless-ro client before delegating")
 		}
 		return syscall.Exec(args[0], args, os.Environ())
 	}

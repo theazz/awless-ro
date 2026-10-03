@@ -32,11 +32,11 @@ func init() {
 var switchCmd = &cobra.Command{
 	Use:     "switch [REGION] [PROFILE]",
 	Aliases: []string{"sw"},
-	Short:   "Quick way to switch awless config to given profile and/or region",
-	Example: `  awless switch eu-west-2           # now using region eu-west-2'
-  awless switch mfa                 # now using profile mfa (with mfa a valid profile in ~/.aws/{config,credentials})
-  awless switch default us-west-1   # now using region us-west-1 and the default profile
-  awless sw eu-west-3 admin         # now using profile admin in region eu-west-3`,
+	Short:   "Quick way to switch awless-ro config to given profile and/or region",
+	Example: `  awless-ro switch eu-west-2           # now using region eu-west-2'
+  awless-ro switch mfa                 # now using profile mfa (with mfa a valid profile in ~/.aws/{config,credentials})
+  awless-ro switch default us-west-1   # now using region us-west-1 and the default profile
+  awless-ro sw eu-west-3 admin         # now using profile admin in region eu-west-3`,
 	PersistentPreRun: applyHooks(initAwlessEnvHook, initLoggerHook),
 	PersistentPostRun: applyHooks(
 		includeHookIf(&config.TriggerSyncOnConfigUpdate, initCloudServicesHook),

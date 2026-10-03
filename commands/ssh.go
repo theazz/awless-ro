@@ -104,24 +104,24 @@ var sshCmd = &cobra.Command{
 	Use:   "ssh [USER@]INSTANCE",
 	Short: "[not in this release] Launch a SSH session to an instance given an id or alias",
 	Long:  "Launch a SSH session to an instance given an id or alias. All connection details are derived from a given instance name/id.",
-	Example: `  awless ssh i-8d43b21b                       # using the instance id
-  awless ssh redis-prod                       # using name only (other infos are derived)
-  awless ssh ec2-user@redis-prod              # forcing the user
-  awless ssh 34.215.29.221                    # using the IP
-  awless ssh root@34.215.29.221 --port 23     # specifying a port
+	Example: `  awless-ro ssh i-8d43b21b                       # using the instance id
+  awless-ro ssh redis-prod                       # using name only (other infos are derived)
+  awless-ro ssh ec2-user@redis-prod              # forcing the user
+  awless-ro ssh 34.215.29.221                    # using the IP
+  awless-ro ssh root@34.215.29.221 --port 23     # specifying a port
 
-  awless ssh redis-prod -i keyname            # using AWS keyname (look into ~/.ssh/keyname.pem & ~/.awless/keys/keyname.pem)
-  awless ssh redis-prod -i ~/path/toward/key  # specifying a full key path
+  awless-ro ssh redis-prod -i keyname            # using AWS keyname (look into ~/.ssh/keyname.pem & ~/.awless-ro/keys/keyname.pem)
+  awless-ro ssh redis-prod -i ~/path/toward/key  # specifying a full key path
 
-  awless ssh db-private --through my-bastion  # connect to a private inst through a public one
-  awless ssh db-private --private             # connect using the private IP (when you have a VPN, tunnel, etc ...)
+  awless-ro ssh db-private --through my-bastion  # connect to a private inst through a public one
+  awless-ro ssh db-private --private             # connect using the private IP (when you have a VPN, tunnel, etc ...)
 
-  awless ssh redis-prod --print-cli           # print out the full terminal command to connect to instance
-  awless ssh redis-prod --print-config        # print out the full SSH config (i.e: ~/.ssh/config) to connect to instance
+  awless-ro ssh redis-prod --print-cli           # print out the full terminal command to connect to instance
+  awless-ro ssh redis-prod --print-config        # print out the full SSH config (i.e: ~/.ssh/config) to connect to instance
   
-  awless ssh private-redis --through my-proxy                                # connect to private through proxy instance
-  awless ssh private-redis --through my-proxy --through-port 23              # specifying proxy port
-  awless ssh 172.31.77.151 --port 2222 --through my-proxy --through-port 23  # specifying target & proxy port`,
+  awless-ro ssh private-redis --through my-proxy                                # connect to private through proxy instance
+  awless-ro ssh private-redis --through my-proxy --through-port 23              # specifying proxy port
+  awless-ro ssh 172.31.77.151 --port 2222 --through my-proxy --through-port 23  # specifying target & proxy port`,
 
 	PersistentPreRun:  applyHooks(initLoggerHook, initAwlessEnvHook, initCloudServicesHook, firstInstallDoneHook),
 	PersistentPostRun: applyHooks(onVersionUpgrade, networkMonitorHook),
@@ -298,7 +298,7 @@ func initInstanceConnectionContext(userhost, keypath string) (*instanceConnectio
 				if uptime, ok := res.Properties()[properties.Launched].(time.Time); ok {
 					up = fmt.Sprintf("\t\t(uptime: %s)", console.HumanizeTime(uptime))
 				}
-				logger.Warningf("\t`awless ssh %s`%s", res.Id(), up)
+				logger.Warningf("\t`awless-ro ssh %s`%s", res.Id(), up)
 			}
 			return ctx, errors.New("use instances ids")
 		}
@@ -371,7 +371,7 @@ func (ctx *instanceConnectionContext) checkInstanceAccessible() (err error) {
 	if st := ctx.state; st != "running" {
 		logger.Warningf("this instance is '%s' (cannot ssh to a non running state)", st)
 		if st == "stopped" {
-			logger.Warningf("you can start it with `awless -f start instance id=%s`", ctx.instance.Id())
+			logger.Warningf("awless-ro is read-only; you can start it with `aws ec2 start-instances --instance-ids %s`", ctx.instance.Id())
 		}
 		return errors.New("instance not accessible")
 	}
@@ -411,7 +411,7 @@ func (ctx *instanceConnectionContext) checkInstanceAccessible() (err error) {
 			if len(sgroups) == 1 {
 				group = sgroups[0]
 			}
-			logger.Warningf("`awless update securitygroup id=%s inbound=authorize protocol=tcp cidr=%s/32 portrange=22`", group, ctx.myip)
+			logger.Warningf("`aws ec2 authorize-security-group-ingress --group-id %s --protocol tcp --port 22 --cidr %s/32`", group, ctx.myip)
 			return errors.New("instance not accessible")
 		}
 	}

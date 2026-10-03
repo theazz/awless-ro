@@ -32,7 +32,7 @@ var (
 
 func Init(profile, region string, extraConf map[string]interface{}, log *logger.Logger, profileSetterCallback func(val string) error, enableNetworkMonitor bool) error {
 	if region == "" {
-		return errors.New("empty AWS region. Set it with `awless config set aws.region`")
+		return errors.New("empty AWS region. Set it with `awless-ro config set aws.region`")
 	}
 
 	params := awscredentials.Params{

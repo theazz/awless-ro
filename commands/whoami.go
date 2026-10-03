@@ -68,7 +68,6 @@ var whoamiCmd = &cobra.Command{
 		if me.IsRoot() {
 			logger.Warning("You are currently root")
 			logger.Warning("Best practices suggest to create a new user and affecting it roles of access")
-			logger.Warning("awless official templates might help https://github.com/theazz/awless-ro-templates\n")
 		}
 
 		switch {

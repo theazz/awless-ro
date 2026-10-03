@@ -80,7 +80,7 @@ func init() {
 var listCmd = &cobra.Command{
 	Use:               "list",
 	Aliases:           []string{"ls"},
-	Example:           "  awless list instances --sort uptime\n  awless list users --format csv\n  awless list volumes --filter state=use --filter type=gp2\n  awless list volumes --tag-value Purchased\n  awless list vpcs --tag-key Dept --tag-key Internal\n  awless list instances --tag Env=Production,Dept=Marketing\n  awless list instances --filter state=running,type=micro\n  awless list s3objects --filter bucket=pdf-bucket ",
+	Example:           "  awless-ro list instances --sort uptime\n  awless-ro list users --format csv\n  awless-ro list volumes --filter state=use --filter type=gp2\n  awless-ro list volumes --tag-value Purchased\n  awless-ro list vpcs --tag-key Dept --tag-key Internal\n  awless-ro list instances --tag Env=Production,Dept=Marketing\n  awless-ro list instances --filter state=running,type=micro\n  awless-ro list s3objects --filter bucket=pdf-bucket ",
 	PersistentPreRun:  applyHooks(initLoggerHook, initAwlessEnvHook, initCloudServicesHook, firstInstallDoneHook),
 	PersistentPostRun: applyHooks(onVersionUpgrade, networkMonitorHook),
 	Short:             "List resources: sorting, filtering via tag/properties, output formatting, etc...",
@@ -99,7 +99,7 @@ var listSpecificResourceCmd = func(resType string) *cobra.Command {
 				}
 				logger.Errorf("invalid parameter%s '%s'", plural, strings.Join(args, " "))
 				if strings.Contains(args[0], "=") {
-					if !promptConfirmDefaultYes("Did you mean `awless list %s --filter %s`? ", cloud.PluralizeResource(resType), strings.Join(args, " ")) {
+					if !promptConfirmDefaultYes("Did you mean `awless-ro list %s --filter %s`? ", cloud.PluralizeResource(resType), strings.Join(args, " ")) {
 						os.Exit(1)
 					}
 					listingFiltersFlag = append(listingFiltersFlag, args...)

@@ -53,7 +53,7 @@ func applyHooks(funcs ...func(*cobra.Command, []string) error) func(*cobra.Comma
 
 func initAwlessEnvHook(cmd *cobra.Command, args []string) error {
 	if err := config.InitAwlessEnv(); err != nil {
-		return fmt.Errorf("cannot init awless environment: %s", err)
+		return fmt.Errorf("cannot init awless-ro environment: %s", err)
 	}
 
 	return applyRegionAndProfilePrecedence()

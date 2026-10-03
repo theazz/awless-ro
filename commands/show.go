@@ -52,10 +52,10 @@ func init() {
 var showCmd = &cobra.Command{
 	Use:   "show REFERENCE",
 	Short: "Show resources lineage and dependencies given a REFERENCE: name, id, arn, etc...",
-	Example: `  awless show i-8d43b21b            # show an instance via its ref
-  awless show AIDAJ3Z24GOKHTZO4OIX6 # show a user via its ref
-  awless show jsmith                # show a user via its ref,
-  awless show @jsmith               # forcing search by name`,
+	Example: `  awless-ro show i-8d43b21b            # show an instance via its ref
+  awless-ro show AIDAJ3Z24GOKHTZO4OIX6 # show a user via its ref
+  awless-ro show jsmith                # show a user via its ref,
+  awless-ro show @jsmith               # forcing search by name`,
 	PersistentPreRun:  applyHooks(initLoggerHook, initAwlessEnvHook, initCloudServicesHook, initSyncerHook, firstInstallDoneHook),
 	PersistentPostRun: applyHooks(onVersionUpgrade, networkMonitorHook),
 
@@ -69,7 +69,7 @@ var showCmd = &cobra.Command{
 
 		if _, err := awsconfig.ParseRegion(ref); err == nil && ref != config.GetAWSRegion() {
 			logger.Errorf("Cannot show region '%s' as you are in region '%s'", ref, config.GetAWSRegion())
-			logger.Infof("Use `awless show %s -r %s`", ref, ref)
+			logger.Infof("Use `awless-ro show %s -r %s`", ref, ref)
 			os.Exit(1)
 		}
 
@@ -246,7 +246,7 @@ func findResourceInLocalGraphs(ref string) (cloud.Resource, cloud.GraphAPI) {
 		logger.Infof("%d resources found with name '%s' in region '%s' for profile '%s'. Show a specific resource with:", len(resources), deprefix(ref), config.GetAWSRegion(), config.GetAWSProfile())
 		for _, res := range resources {
 			var buf bytes.Buffer
-			buf.WriteString(fmt.Sprintf("\t`awless show %s` to show the %s", res.Id(), res.Type()))
+			buf.WriteString(fmt.Sprintf("\t`awless-ro show %s` to show the %s", res.Id(), res.Type()))
 			if state, ok := res.Properties()[properties.State].(string); ok {
 				buf.WriteString(fmt.Sprintf(" (state: '%s')", state))
 			}
@@ -314,7 +314,7 @@ func decorateWithSuggestion(err error, ref string) error {
 		}
 		for _, parent := range parents {
 			if parent.Type() == cloud.Region {
-				buf.WriteString(fmt.Sprintf("\n\tfound previously synced under region '%s' as %s. Show it with `awless show %s -r %s --local`", parent.Id(), res, res.Id(), parent.Id()))
+				buf.WriteString(fmt.Sprintf("\n\tfound previously synced under region '%s' as %s. Show it with `awless-ro show %s -r %s --local`", parent.Id(), res, res.Id(), parent.Id()))
 			}
 		}
 

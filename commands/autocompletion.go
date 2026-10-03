@@ -37,23 +37,23 @@ var autocompleteCmd = &cobra.Command{
 	Long: `
 Output shell completion code for bash or zsh
 This command prints shell code which must be evaluated to provide interactive
-completion of awless commands.
+completion of awless-ro commands.
 
 Bash
-	$ source <(awless completion bash)
-will load the awless completion code for bash. Note that this depends on the
-bash-completion framework. It must be sourced before sourcing the awless
+	$ source <(awless-ro completion bash)
+will load the awless-ro completion code for bash. Note that this depends on the
+bash-completion framework. It must be sourced before sourcing the awless-ro
 completion, e.g. on macOS:
 	$ brew install bash-completion
 	$ source $(brew --prefix)/etc/bash_completion
-	$ source <(awless completion bash)
+	$ source <(awless-ro completion bash)
 	(or, if you want to preserve completion within new terminal sessions)
-	$ echo 'source <(awless completion bash)' >> ~/.bashrc
+	$ echo 'source <(awless-ro completion bash)' >> ~/.bashrc
 
 Zsh
-	$ source <(awless completion zsh)
+	$ source <(awless-ro completion zsh)
 	(or, if you want to preserve completion within new terminal sessions)
-	$ echo 'source <(awless completion zsh)' >> ~/.zshrc`,
+	$ echo 'source <(awless-ro completion zsh)' >> ~/.zshrc`,
 }
 
 var bashAutocompleteCmd = &cobra.Command{
@@ -62,16 +62,16 @@ var bashAutocompleteCmd = &cobra.Command{
 	Long: `
 Output shell completion code for bash.
 This command prints shell code which must be evaluated to provide interactive
-completion of awless commands.
-	$ source <(awless completion bash)
-will load the awless completion code for bash. Note that this depends on the
-bash-completion framework. It must be sourced before sourcing the awless
+completion of awless-ro commands.
+	$ source <(awless-ro completion bash)
+will load the awless-ro completion code for bash. Note that this depends on the
+bash-completion framework. It must be sourced before sourcing the awless-ro
 completion, e.g. on macOS:
 	$ brew install bash-completion
 	$ source $(brew --prefix)/etc/bash_completion
-	$ source <(awless completion bash)
+	$ source <(awless-ro completion bash)
 	(or, if you want to preserve completion within new terminal sessions)
-	$ echo 'source <(awless completion bash)' >> ~/.bashrc`,
+	$ echo 'source <(awless-ro completion bash)' >> ~/.bashrc`,
 	RunE: runCompletionBash,
 }
 
@@ -81,10 +81,10 @@ var zshAutocompleteCmd = &cobra.Command{
 	Long: `
 Output shell completion code for zsh.
 This command prints shell code which must be evaluated to provide interactive
-completion of awless commands.
-	$ source <(awless completion zsh)
+completion of awless-ro commands.
+	$ source <(awless-ro completion zsh)
 	(or, if you want to preserve completion within new terminal sessions)
-	$ echo 'source <(awless completion zsh)' >> ~/.zshrc
+	$ echo 'source <(awless-ro completion zsh)' >> ~/.zshrc
 zsh completions are only supported in versions of zsh >= 5.2`,
 	RunE: runCompletionZsh,
 }
