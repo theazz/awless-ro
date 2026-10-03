@@ -1,7 +1,8 @@
 # awless-ro v0.1.0
 
-A CLI for **looking at** an AWS account: syncs your cloud into a local graph, then
-lets you explore it offline, by name instead of by id, with output you can pipe.
+A CLI for **looking at** an AWS account: readable tables instead of JSON, resources
+by name instead of by id, how they relate to each other, and output you can pipe.
+Optionally, a local copy of the account to explore offline.
 
 It cannot change anything — and that is enforced, not promised. Every AWS operation
 the binary is capable of calling is a `Describe`, `Get`, `List` or `Head`, and a test
@@ -17,31 +18,26 @@ read-only became a property of the tool.
 ## Try it
 
 ```sh
-awless-ro sync
-awless-ro list instances --local
-awless-ro show my-database --local
+brew install theazz/tap/awless-ro
+awless-ro list instances
+awless-ro show my-database
 ```
 
-Existing `~/.aws` profiles are picked up; anything missing is prompted for on first
-run. State goes to `~/.awless-ro`, so an installed upstream `awless` is untouched.
+No setup step: `list` asks AWS directly, and `show` fetches what it needs. Existing
+`~/.aws` profiles are picked up; anything missing is prompted for on first run. State goes to `~/.awless-ro`, so an installed upstream `awless` is untouched.
 
 ## What works
-
-**`sync`** — all nine services in parallel, stored as N-Triples under
-`~/.awless-ro`. A service you lack permission for is reported and skipped; the rest
-still land. Two resource types are off by default because they cost an API call per
-parent, and the sync says so rather than reporting zero of them.
 
 **`list`** — 49 resource types across EC2, IAM, S3, RDS, AutoScaling, SNS, SQS,
 Route53, CloudWatch, CloudFormation, Lambda, ECS, ECR, ELB (classic and v2),
 CloudFront and ACM.
 
 ```sh
-awless-ro list instances --filter state=running --sort uptime --local
-awless-ro list instances --columns name,state,architecture,lifecycle --local
-awless-ro list volumes --tag-key Dept --format tsv --local
-awless-ro list users --format json --local
-awless-ro list vpcs --ids --local
+awless-ro list instances --filter state=running --sort uptime
+awless-ro list instances --columns name,state,architecture,lifecycle
+awless-ro list volumes --tag-key Dept --format tsv
+awless-ro list users --format json
+awless-ro list vpcs --ids
 ```
 
 `--columns` reaches any property a resource carries, not only the default columns.
@@ -67,6 +63,12 @@ and autoscaling activities.
 
 **`whoami`**, **`switch`** (region and profile), **`config`**, **`completion`**,
 **`version`**.
+
+**`sync`** — optional. Fetches all nine services in parallel into a local graph
+under `~/.awless-ro`, after which any command with `--local` answers from it without
+calling AWS. A service you lack permission for is reported and skipped; the rest still
+land. Two resource types are off by default because they cost an API call per parent,
+and the sync says so rather than reporting zero of them.
 
 ## What does not work yet
 

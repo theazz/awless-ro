@@ -231,6 +231,17 @@ which is private between you and the maintainer, rather than in a public issue.
 
 ## Install
 
+With [Homebrew](https://brew.sh), on macOS or Linux:
+
+```sh
+brew install theazz/tap/awless-ro
+```
+
+The formula installs the binary published with each release, checked against its
+SHA-256, and bash completion. Upgrade with `brew upgrade awless-ro`.
+
+With Go:
+
 ```sh
 go install github.com/theazz/awless-ro@latest
 ```

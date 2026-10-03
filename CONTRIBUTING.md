@@ -148,10 +148,19 @@ change that breaks any of those is a major bump (a minor one while the version i
 `0.y.z`). A pull request that changes user-visible behaviour adds a line to
 `CHANGELOG.md` under an `Unreleased` heading at the top, created if absent.
 
-A release: set `Version` in `config/version.go`, move the changelog entries under the
-new version, commit, tag `vX.Y.Z` on that commit, then build with `release.go`, which
-refuses a dirty tree. The tag is what `go install …@latest` resolves, so never move or
-reuse one: a mistake gets a new patch version.
+A release:
+
+1. Set `Version` in `config/version.go`, move the changelog entries under the new
+   version, and add `docs/release-vX.Y.Z.md` for the release notes.
+2. Commit, wait for CI, then tag `vX.Y.Z` on that commit and push the tag. The
+   Release workflow re-runs the gates, builds the artefacts with `release.go`, verifies
+   `SHA256SUMS` and publishes the GitHub release.
+3. Update the Homebrew formula in
+   [theazz/homebrew-tap](https://github.com/theazz/homebrew-tap): the version and the
+   four `sha256` values, taken from the release's `SHA256SUMS`.
+
+The tag is what `go install …@latest` resolves, and tags `v*` are protected against
+being moved or deleted: a mistake gets a new patch version.
 
 ## Licence
 
