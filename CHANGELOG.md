@@ -1,5 +1,20 @@
 # Changelog
 
+## Unreleased
+
+### Fixed
+
+- **`tail` is listed in `--help` and offered by completion.** It had been hidden since
+  it first appeared upstream, as an experiment, though it works and the README
+  documents it. Its help now says what it does, with examples.
+- **`tail scaling-activities` with no activity said nothing and exited 0**, which reads
+  the same as a silent failure. It now says there were no scaling activities in the
+  last six weeks (as long as autoscaling keeps history), on stderr so stdout stays the
+  events alone. (Inherited.)
+- **`tail scaling-activities --follow` returned at once when there was no activity
+  yet** — exactly when one wants to wait for the first. It now polls from that moment
+  on. An invalid `--frequency` is refused before any AWS call. (Inherited.)
+
 ## v0.2.1
 
 ### Fixed

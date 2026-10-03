@@ -55,18 +55,24 @@ func init() {
 	tailCmd.AddCommand(stackEventsCmd)
 }
 
+// tailCmd was hidden from help and completion since it first appeared upstream, as
+// an experiment. It works, the README documents it, and a command people cannot find
+// might as well not exist.
 var tailCmd = &cobra.Command{
 	Use:               "tail",
-	Hidden:            true,
 	PersistentPreRun:  applyHooks(initLoggerHook, initAwlessEnvHook, initCloudServicesHook, firstInstallDoneHook),
 	PersistentPostRun: applyHooks(networkMonitorHook),
-	Short:             "Tail cloud events",
+	Short:             "Show recent CloudFormation stack events or autoscaling activities, or follow them",
+	Example: `  awless-ro tail stack-events my-stack                 # the last 10 events of a stack
+  awless-ro tail stack-events my-stack --follow        # follow a deployment until it completes
+  awless-ro tail scaling-activities -n 20              # the last 20 autoscaling activities
+  awless-ro tail scaling-activities --follow           # wait for new ones`,
 }
 
 var scalingActivitiesCmd = &cobra.Command{
 	Use:               "scaling-activities",
 	ValidArgsFunction: cobra.NoFileCompletions,
-	Short:             "Watch scaling-activities",
+	Short:             "Autoscaling activities across all groups, newest last",
 
 	Run: func(cmd *cobra.Command, args []string) {
 		exitOn(awstailers.NewScalingActivitiesTailer(tailNumberEventsFlag, tailEnableFollowFlag, tailFollowFrequencyFlag).Tail(os.Stdout))
@@ -74,9 +80,9 @@ var scalingActivitiesCmd = &cobra.Command{
 }
 
 var stackEventsCmd = &cobra.Command{
-	Use:               "stack-events",
+	Use:               "stack-events STACK",
 	ValidArgsFunction: resourceRefCompletion([]string{"cloudformation"}, []string{cloud.Stack}),
-	Short:             "Watch stack-events",
+	Short:             "Events of a CloudFormation stack; --follow tracks a deployment in progress",
 
 	Run: func(cmd *cobra.Command, args []string) {
 		if len(args) < 1 {
