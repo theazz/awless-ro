@@ -1,6 +1,6 @@
 # Changelog
 
-## Unreleased
+## v0.2.2
 
 ### Fixed
 
@@ -14,6 +14,12 @@
 - **`tail scaling-activities --follow` returned at once when there was no activity
   yet** — exactly when one wants to wait for the first. It now polls from that moment
   on. An invalid `--frequency` is refused before any AWS call. (Inherited.)
+
+### Documentation
+
+- The README opens with a recorded demo, and says plainly what the tool is for and how
+  it gets its data: some commands ask the AWS API every time, `show` and `inspect` work
+  on a synced graph, and `--local` answers from that copy without calling AWS.
 
 ## v0.2.1
 
