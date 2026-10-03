@@ -270,7 +270,17 @@ keys.
 
 ### Shell completion
 
-Homebrew sets it up for you. Otherwise:
+**Installed with Homebrew**, the completion files are already in place:
+
+- **fish** picks them up on its own.
+- **zsh** and **bash** read them only if the shell is set up for Homebrew's
+  completions, once per machine. If Tab already completes `brew` itself, it is;
+  otherwise follow [Homebrew's shell completion guide](https://docs.brew.sh/Shell-Completion)
+  (for zsh, a few lines in `~/.zshrc`; for bash, the `bash-completion@2` package).
+
+Open a new shell afterwards.
+
+**Installed any other way**, add it to your shell yourself:
 
 ```sh
 # bash (needs the bash-completion package; eval rather than source <(...),
