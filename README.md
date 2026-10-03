@@ -238,7 +238,7 @@ brew install theazz/tap/awless-ro
 ```
 
 The formula installs the binary published with each release, checked against its
-SHA-256, and bash completion. Upgrade with `brew upgrade awless-ro`.
+SHA-256, and shell completion. Upgrade with `brew upgrade awless-ro`.
 
 With Go:
 
@@ -267,6 +267,36 @@ prompted for on first run.
 State lives in `~/.awless-ro` — deliberately not `~/.awless`, so an installed
 upstream `awless` and this tool cannot overwrite each other's graph, database or
 keys.
+
+### Shell completion
+
+**Installed with Homebrew**, the completion files are already in place:
+
+- **fish** picks them up on its own.
+- **zsh** and **bash** read them only if the shell is set up for Homebrew's
+  completions, once per machine. If Tab already completes `brew` itself, it is;
+  otherwise follow [Homebrew's shell completion guide](https://docs.brew.sh/Shell-Completion)
+  (for zsh, a few lines in `~/.zshrc`; for bash, the `bash-completion@2` package).
+
+Open a new shell afterwards.
+
+**Installed any other way**, add it to your shell yourself:
+
+```sh
+# bash (needs the bash-completion package; eval rather than source <(...),
+# which the bash 3.2 shipped with macOS does not support)
+echo 'eval "$(awless-ro completion bash)"' >> ~/.bashrc
+
+# zsh
+awless-ro completion zsh > "${fpath[1]}/_awless-ro"
+
+# fish
+awless-ro completion fish > ~/.config/fish/completions/awless-ro.fish
+```
+
+Completion covers commands and flags, regions and profiles, config keys and their
+values, and — from the local copy, once you have synced — resource ids and names
+for `show`. It never calls AWS: a Tab press does not wait on the network.
 
 ## Commands
 
@@ -345,8 +375,8 @@ Two resource types are off by default because they cost an API call per parent �
 per bucket, one per hosted zone. The sync says so rather than reporting zero of them.
 
 You rarely need to run it by hand. `show` and `inspect` refresh the copy on their own
-for the services they touch, and choosing a new region — on first run or with
-`switch` — syncs it once. `--no-sync` skips that for one command, and
+for the services they touch, and changing region with `switch` syncs the new one
+once. The first run does not sync. `--no-sync` skips that for one command, and
 `awless-ro config set autosync false` turns it off for good.
 
 ## What was removed

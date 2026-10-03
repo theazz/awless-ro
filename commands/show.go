@@ -50,8 +50,9 @@ func init() {
 }
 
 var showCmd = &cobra.Command{
-	Use:   "show REFERENCE",
-	Short: "Show resources lineage and dependencies given a REFERENCE: name, id, arn, etc...",
+	Use:               "show REFERENCE",
+	ValidArgsFunction: completeShowRef,
+	Short:             "Show resources lineage and dependencies given a REFERENCE: name, id, arn, etc...",
 	Example: `  awless-ro show i-8d43b21b            # show an instance via its ref
   awless-ro show AIDAJ3Z24GOKHTZO4OIX6 # show a user via its ref
   awless-ro show jsmith                # show a user via its ref,

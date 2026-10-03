@@ -38,10 +38,19 @@ func init() {
 	RootCmd.AddCommand(inspectCmd)
 
 	inspectCmd.Flags().StringVarP(&inspectorFlag, "inspector", "i", "", "Indicates which inspector to run")
+	inspectCmd.RegisterFlagCompletionFunc("inspector", func(cmd *cobra.Command, args []string, toComplete string) ([]cobra.Completion, cobra.ShellCompDirective) {
+		var names []string
+		for name := range inspect.InspectorsRegister {
+			names = append(names, name)
+		}
+		sort.Strings(names)
+		return completeWith(names, toComplete)
+	})
 }
 
 var inspectCmd = &cobra.Command{
 	Use:               "inspect",
+	ValidArgsFunction: cobra.NoFileCompletions,
 	Short:             "Analyze your infrastructure through inspectors",
 	Long:              fmt.Sprintf("Basic proof of concept inspectors to analyze your infrastructure: %s", allInspectors()),
 	Example:           "  awless-ro inspect -i bucket_sizer\n  awless-ro inspect -i open_buckets\n  awless-ro inspect -i port_scanner",

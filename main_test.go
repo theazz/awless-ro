@@ -77,3 +77,80 @@ func TestUnknownCommandSaysWhatIsWrong(t *testing.T) {
 		t.Errorf("the output should name what was not recognised, got:\n%s", out)
 	}
 }
+
+// The completion scripts come from cobra, and the zsh one has to be installable: a
+// package manager drops it into a site-functions directory, where zsh only picks up a
+// file that starts with #compdef. The script this replaced was meant to be sourced and
+// was silently ignored when installed that way.
+func TestCompletionScriptsForEveryShell(t *testing.T) {
+	bin := build(t)
+
+	for shell, first := range map[string]string{
+		"bash":       "# bash completion",
+		"zsh":        "#compdef awless-ro",
+		"fish":       "# fish completion",
+		"powershell": "# powershell completion",
+	} {
+		t.Run(shell, func(t *testing.T) {
+			cmd := exec.Command(bin, "completion", shell)
+			cmd.Env = append(os.Environ(), "HOME="+t.TempDir())
+			out, err := cmd.Output()
+			if err != nil {
+				t.Fatalf("completion %s: %s", shell, err)
+			}
+			if !strings.HasPrefix(string(out), first) {
+				t.Errorf("completion %s should start with %q, got %.60q", shell, first, out)
+			}
+		})
+	}
+}
+
+// Completion runs on every Tab press, so it must answer from local state and nothing
+// else. On a machine where awless-ro has never run that means offering nothing: no
+// first-run setup, no credential prompt, no sync, and nothing written to the home
+// directory.
+func TestCompletionOnAFreshMachineDoesNotSetAnythingUp(t *testing.T) {
+	bin := build(t)
+	home := t.TempDir()
+
+	for _, args := range [][]string{
+		{"__complete", "show", ""},
+		{"__complete", "ssh", ""},
+		{"__complete", "tail", "stack-events", ""},
+		{"__complete", "whoami", ""},
+	} {
+		cmd := exec.Command(bin, args...)
+		cmd.Env = append(os.Environ(), "HOME="+home,
+			"AWS_ACCESS_KEY_ID=", "AWS_SECRET_ACCESS_KEY=", "AWS_PROFILE=")
+		cmd.Stdin = nil
+		out, err := cmd.Output()
+		if err != nil {
+			t.Fatalf("%v: %s", args, err)
+		}
+		// cobra ends with the directive line; anything before it is a candidate.
+		lines := strings.Split(strings.TrimSpace(string(out)), "\n")
+		if len(lines) != 1 || !strings.HasPrefix(lines[0], ":") {
+			t.Errorf("%v offered candidates with nothing synced:\n%s", args, out)
+		}
+	}
+
+	entries, err := os.ReadDir(home)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if len(entries) != 0 {
+		t.Errorf("completion created %d entries in the home directory, starting with %s", len(entries), entries[0].Name())
+	}
+}
+
+func TestCompletionOfGlobalFlags(t *testing.T) {
+	cmd := exec.Command(build(t), "__complete", "list", "instances", "-r", "eu-west-")
+	cmd.Env = append(os.Environ(), "HOME="+t.TempDir())
+	out, err := cmd.Output()
+	if err != nil {
+		t.Fatal(err)
+	}
+	if !strings.Contains(string(out), "eu-west-1\n") {
+		t.Errorf("-r should complete to regions, got:\n%s", out)
+	}
+}

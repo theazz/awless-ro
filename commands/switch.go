@@ -30,9 +30,10 @@ func init() {
 }
 
 var switchCmd = &cobra.Command{
-	Use:     "switch [REGION] [PROFILE]",
-	Aliases: []string{"sw"},
-	Short:   "Quick way to switch awless-ro config to given profile and/or region",
+	Use:               "switch [REGION] [PROFILE]",
+	ValidArgsFunction: completeSwitch,
+	Aliases:           []string{"sw"},
+	Short:             "Quick way to switch awless-ro config to given profile and/or region",
 	Example: `  awless-ro switch eu-west-2           # now using region eu-west-2'
   awless-ro switch mfa                 # now using profile mfa (with mfa a valid profile in ~/.aws/{config,credentials})
   awless-ro switch default us-west-1   # now using region us-west-1 and the default profile

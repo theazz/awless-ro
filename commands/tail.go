@@ -23,6 +23,7 @@ import (
 
 	"github.com/spf13/cobra"
 	"github.com/theazz/awless-ro/aws/tailers"
+	"github.com/theazz/awless-ro/cloud"
 )
 
 var tailFollowFrequencyFlag time.Duration
@@ -63,8 +64,9 @@ var tailCmd = &cobra.Command{
 }
 
 var scalingActivitiesCmd = &cobra.Command{
-	Use:   "scaling-activities",
-	Short: "Watch scaling-activities",
+	Use:               "scaling-activities",
+	ValidArgsFunction: cobra.NoFileCompletions,
+	Short:             "Watch scaling-activities",
 
 	Run: func(cmd *cobra.Command, args []string) {
 		exitOn(awstailers.NewScalingActivitiesTailer(tailNumberEventsFlag, tailEnableFollowFlag, tailFollowFrequencyFlag).Tail(os.Stdout))
@@ -72,8 +74,9 @@ var scalingActivitiesCmd = &cobra.Command{
 }
 
 var stackEventsCmd = &cobra.Command{
-	Use:   "stack-events",
-	Short: "Watch stack-events",
+	Use:               "stack-events",
+	ValidArgsFunction: resourceRefCompletion([]string{"cloudformation"}, []string{cloud.Stack}),
+	Short:             "Watch stack-events",
 
 	Run: func(cmd *cobra.Command, args []string) {
 		if len(args) < 1 {

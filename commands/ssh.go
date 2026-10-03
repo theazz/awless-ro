@@ -101,9 +101,10 @@ and ssh does the rest:
 Progress: https://github.com/theazz/awless-ro/issues/1`
 
 var sshCmd = &cobra.Command{
-	Use:   "ssh [USER@]INSTANCE",
-	Short: "[not in this release] Launch a SSH session to an instance given an id or alias",
-	Long:  "Launch a SSH session to an instance given an id or alias. All connection details are derived from a given instance name/id.",
+	Use:               "ssh [USER@]INSTANCE",
+	ValidArgsFunction: completeSSHTarget,
+	Short:             "[not in this release] Launch a SSH session to an instance given an id or alias",
+	Long:              "Launch a SSH session to an instance given an id or alias. All connection details are derived from a given instance name/id.",
 	Example: `  awless-ro ssh i-8d43b21b                       # using the instance id
   awless-ro ssh redis-prod                       # using name only (other infos are derived)
   awless-ro ssh ec2-user@redis-prod              # forcing the user

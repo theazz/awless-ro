@@ -1,5 +1,23 @@
 # Changelog
 
+## Unreleased
+
+### Features
+
+- Shell completion for **fish** and **PowerShell**, alongside bash and zsh. The zsh
+  script can now be installed as a completion file (it starts with `#compdef`), so
+  package managers can set it up; the Homebrew formula will install all three.
+- Completion is cobra's own rather than a hand-written generator, and what it offers
+  is computed in Go, the same for every shell: resource ids and names for `show`,
+  instances for `ssh` (keeping a `user@` prefix), stacks for `tail stack-events`,
+  regions and profiles for `switch`, `-r` and `-p`, config keys with their help and
+  their values for `config set`, inspectors for `inspect -i`, vendors for
+  `search images`, formats for `list --format`.
+- Completion answers from local state only. It never calls AWS, never syncs and,
+  on a machine where awless-ro has not run yet, never starts first-run setup.
+  Profile completion skips `sso-session` and `services` sections of `~/.aws/config`,
+  which are not profiles.
+
 ## v0.1.1
 
 ### Fixed

@@ -51,6 +51,7 @@ func init() {
 
 var syncCmd = &cobra.Command{
 	Use:               "sync",
+	ValidArgsFunction: cobra.NoFileCompletions,
 	Short:             "Manual sync of remote resources to the local store (ex: when autosync is unset)",
 	PersistentPreRun:  applyHooks(initLoggerHook, initAwlessEnvHook, initCloudServicesHook, initSyncerHook, firstInstallDoneHook),
 	PersistentPostRun: applyHooks(onVersionUpgrade, networkMonitorHook),

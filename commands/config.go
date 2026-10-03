@@ -36,6 +36,7 @@ func init() {
 
 var configCmd = &cobra.Command{
 	Use:                "config",
+	ValidArgsFunction:  cobra.NoFileCompletions,
 	Short:              "get, set, unset configuration values",
 	Example:            "  awless-ro config        # list all your config\n  awless-ro config set aws.region eu-west-1\n  awless-ro config set aws.storage.s3object.sync true",
 	PersistentPreRunE:  initAwlessEnvHook,
@@ -56,8 +57,9 @@ var configCmd = &cobra.Command{
 }
 
 var configGetCmd = &cobra.Command{
-	Use:   "get KEY",
-	Short: "Get a configuration value",
+	Use:               "get KEY",
+	ValidArgsFunction: completeConfigKey,
+	Short:             "Get a configuration value",
 
 	RunE: func(cmd *cobra.Command, args []string) error {
 		if len(args) == 0 {
@@ -76,6 +78,7 @@ var configGetCmd = &cobra.Command{
 
 var configSetCmd = &cobra.Command{
 	Use:               "set KEY [VALUE]",
+	ValidArgsFunction: completeConfigSet,
 	Short:             "Set or update a configuration value",
 	PersistentPreRun:  applyHooks(initAwlessEnvHook),
 	PersistentPostRun: applyHooks(includeHookIf(&config.TriggerSyncOnConfigUpdate, initCloudServicesHook)),
@@ -98,8 +101,9 @@ var configSetCmd = &cobra.Command{
 }
 
 var configUnsetCmd = &cobra.Command{
-	Use:   "unset KEY",
-	Short: "Unset a configuration value",
+	Use:               "unset KEY",
+	ValidArgsFunction: completeConfigKey,
+	Short:             "Unset a configuration value",
 
 	RunE: func(cmd *cobra.Command, args []string) error {
 		if len(args) == 0 {
