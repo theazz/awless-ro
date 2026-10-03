@@ -18,6 +18,30 @@
   Profile completion skips `sso-session` and `services` sections of `~/.aws/config`,
   which are not profiles.
 
+## v0.1.1
+
+### Fixed
+
+- **The first command you ran synced the whole account before doing its own work.**
+  `awless-ro whoami` needs a single `GetCallerIdentity`; on a machine with no
+  `~/.awless-ro` it took about thirty-five seconds instead of two, because nine
+  services and several thousand resources were fetched first. Writing the region for
+  the first time went through the same path as changing it, and a region change
+  schedules a sync — reasonably, since the local graph is per-region — but the first
+  run is the initial write, not a change. Nothing needed the sync: commands fetch what
+  they need when they are not given `--local`, and a local copy is what `sync` is for.
+  Changing the region later still syncs, and `aws.autosync` still turns that off.
+  ([#7](https://github.com/theazz/awless-ro/issues/7), inherited from upstream.)
+
+  Measured on the same account, from an empty home: `whoami` 37s → 3s,
+  `list instances` 30s → 1s, `list users` 36s → 1s,
+  `search images canonical --latest-id` 41s → 1s.
+
+- **`--local` said "No results found." when nothing had been synced yet**, which
+  answers a question about the account in a situation where the account was never
+  read. It now says so and names the setting to change. Reachable before, but rarely:
+  the first run used to sync, so there was usually something there.
+
 ## v0.1.0 — first release of awless-ro
 
 Fork of [wallix/awless](https://github.com/wallix/awless) at `44e892b4`, unmaintained

@@ -196,6 +196,23 @@ func LoadLocalGraphs(profile, region string) (cloud.GraphAPI, error) {
 	return graph.NewGraphFromFiles(files...)
 }
 
+// NothingSyncedFor reports that this profile and region have no synced files at all.
+//
+// It exists so that `--local` can tell "the account holds none of these" apart from
+// "nothing has been synced yet". Both produced "No results found.", which is an answer
+// about the account in a situation where the account was never read — and since the
+// first run no longer syncs, having synced nothing is the normal starting state rather
+// than an unusual one.
+func NothingSyncedFor(profile, region string) bool {
+	for _, dir := range []string{"global", region} {
+		files, _ := filepath.Glob(filepath.Join(repo.BaseDir(), profile, dir, fmt.Sprintf("*%s", fileExt)))
+		if len(files) > 0 {
+			return false
+		}
+	}
+	return true
+}
+
 func LoadAllLocalGraphs(profile string) (cloud.GraphAPI, error) {
 	path := filepath.Join(repo.BaseDir(), profile, "*", fmt.Sprintf("*%s", fileExt))
 	files, _ := filepath.Glob(path)

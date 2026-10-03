@@ -213,7 +213,10 @@ func networkMonitorHook(cmd *cobra.Command, args []string) error {
 }
 
 func firstInstallDoneHook(cmd *cobra.Command, args []string) error {
-	if config.TriggerSyncOnConfigUpdate {
+	// Keyed off the first install itself, not off the sync flag. The flag used to
+	// stand in for "this was the first run", which only worked while the first run
+	// always synced.
+	if config.AwlessFirstInstall {
 		fmt.Fprintln(os.Stderr, "\nAll done. Enjoy!")
 		fmt.Fprintln(os.Stderr, "You can review and configure awless-ro with `awless-ro config`")
 		fmt.Fprintln(os.Stderr)

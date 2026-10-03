@@ -112,6 +112,7 @@ var listSpecificResourceCmd = func(resType string) *cobra.Command {
 			var g cloud.GraphAPI
 
 			if localGlobalFlag {
+				warnIfNothingSynced()
 				if srvName, ok := awsservices.ServicePerResourceType[resType]; ok {
 					g = sync.LoadLocalGraphForService(srvName, config.GetAWSProfile(), config.GetAWSRegion())
 				} else {
@@ -154,6 +155,18 @@ var listAllResourceInServiceCmd = func(srvName string) *cobra.Command {
 			exitOn(displayer.Print(os.Stdout))
 		},
 	}
+}
+
+// warnIfNothingSynced says so when --local is asked to read a local copy that does
+// not exist yet, instead of letting the command answer "No results found." — which
+// says something about the account, in a situation where the account was never read.
+func warnIfNothingSynced() {
+	profile, region := config.GetAWSProfile(), config.GetAWSRegion()
+	if !sync.NothingSyncedFor(profile, region) {
+		return
+	}
+	logger.Infof("nothing has been synced for profile '%s' in region '%s' yet, so --local has "+
+		"nothing to read. Run `awless-ro sync`, or drop --local to ask AWS directly.", profile, region)
 }
 
 func printResources(g cloud.GraphAPI, resType string) {
