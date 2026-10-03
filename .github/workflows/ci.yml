@@ -1,6 +1,12 @@
 name: CI
 
-on: [push, pull_request]
+# Pushes to master, and pull requests. Not every push: a release tag would run this
+# a second time alongside the Release workflow, which repeats these gates itself, and a
+# branch with an open pull request would be built twice, once for each event.
+on:
+  push:
+    branches: [master]
+  pull_request:
 
 # The workflow only ever reads the repository. Without this block the token gets
 # whatever the repository defaults happen to be, which for older repositories is
