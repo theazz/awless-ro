@@ -62,3 +62,11 @@ jobs:
       # release cannot turn a green build red without a commit of ours.
       - name: govulncheck
         run: go run golang.org/x/vuln/cmd/govulncheck@v1.8.0 ./...
+
+      # The workflows are code too, and the only code here with no compiler and no
+      # tests. actionlint catches what would otherwise be found by pushing and
+      # waiting: a mistyped context, an expression that cannot evaluate, a shell
+      # error inside a run block. Run as a module rather than through an action, so
+      # there is one less third party in the chain.
+      - name: actionlint
+        run: go run github.com/rhysd/actionlint/cmd/actionlint@v1.7.12
