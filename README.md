@@ -375,8 +375,8 @@ Two resource types are off by default because they cost an API call per parent �
 per bucket, one per hosted zone. The sync says so rather than reporting zero of them.
 
 You rarely need to run it by hand. `show` and `inspect` refresh the copy on their own
-for the services they touch, and choosing a new region — on first run or with
-`switch` — syncs it once. `--no-sync` skips that for one command, and
+for the services they touch, and changing region with `switch` syncs the new one
+once. The first run does not sync. `--no-sync` skips that for one command, and
 `awless-ro config set autosync false` turns it off for good.
 
 ## What was removed
