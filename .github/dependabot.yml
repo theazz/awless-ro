@@ -14,6 +14,13 @@ updates:
         patterns:
           - "github.com/aws/aws-sdk-go-v2*"
           - "github.com/aws/smithy-go"
+    ignore:
+      # tablewriter 1.x rewrote the API: the table rendering in console/ would have to
+      # be redone, the tables people read and parse might come out different, and it
+      # brings dependencies of its own. That is a change to make on purpose, not one to
+      # take from a weekly bump (#5). Minor and patch releases of 0.x still come through.
+      - dependency-name: "github.com/olekukonko/tablewriter"
+        update-types: ["version-update:semver-major"]
 
   # Keeps the SHA pins in .github/workflows/ci.yml current. Without this, pinning by
   # SHA means never receiving a security fix for an action.

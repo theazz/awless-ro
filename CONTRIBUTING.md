@@ -155,9 +155,13 @@ A release:
 2. Commit, wait for CI, then tag `vX.Y.Z` on that commit and push the tag. The
    Release workflow re-runs the gates, builds the artefacts with `release.go`, verifies
    `SHA256SUMS` and publishes the GitHub release.
-3. Update the Homebrew formula in
-   [theazz/homebrew-tap](https://github.com/theazz/homebrew-tap): the version and the
-   four `sha256` values, taken from the release's `SHA256SUMS`.
+3. The same workflow then points the Homebrew formula in
+   [theazz/homebrew-tap](https://github.com/theazz/homebrew-tap) at the new release,
+   with the checksums from its `SHA256SUMS`
+   (`.github/scripts/update_homebrew_formula.py`). Pre-release tags such as
+   `v1.2.0-rc.1` are left out. It pushes with a deploy key that has write access to
+   the tap only, stored as the `HOMEBREW_TAP_DEPLOY_KEY` secret; without it the job
+   fails and says so, and the formula can be updated by hand with the same script.
 
 The tag is what `go install …@latest` resolves, and tags `v*` are protected against
 being moved or deleted: a mistake gets a new patch version.
