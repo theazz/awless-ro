@@ -2,6 +2,27 @@
 
 ## Unreleased
 
+### Fixed
+
+- **`list buckets` could fail on its first run with "no such host"**, and succeed on
+  the second ([#10](https://github.com/theazz/awless-ro/issues/10), inherited from
+  upstream). To keep only the current region's buckets it called `GetBucketLocation`
+  for every bucket in the account, all at once — each to the bucket's own hostname,
+  so as many simultaneous DNS lookups of different names. A cold resolver, typically
+  behind a VPN, answered some of them "no such host", the SDK does not retry that, and
+  the first failure ended the whole listing. S3 now filters by region itself
+  (`ListBuckets` with `BucketRegion`): one call instead of one per bucket, and
+  `GetBucketLocation` is no longer among the operations the tool can perform (61 now).
+  This applies to everything that reads buckets: `list buckets`, `list s3objects`,
+  `show`, `sync` and the bucket inspectors.
+- **Per-item API calls are bounded.** Fetchers that make one call per bucket, task
+  definition revision, IAM user, load balancer, queue, hosted zone or ECS cluster
+  started all of them at once, which in a large account meant hundreds or thousands of
+  requests in the same instant and throttling the SDK's retry budget could not absorb.
+  At most eight are now in flight per fetcher. When one fails the rest are stopped
+  instead of being left blocked forever, and the access key fetcher no longer races on
+  its error flag.
+
 ### Performance
 
 - **A first `sync` takes about half as long** ([#12](https://github.com/theazz/awless-ro/issues/12)).
@@ -12,6 +33,10 @@
   pagination, run side by side. Measured from an empty home on the same account:
   `sync` 31–47s → 15.5s, `list policies` 19s → 11–13s. Same call, same permission,
   same result.
+
+### Dependencies
+
+- AWS SDK for Go v2 service modules updated (patch and minor releases).
 
 ## v0.2.0
 

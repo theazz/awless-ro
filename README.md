@@ -181,7 +181,7 @@ auditor, or an on-call engineer who needs to look around production at 3 am.
 
 - *Read-only by construction.* Every AWS call goes through a narrow per-service
   interface and nothing else in the tree holds an SDK client, so the methods on those
-  interfaces are the complete list of operations the binary can perform — currently 62
+  interfaces are the complete list of operations the binary can perform — currently 61
   across 18 services. `TestEveryAWSOperationIsARead` reflects over them and fails the
   build if any name is not a `Describe`, `Get`, `List` or `Head`, or if a field is a
   concrete client rather than an interface. Reflecting over the struct rather than a

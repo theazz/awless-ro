@@ -46,94 +46,72 @@ func getClusterArns(ctx context.Context, cache fetch.Cache, api EcsAPI) ([]strin
 
 // getAllTasks lists the running and the stopped tasks of every cluster, then
 // describes them in batches. DescribeTasks only accepts task ARNs of a single
-// cluster at a time, which is why the cluster travels alongside the ARNs.
+// cluster at a time, which is why the cluster travels alongside the ARNs. A page of
+// ListTasks holds at most 100 ARNs, which is also as many as DescribeTasks takes.
 func getAllTasks(ctx context.Context, cache fetch.Cache, api EcsAPI) ([]ecstypes.Task, error) {
-	var res []ecstypes.Task
-
 	clusterArns, err := getClusterArns(ctx, cache, api)
 	if err != nil {
-		return res, err
+		return nil, err
 	}
 
-	type taskArns struct {
-		err     error
-		arns    []string
+	type listing struct {
 		cluster string
+		status  ecstypes.DesiredStatus
 	}
-	arnsc := make(chan taskArns)
-	var listWG sync.WaitGroup
+	var listings []listing
+	for _, cluster := range clusterArns {
+		listings = append(listings,
+			listing{cluster, ecstypes.DesiredStatusRunning},
+			listing{cluster, ecstypes.DesiredStatusStopped})
+	}
 
-	listTasks := func(cluster string, status ecstypes.DesiredStatus) {
-		defer listWG.Done()
+	type batch struct {
+		cluster string
+		arns    []string
+	}
+	var (
+		mu      sync.Mutex
+		batches []batch
+	)
+	err = forEachParallel(ctx, listings, func(ctx context.Context, l listing) error {
 		paginator := ecs.NewListTasksPaginator(api, &ecs.ListTasksInput{
-			Cluster:       aws.String(cluster),
-			DesiredStatus: status,
+			Cluster:       aws.String(l.cluster),
+			DesiredStatus: l.status,
 		})
 		for paginator.HasMorePages() {
 			out, e := paginator.NextPage(ctx)
 			if e != nil {
-				arnsc <- taskArns{err: e}
-				return
+				return e
 			}
-			arnsc <- taskArns{arns: out.TaskArns, cluster: cluster}
-		}
-	}
-
-	for _, cluster := range clusterArns {
-		listWG.Add(1)
-		go listTasks(cluster, ecstypes.DesiredStatusRunning)
-		listWG.Add(1)
-		go listTasks(cluster, ecstypes.DesiredStatusStopped)
-	}
-
-	type describedTasks struct {
-		err   error
-		tasks []ecstypes.Task
-	}
-	tasksc := make(chan describedTasks)
-	var describeWG sync.WaitGroup
-
-	describeWG.Add(1)
-	go func() {
-		defer describeWG.Done()
-		for r := range arnsc {
-			if r.err != nil {
-				tasksc <- describedTasks{err: r.err}
-				return
-			}
-			if len(r.arns) == 0 {
+			if len(out.TaskArns) == 0 {
 				continue
 			}
-
-			describeWG.Add(1)
-			go func(arns []string, cluster string) {
-				defer describeWG.Done()
-				out, e := api.DescribeTasks(ctx, &ecs.DescribeTasksInput{
-					Cluster: aws.String(cluster),
-					Tasks:   arns,
-				})
-				if e != nil {
-					tasksc <- describedTasks{err: e}
-					return
-				}
-				tasksc <- describedTasks{tasks: out.Tasks}
-			}(r.arns, r.cluster)
+			mu.Lock()
+			batches = append(batches, batch{cluster: l.cluster, arns: out.TaskArns})
+			mu.Unlock()
 		}
-	}()
-
-	go func() {
-		listWG.Wait()
-		close(arnsc)
-		describeWG.Wait()
-		close(tasksc)
-	}()
-
-	for r := range tasksc {
-		if r.err != nil {
-			return res, r.err
-		}
-		res = append(res, r.tasks...)
+		return nil
+	})
+	if err != nil {
+		return nil, err
 	}
 
+	var res []ecstypes.Task
+	err = forEachParallel(ctx, batches, func(ctx context.Context, b batch) error {
+		out, e := api.DescribeTasks(ctx, &ecs.DescribeTasksInput{
+			Cluster: aws.String(b.cluster),
+			Tasks:   b.arns,
+		})
+		if e != nil {
+			return e
+		}
+		mu.Lock()
+		res = append(res, out.Tasks...)
+		mu.Unlock()
+		return nil
+	})
+	if err != nil {
+		return nil, err
+	}
 	return res, nil
 }

@@ -2,8 +2,8 @@ package awsfetch
 
 import (
 	"context"
+	"errors"
 	"strings"
-	"sync"
 
 	"github.com/aws/aws-sdk-go-v2/aws"
 	"github.com/aws/aws-sdk-go-v2/service/s3"
@@ -26,30 +26,11 @@ func forEachBucketParallel(ctx context.Context, cache fetch.Cache, api S3API, f 
 		buckets = v
 	}
 
-	errc := make(chan error)
-	var wg sync.WaitGroup
-
-	for _, output := range buckets {
-		wg.Add(1)
-		go func(b s3types.Bucket) {
-			defer wg.Done()
-			if err := f(b); err != nil {
-				errc <- err
-			}
-		}(output)
-	}
-	go func() {
-		wg.Wait()
-		close(errc)
-	}()
-
-	for err := range errc {
-		if err != nil {
-			return err
-		}
-	}
-
-	return nil
+	// Bounded, because each call goes to the bucket's own hostname: see
+	// maxParallelCalls.
+	return forEachParallel(ctx, buckets, func(_ context.Context, b s3types.Bucket) error {
+		return f(b)
+	})
 }
 
 func fetchObjectsForBucket(ctx context.Context, api S3API, bucket s3types.Bucket, resourcesC chan<- *graph.Resource) error {
@@ -78,14 +59,31 @@ func fetchObjectsForBucket(ctx context.Context, api S3API, bucket s3types.Bucket
 	return nil
 }
 
-// getBucketsPerRegion keeps only the buckets that live in the region being
-// synced. ListBuckets is global, so each bucket's location needs its own call.
+// getBucketsPerRegion returns the buckets that live in the region being synced.
+//
+// ListBuckets lists every bucket in the account, whatever its region. This used to be
+// followed by a GetBucketLocation for each of them, all at once: one request per
+// bucket in the account, each to the bucket's own hostname, so as many DNS lookups of
+// distinct names in the same instant — and the first that failed failed the listing.
+// A cold resolver answering one of them "no such host" was enough, and the SDK does
+// not retry that. S3 has filtered ListBuckets by region itself since October 2024, so
+// this is a single paginated call to the regional endpoint.
 func getBucketsPerRegion(ctx context.Context, api S3API) ([]s3types.Bucket, error) {
-	var buckets []s3types.Bucket
+	region, _ := ctx.Value("region").(string)
+	if region == "" {
+		// Without a region the filter would be dropped and every bucket in the
+		// account returned as if it were local.
+		return nil, errors.New("s3: no region to list buckets for")
+	}
 
-	out, err := api.ListBuckets(ctx, &s3.ListBucketsInput{})
-	if err != nil {
-		return buckets, err
+	var all []s3types.Bucket
+	paginator := s3.NewListBucketsPaginator(api, &s3.ListBucketsInput{BucketRegion: aws.String(region)})
+	for paginator.HasMorePages() {
+		page, err := paginator.NextPage(ctx)
+		if err != nil {
+			return nil, err
+		}
+		all = append(all, page.Buckets...)
 	}
 
 	var userBucketName string
@@ -97,63 +95,17 @@ func getBucketsPerRegion(ctx context.Context, api S3API) ([]s3types.Bucket, erro
 		userBucketName = buck
 		hasBucketFilter = true
 	}
-
-	if hasBucketFilter {
-		for _, b := range out.Buckets {
-			if strings.Contains(strings.ToLower(aws.ToString(b.Name)), strings.ToLower(userBucketName)) {
-				buckets = append(buckets, b)
-			}
-		}
-	} else {
-		buckets = out.Buckets
+	if !hasBucketFilter {
+		return all, nil
 	}
 
-	bucketc := make(chan s3types.Bucket)
-	errc := make(chan error)
-
-	var wg sync.WaitGroup
-
-	for _, bucket := range buckets {
-		wg.Add(1)
-		go func(b s3types.Bucket) {
-			defer wg.Done()
-			loc, err := api.GetBucketLocation(ctx, &s3.GetBucketLocationInput{Bucket: b.Name})
-			if err != nil {
-				errc <- err
-				return
-			}
-
-			region, _ := ctx.Value("region").(string)
-			// An empty location constraint means us-east-1.
-			switch string(loc.LocationConstraint) {
-			case "":
-				if region == "us-east-1" {
-					bucketc <- b
-				}
-			case region:
-				bucketc <- b
-			}
-		}(bucket)
-	}
-	go func() {
-		wg.Wait()
-		close(bucketc)
-	}()
-
-	var bucketsInRegion []s3types.Bucket
-	for {
-		select {
-		case err := <-errc:
-			if err != nil {
-				return bucketsInRegion, err
-			}
-		case b, ok := <-bucketc:
-			if !ok {
-				return bucketsInRegion, nil
-			}
-			bucketsInRegion = append(bucketsInRegion, b)
+	var buckets []s3types.Bucket
+	for _, b := range all {
+		if strings.Contains(strings.ToLower(aws.ToString(b.Name)), strings.ToLower(userBucketName)) {
+			buckets = append(buckets, b)
 		}
 	}
+	return buckets, nil
 }
 
 func fetchAndExtractGrantsFn(ctx context.Context, api S3API, bucketName string) ([]*graph.Grant, error) {
