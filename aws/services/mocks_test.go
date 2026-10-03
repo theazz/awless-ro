@@ -123,29 +123,24 @@ func (m *mockS3) GetBucketAcl(_ context.Context, input *s3.GetBucketAclInput, _ 
 	return &s3.GetBucketAclOutput{Grants: m.grants[awssdk.ToString(input.Bucket)]}, nil
 }
 
-func (m *mockS3) ListBuckets(_ context.Context, _ *s3.ListBucketsInput, _ ...func(*s3.Options)) (*s3.ListBucketsOutput, error) {
+func (m *mockS3) ListBuckets(_ context.Context, input *s3.ListBucketsInput, _ ...func(*s3.Options)) (*s3.ListBucketsOutput, error) {
+	// Keyed by region, as S3 answers with BucketRegion set; "" is us-east-1, as the
+	// location constraint used to say.
 	var buckets []s3types.Bucket
-	for _, b := range m.buckets {
-		buckets = append(buckets, b...)
+	for region, bs := range m.buckets {
+		if region == "" {
+			region = "us-east-1"
+		}
+		if r := awssdk.ToString(input.BucketRegion); r != "" && r != region {
+			continue
+		}
+		buckets = append(buckets, bs...)
 	}
 	return &s3.ListBucketsOutput{Buckets: buckets}, nil
 }
 
 func (m *mockS3) ListObjectsV2(_ context.Context, input *s3.ListObjectsV2Input, _ ...func(*s3.Options)) (*s3.ListObjectsV2Output, error) {
 	return &s3.ListObjectsV2Output{Contents: m.objects[awssdk.ToString(input.Bucket)]}, nil
-}
-
-func (m *mockS3) GetBucketLocation(_ context.Context, input *s3.GetBucketLocationInput, _ ...func(*s3.Options)) (*s3.GetBucketLocationOutput, error) {
-	for region, buckets := range m.buckets {
-		for _, bucket := range buckets {
-			if awssdk.ToString(bucket.Name) == awssdk.ToString(input.Bucket) {
-				return &s3.GetBucketLocationOutput{
-					LocationConstraint: s3types.BucketLocationConstraint(region),
-				}, nil
-			}
-		}
-	}
-	return nil, fmt.Errorf("bucket location mock: bucket %s not found", awssdk.ToString(input.Bucket))
 }
 
 func (m *mockSqs) ListQueues(_ context.Context, _ *sqs.ListQueuesInput, _ ...func(*sqs.Options)) (*sqs.ListQueuesOutput, error) {
