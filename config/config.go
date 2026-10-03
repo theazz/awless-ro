@@ -381,6 +381,19 @@ func displayDefaults() string {
 }
 
 func runSyncWithUpdatedRegion(i interface{}) {
+	// The first run writes the region for the first time; it does not change it.
+	// Treating the two the same meant the first command anyone ever ran pulled the
+	// whole account before doing its own work — `whoami`, which needs a single
+	// GetCallerIdentity, waited on nine services and several thousand resources.
+	//
+	// Nothing needed that. Commands fetch what they need when they are not given
+	// --local, and a local copy is what `sync` is for. Reacting to an explicit
+	// region change is still worth it: the local graph is per-region, so the one
+	// already on disk is about somewhere else.
+	if AwlessFirstInstall {
+		return
+	}
+
 	if !GetAutosync() {
 		return
 	}
