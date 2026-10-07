@@ -1,88 +1,47 @@
 # awless-ro v0.2.2
 
-Two fixes to how a run works out which credentials and which region to use. Both are
-the same mistake in opposite directions, and both bite hardest on a machine where
-awless-ro has never run.
+`tail` comes out of hiding, and `tail scaling-activities` says when there is nothing to
+show.
 
-## Credentials in the environment were ignored
+## `tail` is listed
 
-On a machine with no `~/.aws` — a CI job, a container, a fresh shell — every command
-failed:
+`tail` shows recent CloudFormation stack events or autoscaling activities, or follows
+them. It had been hidden from `--help` and completion since it first appeared upstream,
+as an experiment — though it works, and the README already documented it. It is now
+listed, with help and examples:
 
-```
-[error]   AWS credentials for profile "default" are configured but cannot be used:
-          failed to get shared config profile, default
-```
-
-or walked past the keys entirely and tried to reach EC2 instance metadata. Which is
-awkward, because the tool's own advice tells you to export exactly those variables:
-
-```
-no AWS credentials found for profile "default".
-Set them up with `aws configure --profile default`, or point awless-ro at another
-profile with --aws-profile, or export AWS_ACCESS_KEY_ID and AWS_SECRET_ACCESS_KEY
+```sh
+awless-ro tail stack-events my-stack                 # the last 10 events of a stack
+awless-ro tail stack-events my-stack --follow        # follow a deployment until it completes
+awless-ro tail scaling-activities -n 20              # the last 20 autoscaling activities
+awless-ro tail scaling-activities --follow           # wait for new ones
 ```
 
-The default profile was always pinned on the AWS SDK. A pinned profile is exclusive:
-the SDK resolves from that profile alone and stops consulting the environment, so with
-no shared config file to read there was nothing left to try.
+## `tail scaling-activities` with nothing to show
 
-The profile is now pinned only when one was actually chosen:
+Two defects inherited from upstream:
 
-- `--aws-profile` / `-p`
-- `AWS_PROFILE` or `AWS_DEFAULT_PROFILE`
-- a configured `aws.profile` naming something other than `default`
+- **No activity printed nothing and exited 0**, which reads the same as a command that
+  failed silently. Autoscaling keeps six weeks of history, so in a quiet account this
+  is the usual answer. It now says so — on stderr, so stdout stays the events alone.
+- **`--follow` returned at once when there was no activity yet**, which is exactly when
+  one waits for the first. It now polls from that moment on. An invalid `--frequency`
+  is refused before any AWS call.
 
-With nothing chosen, the SDK's documented order applies — environment, then
-`~/.aws/{credentials,config}`, then container and instance roles.
+## README
 
-A profile you *did* ask for and that does not exist is still reported by name. It does
-not fall through to keys in the environment: the profile decides which account's
-resources are read and where the local graph is kept, so answering a request for one
-account with another account's credentials would be worse than failing.
+The README now opens with a short recorded demo, and its "What it is good for" section
+says plainly how the tool gets its data: `list`, `search`, `whoami` and `tail` ask the
+AWS API every time; `show` and `inspect` work on a synced graph of the account, which
+is where relations come from; `list`, `show` and `inspect` take `--local` to answer from
+that copy without calling AWS.
 
-## The first run asked for a region the profile already named
-
-With a `~/.aws/config` like this and no `[default]` section:
-
-```ini
-[profile beta]
-region = us-east-2
-```
-
-a first `awless-ro -p beta list instances` asked which region to use:
-
-```
-Please enter one region: (Ctrl+C to quit, Tab for completion)
->
-```
-
-and stored the answer as the default region, for a profile that had already said what
-it meant. In a script, with no terminal to ask, the run could not get past it.
-
-The region that a first run needs was resolved before the chosen profile was taken
-into account. It is now resolved through that profile, and the selector appears only
-when nothing — profile, environment, or instance metadata — names a region. A profile
-name that does not exist is not an error here: the environment and the shared default
-still get to answer.
-
-## Also
-
-- `awless-ro -p <profile>` keeps reporting where the region came from, unchanged:
-  `region precedence: 'us-east-2' loaded through profile 'beta'`.
-
-No change to any command, flag, output format or exit code, hence a patch release.
-Full detail in
+No change to any command's output, flag or exit code beyond the above, hence a patch
+release. Full detail in
 [CHANGELOG.md](https://github.com/theazz/awless-ro/blob/master/CHANGELOG.md).
 
 ## Verified
 
-Offline tests cover each case: keys in the environment with no `~/.aws` and with a
-shared config that has no `[default]` section; an explicitly chosen profile winning
-over keys in the environment, through both `-p` and `AWS_PROFILE`; a chosen profile
-that does not exist being named rather than skipped; and a first run with `-p` taking
-the region from the profile without reaching the interactive selector. None of them
-needs AWS credentials or network access.
-
-Driven end to end against a built binary with an empty home and fake key material,
-neither reported symptom appears. Checked against a live account too, read-only.
+Against a live account: `tail stack-events` prints the header and events, and fails
+with exit 1 on a stack that does not exist; `tail scaling-activities` with no activity
+prints the notice and exits 0; `--follow` keeps waiting.

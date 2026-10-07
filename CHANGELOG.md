@@ -1,22 +1,23 @@
 # Changelog
 
-## v0.2.2
+## v0.2.3
 
 ### Fixed
 
-- **Credentials in `AWS_ACCESS_KEY_ID` and `AWS_SECRET_ACCESS_KEY` were ignored**, so
-  on a machine with no `~/.aws` — a CI job, a container, a fresh shell — every command
-  failed with `AWS credentials for profile "default" are configured but cannot be
-  used`, or walked past the keys and tried to reach EC2 instance metadata. The tool's
-  own advice tells you to export exactly those two variables. The cause was that the
-  default profile was always pinned on the AWS SDK, and a pinned profile is exclusive:
-  the SDK then resolves from that profile alone and never looks at the environment.
-  The profile is now pinned only when one was actually chosen — `--aws-profile`,
-  `AWS_PROFILE`, `AWS_DEFAULT_PROFILE`, or a configured `aws.profile` naming something
-  other than `default` — and otherwise the SDK's documented order applies: environment,
-  then `~/.aws/{credentials,config}`, then container and instance roles. A profile you
-  did ask for and that does not exist is still reported by name rather than quietly
-  falling through to whatever else is around.
+- **Credentials in `AWS_ACCESS_KEY_ID` and `AWS_SECRET_ACCESS_KEY` were ignored**, in
+  v0.2.2 and v0.2.1 alike, and in the releases before them. On a machine with no
+  `~/.aws` — a CI job, a container, a fresh shell — every command failed with
+  `AWS credentials for profile "default" are configured but cannot be used`, or walked
+  past the keys and tried to reach EC2 instance metadata. The tool's own advice tells
+  you to export exactly those two variables. The cause was that the default profile was
+  always pinned on the AWS SDK, and a pinned profile is exclusive: the SDK then resolves
+  from that profile alone and never looks at the environment. The profile is now pinned
+  only when one was actually chosen — `--aws-profile`, `AWS_PROFILE`,
+  `AWS_DEFAULT_PROFILE`, or a configured `aws.profile` naming something other than
+  `default` — and otherwise the SDK's documented order applies: environment, then
+  `~/.aws/{credentials,config}`, then container and instance roles. A profile you did
+  ask for and that does not exist is still reported by name rather than quietly falling
+  through to whatever else is around.
 - **The first run with `--aws-profile` asked for a region although the profile already
   named one**, if `~/.aws/config` had no `[default]` section. The region needed to get
   started was looked up without the profile, found nothing, and dropped into the
@@ -24,6 +25,27 @@
   region. In a script, with no terminal to ask, the run could not get past it at all.
   The region now comes from the chosen profile, and the selector appears only when
   nothing names a region.
+
+## v0.2.2
+
+### Fixed
+
+- **`tail` is listed in `--help` and offered by completion.** It had been hidden since
+  it first appeared upstream, as an experiment, though it works and the README
+  documents it. Its help now says what it does, with examples.
+- **`tail scaling-activities` with no activity said nothing and exited 0**, which reads
+  the same as a silent failure. It now says there were no scaling activities in the
+  last six weeks (as long as autoscaling keeps history), on stderr so stdout stays the
+  events alone. (Inherited.)
+- **`tail scaling-activities --follow` returned at once when there was no activity
+  yet** — exactly when one wants to wait for the first. It now polls from that moment
+  on. An invalid `--frequency` is refused before any AWS call. (Inherited.)
+
+### Documentation
+
+- The README opens with a recorded demo, and says plainly what the tool is for and how
+  it gets its data: some commands ask the AWS API every time, `show` and `inspect` work
+  on a synced graph, and `--local` answers from that copy without calling AWS.
 
 ## v0.2.1
 
