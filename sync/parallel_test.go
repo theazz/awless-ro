@@ -225,12 +225,18 @@ func TestSyncedGraphsReadBack(t *testing.T) {
 	}
 
 	t.Run("one service at a time", func(t *testing.T) {
-		g := LoadLocalGraphForService("infra", "admin", "eu-west-1")
+		g, err := LoadLocalGraphForService("infra", "admin", "eu-west-1")
+		if err != nil {
+			t.Fatal(err)
+		}
 		assertHasResource(t, g, "instance", "i-1")
 
 		// access is asked for with a real region and still found, because the loader
 		// knows it is stored globally.
-		g = LoadLocalGraphForService("access", "admin", "eu-west-1")
+		g, err = LoadLocalGraphForService("access", "admin", "eu-west-1")
+		if err != nil {
+			t.Fatal(err)
+		}
 		assertHasResource(t, g, "user", "u-1")
 	})
 
@@ -272,7 +278,10 @@ func TestSyncedGraphsReadBack(t *testing.T) {
 func TestReadingAnUnsyncedProfileIsEmptyNotAnError(t *testing.T) {
 	t.Setenv("__AWLESS_HOME", t.TempDir())
 
-	g := LoadLocalGraphForService("infra", "nobody", "eu-west-1")
+	g, err := LoadLocalGraphForService("infra", "nobody", "eu-west-1")
+	if err != nil {
+		t.Fatal(err)
+	}
 	if g == nil {
 		t.Fatal("expected an empty graph, got nil")
 	}
