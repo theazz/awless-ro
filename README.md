@@ -296,6 +296,13 @@ carries, not only the default columns. `--format` covers `table`, `csv`, `tsv`,
 `json` and `porcelain`; `--ids` prints one id per line and nothing else, for scripts.
 `-r` and `-p` override the region and profile for one command.
 
+Tables fit the terminal: long values wrap only as much as the width requires, and
+columns that still do not fit are dropped from the right, with a note saying which.
+When the output goes to a pipe or a file there is no width to fit, so tables are not
+wrapped at all: one row per line, values whole, as `ps` or `kubectl get` do.
+`--max-width N` sets the width explicitly, on a terminal or not, and `--max-width 0`
+turns the limit off; `show` takes it too. It has no effect on the other formats.
+
 **`show`** — one resource by id, by name, or by `@name`, with its relations. Names
 are not unique in AWS, so an ambiguous one lists the candidates.
 

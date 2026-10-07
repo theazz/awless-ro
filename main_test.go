@@ -7,6 +7,7 @@ import (
 	"path/filepath"
 	"strings"
 	"testing"
+	"unicode/utf8"
 )
 
 // The exit status is the one thing about this binary that only a test running it can
@@ -140,6 +141,126 @@ func TestCompletionOnAFreshMachineDoesNotSetAnythingUp(t *testing.T) {
 	}
 	if len(entries) != 0 {
 		t.Errorf("completion created %d entries in the home directory, starting with %s", len(entries), entries[0].Name())
+	}
+}
+
+// A bad --max-width is a mistake on the command line, so it is refused while the
+// command line is parsed: before any hook, hence before any setup under the home
+// directory, any AWS session or any AWS call.
+func TestInvalidMaxWidthIsRefusedBeforeAnythingRuns(t *testing.T) {
+	bin := build(t)
+
+	for _, args := range [][]string{
+		{"list", "stacks", "--local", "--max-width", "-1"},
+		{"list", "stacks", "--local", "--max-width=-1"},
+		{"list", "stacks", "--local", "--max-width", "abc"},
+		{"list", "stacks", "--local", "--max-width", "1.5"},
+		{"show", "x", "--local", "--max-width", "-5"},
+	} {
+		t.Run(strings.Join(args, " "), func(t *testing.T) {
+			home := t.TempDir()
+			cmd := exec.Command(bin, args...)
+			cmd.Env = append(os.Environ(), "HOME="+home,
+				"AWS_ACCESS_KEY_ID=", "AWS_SECRET_ACCESS_KEY=", "AWS_PROFILE=")
+			out, err := cmd.CombinedOutput()
+
+			var exit *exec.ExitError
+			if !errors.As(err, &exit) || exit.ExitCode() != 1 {
+				t.Fatalf("want exit status 1, got %v. Output:\n%s", err, out)
+			}
+			if !strings.Contains(string(out), "max-width") {
+				t.Errorf("the error does not name --max-width:\n%s", out)
+			}
+			entries, err := os.ReadDir(home)
+			if err != nil {
+				t.Fatal(err)
+			}
+			if len(entries) != 0 {
+				t.Errorf("something ran: %d entries in the home directory, starting with %s", len(entries), entries[0].Name())
+			}
+		})
+	}
+}
+
+// Output going to a pipe or a file has no width to fit, so the table is not wrapped at
+// all: each record on one line, whole, however long. The stacks are synthetic.
+func TestTableOutputToAPipeIsNotWrapped(t *testing.T) {
+	bin := build(t)
+	home := t.TempDir()
+
+	const (
+		arn1  = "arn:aws:cloudformation:eu-west-1:123456789012:stack/my-production-application-network-stack-eu-west-1-blue/0f1e2d3c-4b5a-6978-8765-4321fedcba09"
+		name1 = "my-production-application-network-stack-eu-west-1-blue"
+		arn2  = "arn:aws:cloudformation:eu-west-1:123456789012:stack/my-production-application-compute-stack-eu-west-1-green/1a2b3c4d-5e6f-7890-abcd-ef0123456789"
+		name2 = "my-production-application-compute-stack-eu-west-1-green"
+	)
+	dir := filepath.Join(home, ".awless-ro", "aws", "rdf", "default", "eu-west-1")
+	if err := os.MkdirAll(dir, 0o700); err != nil {
+		t.Fatal(err)
+	}
+	triples := `<s1> <cloud:id> "` + arn1 + `" .
+<s1> <cloud:name> "` + name1 + `" .
+<s1> <cloud:state> "UPDATE_ROLLBACK_COMPLETE" .
+<s1> <rdf:type> <cloud-owl:Stack> .
+<s2> <cloud:id> "` + arn2 + `" .
+<s2> <cloud:name> "` + name2 + `" .
+<s2> <cloud:state> "CREATE_COMPLETE" .
+<s2> <rdf:type> <cloud-owl:Stack> .
+`
+	if err := os.WriteFile(filepath.Join(dir, "cloudformation.nt"), []byte(triples), 0o600); err != nil {
+		t.Fatal(err)
+	}
+
+	run := func(extra ...string) string {
+		t.Helper()
+		cmd := exec.Command(bin, append([]string{"list", "stacks", "--local"}, extra...)...)
+		cmd.Env = append(os.Environ(), "HOME="+home,
+			"AWS_REGION=eu-west-1", "AWS_DEFAULT_REGION=eu-west-1", "AWS_EC2_METADATA_DISABLED=true",
+			"AWS_ACCESS_KEY_ID=", "AWS_SECRET_ACCESS_KEY=", "AWS_PROFILE=")
+		out, err := cmd.Output() // stdout is a pipe
+		if err != nil {
+			t.Fatalf("%v: %v\n%s", extra, err, out)
+		}
+		return string(out)
+	}
+	run() // the first run sets the home up and may greet; not what is under test
+
+	plain := run()
+	lines := strings.Split(plain, "\n")
+	for _, row := range [][2]string{{arn1, name1}, {arn2, name2}} {
+		found := false
+		for _, l := range lines {
+			if strings.Contains(l, row[0]) && strings.Contains(l, row[1]) {
+				found = true
+			}
+		}
+		if !found {
+			t.Errorf("%s and its ARN are not whole on one line:\n%s", row[1], plain)
+		}
+	}
+	if strings.Contains(plain, "truncated") {
+		t.Errorf("columns dropped in a pipe:\n%s", plain)
+	}
+
+	if got := run("--max-width", "0"); got != plain {
+		t.Errorf("--max-width 0 differs from the default in a pipe:\n%s\nwant\n%s", got, plain)
+	}
+
+	narrow := run("--max-width", "80")
+	if !strings.Contains(narrow, "truncated to fit terminal") {
+		t.Errorf("--max-width 80 dropped nothing:\n%s", narrow)
+	}
+	for _, l := range strings.Split(narrow, "\n") {
+		if strings.Contains(l, "truncated") {
+			break
+		}
+		if n := utf8.RuneCountInString(l); n > 80 {
+			t.Errorf("--max-width 80 printed a line of %d: %q", n, l)
+		}
+	}
+
+	if csv, csv80 := run("--format", "csv"), run("--format", "csv", "--max-width", "80"); csv != csv80 || !strings.Contains(csv, arn1) {
+		t.Errorf("--max-width changed csv:\n%s\nwant\n%s", csv80, csv)
 	}
 }
 

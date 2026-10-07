@@ -59,7 +59,6 @@ func (d *tableResourceDisplayer) Print(w io.Writer) error {
 	values := make(table, len(d.r.Properties()))
 
 	i := 0
-	propertyNameMaxWith := 13
 	for prop, val := range d.r.Properties() {
 		var header ColumnDefinition
 		for _, h := range d.columnDefinitions {
@@ -75,9 +74,6 @@ func (d *tableResourceDisplayer) Print(w io.Writer) error {
 			values[i] = make([]interface{}, 2)
 		}
 		values[i][0] = header.title()
-		if l := len(header.title()); l > propertyNameMaxWith {
-			propertyNameMaxWith = l
-		}
 		if withheldFromTable[prop] {
 			values[i][1] = withheldNotice(prop, val)
 		} else {
@@ -89,24 +85,31 @@ func (d *tableResourceDisplayer) Print(w io.Writer) error {
 	ds := defaultSorter{sortBy: []int{0}}
 	ds.sort(values)
 
-	valueColumnMaxwidth := d.maxwidth - (propertyNameMaxWith + 7) // ( = border + 2 * margin + border + 2 * margin + border)
-	if valueColumnMaxwidth <= 0 {
-		valueColumnMaxwidth = 50
+	headers := []string{"Property" + ds.symbol(), "Value"}
+	natural := []int{cellWidth(headers[0]), cellWidth(headers[1])}
+	var rows [][]string
+	for i := range values {
+		if val := fmt.Sprint(values[i][1]); val != "" {
+			row := []string{fmt.Sprint(values[i][0]), val}
+			for j := range row {
+				natural[j] = max(natural[j], cellWidth(row[j]))
+			}
+			rows = append(rows, row)
+		}
 	}
+	// The value column takes whatever the property names leave; a property table
+	// has two columns and needs both, so nothing is dropped.
+	widths := columnWidths(natural, d.maxwidth, false)
 
 	table := tablewriter.NewWriter(w)
 	table.SetBorders(tablewriter.Border{Left: true, Top: false, Right: true, Bottom: false})
-	table.SetColWidth(valueColumnMaxwidth)
+	table.SetAutoWrapText(false)
 	table.SetCenterSeparator("|")
 	table.SetAlignment(tablewriter.ALIGN_LEFT)
-	table.SetHeader([]string{"Property" + ds.symbol(), "Value"})
+	table.SetHeader([]string{wrapCell(headers[0], widths[0]), wrapCell(headers[1], widths[1])})
 
-	wraper := autoWraper{maxWidth: valueColumnMaxwidth, wrappingChar: " "}
-
-	for i := range values {
-		if val := fmt.Sprint(values[i][1]); val != "" {
-			table.Append([]string{fmt.Sprint(values[i][0]), wraper.Wrap(val)})
-		}
+	for _, row := range rows {
+		table.Append([]string{wrapCell(row[0], widths[0]), wrapCell(row[1], widths[1])})
 	}
 
 	table.Render()
