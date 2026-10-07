@@ -311,9 +311,27 @@ awless-ro list volumes --tag-key Dept --format tsv
 awless-ro list users --format json
 ```
 
-`--filter` matches any column, case-insensitively, by substring; `--tag`,
-`--tag-key` and `--tag-value` match tags. `--columns` reaches any property a resource
-carries, not only the default columns. `--format` covers `table`, `csv`, `tsv`,
+`--filter` matches any column, case-insensitively, in one of two forms:
+
+| Form | Matches | Example |
+|---|---|---|
+| `key=value` | any column containing the value | `--filter type=t3` finds `t3.micro` and `t3.large` |
+| `key==value` | the whole column value | `--filter state==Active` finds `Active` and not `Inactive` |
+
+The substring form cannot exclude a longer value that contains the one you asked
+for, which is what the exact form is for:
+
+```sh
+awless-ro list accesskeys --filter state==Active   # only the active keys
+awless-ro list accesskeys --filter state=active    # also the Inactive ones: "inactive" contains "active"
+```
+
+Both forms compare the value as it is stored rather than the cell as it is
+printed, so a date column is matched on its full timestamp and not on the `2
+days` the table shows.
+
+`--tag`, `--tag-key` and `--tag-value` match tags. `--columns` reaches any property a
+resource carries, not only the default columns. `--format` covers `table`, `csv`, `tsv`,
 `json` and `porcelain`; `--ids` prints one id per line and nothing else, for scripts.
 `-r` and `-p` override the region and profile for one command.
 

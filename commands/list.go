@@ -67,7 +67,7 @@ func init() {
 
 	listCmd.PersistentFlags().StringVar(&listingFormat, "format", "table", "Output format: table, csv, tsv, json, porcelain")
 	listCmd.RegisterFlagCompletionFunc("format", fixedCompletion("table", "csv", "tsv", "json", "porcelain"))
-	listCmd.PersistentFlags().StringSliceVar(&listingFiltersFlag, "filter", []string{}, "Filter resources given key/values fields (case insensitive). Ex: --filter type=t2.micro")
+	listCmd.PersistentFlags().StringSliceVar(&listingFiltersFlag, "filter", []string{}, "Filter resources by column, case insensitive: key=value matches a substring, key==value matches the whole value. Ex: --filter type=t2.micro --filter state==running")
 	listCmd.PersistentFlags().StringSliceVar(&listingTagFiltersFlag, "tag", []string{}, "Filter EC2 resources given tags (case sensitive!). Ex: --tag Env=Production")
 	listCmd.PersistentFlags().StringSliceVar(&listingTagKeyFiltersFlag, "tag-key", []string{}, "Filter EC2 resources given a tag key only (case sensitive!). Ex: --tag-key Env")
 	listCmd.PersistentFlags().StringSliceVar(&listingTagValueFiltersFlag, "tag-value", []string{}, "Filter EC2 resources given a tag value only (case sensitive!). Ex: --tag-value Staging")
@@ -81,7 +81,7 @@ func init() {
 var listCmd = &cobra.Command{
 	Use:               "list",
 	Aliases:           []string{"ls"},
-	Example:           "  awless-ro list instances --sort uptime\n  awless-ro list users --format csv\n  awless-ro list volumes --filter state=use --filter type=gp2\n  awless-ro list volumes --tag-value Purchased\n  awless-ro list vpcs --tag-key Dept --tag-key Internal\n  awless-ro list instances --tag Env=Production,Dept=Marketing\n  awless-ro list instances --filter state=running,type=micro\n  awless-ro list s3objects --filter bucket=pdf-bucket ",
+	Example:           "  awless-ro list instances --sort uptime\n  awless-ro list users --format csv\n  awless-ro list volumes --filter state=use --filter type=gp2\n  awless-ro list volumes --tag-value Purchased\n  awless-ro list vpcs --tag-key Dept --tag-key Internal\n  awless-ro list instances --tag Env=Production,Dept=Marketing\n  awless-ro list instances --filter state=running,type=micro\n  awless-ro list s3objects --filter bucket=pdf-bucket \n  awless-ro list accesskeys --filter state==Active",
 	PersistentPreRun:  applyHooks(initLoggerHook, initAwlessEnvHook, initCloudServicesHook, firstInstallDoneHook),
 	PersistentPostRun: applyHooks(onVersionUpgrade, networkMonitorHook),
 	Short:             "List resources: sorting, filtering via tag/properties, output formatting, etc...",
