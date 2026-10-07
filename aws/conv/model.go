@@ -443,22 +443,28 @@ var awsResourcesDef = map[string]map[string]*propertyTransform{
 	},
 	// DNS
 	cloud.Zone: {
-		properties.Name:            {name: "Name", transform: extractValueFn},
+		// HostedZone.Name comes back in DNS presentation format, same as a
+		// record's: a zone with an underscore in it displays as \137 undecoded.
+		properties.Name:            {name: "Name", transform: extractDNSNameFn},
 		properties.Comment:         {name: "Config", transform: extractFieldFn("Comment")},
 		properties.Private:         {name: "Config", transform: extractFieldFn("PrivateZone")},
 		properties.CallerReference: {name: "CallerReference", transform: extractValueFn},
 		properties.RecordCount:     {name: "ResourceRecordSetCount", transform: extractValueFn},
 	},
 	cloud.Record: {
-		properties.Name:                  {name: "Name", transform: extractValueFn},
-		properties.Zone:                  {name: "Zone"},
-		properties.Failover:              {name: "Failover", transform: extractValueFn},
-		properties.Continent:             {name: "GeoLocation", transform: extractFieldFn("ContinentCode")},
-		properties.Country:               {name: "GeoLocation", transform: extractFieldFn("CountryCode")},
-		properties.HealthCheck:           {name: "HealthCheckId", transform: extractValueFn},
-		properties.Region:                {name: "Region", transform: extractValueFn},
+		properties.Name:        {name: "Name", transform: extractDNSNameFn},
+		properties.Zone:        {name: "Zone"},
+		properties.Failover:    {name: "Failover", transform: extractValueFn},
+		properties.Continent:   {name: "GeoLocation", transform: extractFieldFn("ContinentCode")},
+		properties.Country:     {name: "GeoLocation", transform: extractFieldFn("CountryCode")},
+		properties.HealthCheck: {name: "HealthCheckId", transform: extractValueFn},
+		properties.Region:      {name: "Region", transform: extractValueFn},
+		// Records stays RAW deliberately: ResourceRecords[].Value is a DNS name
+		// only for CNAME/NS/MX/PTR/SRV — for TXT and SPF it is an opaque payload
+		// whose backslashes are data, and decoding it would corrupt exactly the
+		// records users read most literally.
 		properties.Records:               {name: "ResourceRecords", transform: extractStringSliceValues("Value")},
-		properties.Alias:                 {name: "AliasTarget", transform: extractFieldFn("DNSName")},
+		properties.Alias:                 {name: "AliasTarget", transform: decodeDNSNameFn(extractFieldFn("DNSName"))},
 		properties.Set:                   {name: "SetIdentifier", transform: extractValueFn},
 		properties.TTL:                   {name: "TTL", transform: extractValueFn},
 		properties.TrafficPolicyInstance: {name: "TrafficPolicyInstanceId", transform: extractValueFn},

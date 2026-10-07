@@ -43,8 +43,11 @@ import (
 	"net"
 	"net/url"
 	"reflect"
+	"strconv"
+	"strings"
 	"sync"
 	"time"
+	"unicode/utf8"
 
 	awssdk "github.com/aws/aws-sdk-go-v2/aws"
 	acmtypes "github.com/aws/aws-sdk-go-v2/service/acm/types"
@@ -546,6 +549,116 @@ var extractFieldFn = func(field string) transformFn {
 
 		return extractValueFn(structField.Interface())
 	}
+}
+
+// decodeDNSNameFn wraps a transform and decodes DNS presentation format in a
+// string result, leaving any other result untouched. Route 53 returns names with
+// one backslash and three OCTAL digits per escaped octet, so a wildcard record
+// arrives as the four characters \052 — ASCII 42 is 052 in octal. RFC 1035 §5.1
+// specifies decimal for this escape; Route 53 does not use it, and reading 052 as
+// decimal yields '4' and corrupts the name.
+//
+// Not strconv.Unquote. Octal it happens to agree on; everything around it it does
+// not. Unquote needs the value wrapped in Go string-literal quotes, it decodes Go
+// escapes (\x, \u, \U) that DNS never emits, it turns \001 and \177 into raw
+// control bytes, and it returns ErrSyntax for inputs a DNS name can legitimately
+// carry: `a\.b` and a trailing lone backslash both fail, as does any triple above
+// \377. A name that failed to convert would be worse than one left escaped.
+//
+// It is a decorator rather than a plain transform because the mappings that need
+// it read their value in two different ways: properties.Name reads the field
+// itself, properties.Alias reads a field of a nested shape.
+func decodeDNSNameFn(inner transformFn) transformFn {
+	return func(i interface{}) (interface{}, error) {
+		val, err := inner(i)
+		if err != nil || val == nil {
+			// nil, nil for a nil pointer and an error unchanged: a shape change
+			// in the SDK degrades to today's behaviour instead of erroring.
+			return val, err
+		}
+		str, ok := val.(string)
+		if !ok {
+			return val, nil
+		}
+		return unescapeDNSName(str), nil
+	}
+}
+
+// extractDNSNameFn is the common case: read the field, then decode.
+var extractDNSNameFn = decodeDNSNameFn(extractValueFn)
+
+// unescapeDNSName decodes DNS presentation format. It is total — string to
+// string, it cannot fail — which is why the fail-safe below is "return the input"
+// rather than an error.
+//
+// The escape is a backslash and three OCTAL digits per octet; see
+// decodeDNSNameFn for why the base is 8 and not the decimal of RFC 1035 §5.1.
+func unescapeDNSName(s string) string {
+	// Rule 5: no backslash, nothing to do, and nothing allocated.
+	if !strings.ContainsRune(s, '\\') {
+		return s
+	}
+
+	// Assembled as BYTES, not runes, so a multi-byte UTF-8 sequence written as
+	// consecutive octal triples reassembles (\303\251 -> é).
+	out := make([]byte, 0, len(s))
+	for i := 0; i < len(s); {
+		if s[i] != '\\' {
+			out = append(out, s[i])
+			i++
+			continue
+		}
+		// Rule 4: a trailing lone backslash is kept verbatim.
+		if i+1 == len(s) {
+			out = append(out, '\\')
+			i++
+			continue
+		}
+		if i+3 < len(s) && isOctalDigit(s[i+1]) && isOctalDigit(s[i+2]) && isOctalDigit(s[i+3]) {
+			v, err := strconv.ParseUint(s[i+1:i+4], 8, 32)
+			if err == nil {
+				// Rule 1: a printable or high octet becomes that single byte.
+				// 0x80..0xFF is deliberately included — those are the UTF-8 lead
+				// and continuation bytes, the case decoding exists for.
+				if v >= 0x20 && v <= 0xFF && v != 0x7F {
+					out = append(out, byte(v))
+					i += 4
+					continue
+				}
+				// Rule 2: below 0x20, DEL, or above an octet — emit all four
+				// characters verbatim. For a control octet the escape IS the
+				// readable form, and decoding one would put a raw control byte
+				// into a table cell and into an N-Triples literal. Above \377
+				// there is no octet AWS could mean, so leaving it alone is the
+				// non-lossy answer.
+				out = append(out, s[i:i+4]...)
+				i += 4
+				continue
+			}
+		}
+		// Rule 3: backslash plus anything else is the following character
+		// verbatim. This is what makes \\ -> \ work and is the presentation
+		// format's own rule for a non-numeric escape. Mildly lossy in theory —
+		// \. becomes an ordinary dot — but Route 53 escapes octets as octal
+		// triples, so a bare \. is not a form it emits; rule 3 is here for \\
+		// and as a safe catch-all.
+		out = append(out, s[i+1])
+		i += 2
+	}
+
+	decoded := string(out)
+	// Fail-safe: never hand invalid UTF-8 to the graph. triplestore writes
+	// literals through escapeLiteral, which escapes only backslash, quote, \n,
+	// \r and \t and assumes valid UTF-8, so a stray high octet would end up in
+	// the .nt files. Returning the original is the non-lossy answer.
+	if !utf8.ValidString(decoded) {
+		return s
+	}
+	return decoded
+}
+
+func isOctalDigit(b byte) bool {
+	return b >= '0' && b <= '7'
 }
 
 var extractTagsFn = func(i interface{}) (interface{}, error) {
