@@ -186,6 +186,14 @@ func AccessKey(id string) *rBuilder {
 	return new("accesskey", id)
 }
 
+func Database(id string) *rBuilder {
+	return new("database", id)
+}
+
+func Volume(id string) *rBuilder {
+	return new("volume", id)
+}
+
 func (b *rBuilder) Prop(key string, value interface{}) *rBuilder {
 	b.props[key] = value
 	return b

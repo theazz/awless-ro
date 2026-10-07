@@ -586,6 +586,15 @@ func TestMaxWidth(t *testing.T) {
 	g := createInfraGraph()
 	columns := []string{"ID", "Name", "State", "Type", "PublicIP"}
 
+	// autowrapMaxSize and tableColWidth are package-level and this test mutates
+	// them below to exercise narrow terminals, so they must be restored or any
+	// later test in the package (run order dependent, e.g. under -shuffle) sees
+	// the narrowed values instead of the defaults.
+	previousAutowrapMaxSize, previousTableColWidth := autowrapMaxSize, tableColWidth
+	t.Cleanup(func() {
+		autowrapMaxSize, tableColWidth = previousAutowrapMaxSize, previousTableColWidth
+	})
+
 	displayer, _ := BuildOptions(
 		WithRdfType("instance"),
 		WithColumns(columns),
@@ -945,6 +954,11 @@ func TestEmotyDisplays(t *testing.T) {
 
 	g = createInfraGraph()
 	columns = []string{}
+	// DefaultsColumnDefinitions is a package-level map read by every other test
+	// that relies on default columns, so it must be restored afterwards or later
+	// tests see "No columns to display." depending on run order.
+	previousDefaults := DefaultsColumnDefinitions
+	t.Cleanup(func() { DefaultsColumnDefinitions = previousDefaults })
 	DefaultsColumnDefinitions = make(map[string][]ColumnDefinition)
 
 	displayer, _ = BuildOptions(

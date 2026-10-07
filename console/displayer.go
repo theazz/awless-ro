@@ -999,7 +999,10 @@ func valueLowerOrEqual(a, b interface{}) bool {
 		return false
 	}
 	if reflect.TypeOf(a) != reflect.TypeOf(b) {
-		panic(fmt.Sprintf("can not compare values of type %T and %T", a, b))
+		// Mismatched types for the same column should not happen, but this is a
+		// read-only inspection CLI: fall back to a total, stable order instead of
+		// panicking on data we don't control.
+		return fmt.Sprint(a) <= fmt.Sprint(b)
 	}
 	switch a.(type) {
 	case int:
@@ -1018,10 +1021,18 @@ func valueLowerOrEqual(a, b interface{}) bool {
 		aa := a.(time.Time)
 		bb := b.(time.Time)
 		return aa.After(bb)
+	case bool:
+		aa := a.(bool)
+		bb := b.(bool)
+		// false before true, so unchecked/disabled rows sort ahead of checked/enabled ones.
+		return !aa || bb
 	case []string, []int:
 		return fmt.Sprint(a) <= fmt.Sprint(b)
 	default:
-		panic(fmt.Sprintf("can not compare values of type %T", a))
+		// A read-only inspection CLI should not abort because a column holds a
+		// type this switch doesn't know about. Fall back to a total, stable
+		// (if arbitrary) order instead of panicking.
+		return fmt.Sprint(a) <= fmt.Sprint(b)
 	}
 }
 
