@@ -74,6 +74,9 @@ func withAWSHome(t *testing.T) string {
 const (
 	validKeyID  = "AKIAIOSFODNN7EXAMPLE"
 	validSecret = "wJalrXUtnFEMI/K7MDENG/bPxRfiCYEXAMPLEKEY"
+	// A second well-formed example key, so a test can tell which of two sources
+	// answered.
+	betaKeyID = "AKIAI44QH8DHBEXAMPLE"
 )
 
 func TestNewProfileWritesTheSharedCredentialsFile(t *testing.T) {

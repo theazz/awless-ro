@@ -45,7 +45,13 @@ func init() {
 	os.Setenv("__AWLESS_KEYS_DIR", KeysDir)
 }
 
-func InitAwlessEnv() error {
+// InitAwlessEnv prepares ~/.awless-ro and loads the configuration, resolving the
+// settings a first run cannot do without.
+//
+// profile is the profile this run chose, or empty when it chose none. It is only used
+// on a first install, to look up the region the chosen profile already names; the
+// stored configuration cannot contribute to that choice yet, because there is none.
+func InitAwlessEnv(profile string) error {
 	_, err := os.Stat(DBPath)
 
 	AwlessFirstInstall = os.IsNotExist(err)
@@ -64,7 +70,7 @@ func InitAwlessEnv() error {
 		fmt.Fprintln(os.Stderr, "Welcome! Resolving environment data...")
 		fmt.Fprintln(os.Stderr)
 
-		if err = InitConfig(resolveRequiredConfigFromEnv()); err != nil {
+		if err = InitConfig(resolveRequiredConfigFromEnv(profile)); err != nil {
 			return err
 		}
 
@@ -83,8 +89,8 @@ func InitAwlessEnv() error {
 	return nil
 }
 
-func resolveRequiredConfigFromEnv() map[string]string {
-	region := awsservices.ResolveRegionFromEnv()
+func resolveRequiredConfigFromEnv(profile string) map[string]string {
+	region := awsservices.ResolveRegionFromEnv(profile)
 
 	resolved := make(map[string]string)
 	if region != "" {

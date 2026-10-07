@@ -1,12 +1,14 @@
 package main
 
 import (
+	"context"
 	"errors"
 	"os"
 	"os/exec"
 	"path/filepath"
 	"strings"
 	"testing"
+	"time"
 )
 
 // The exit status is the one thing about this binary that only a test running it can
@@ -52,6 +54,59 @@ func TestExitStatusReportsFailure(t *testing.T) {
 				t.Errorf("exit status %d, want %d. Output:\n%s", got, tc.want, out)
 			}
 		})
+	}
+}
+
+// A first run that names a profile must take the region from that profile instead of
+// asking for one.
+//
+// It used to ask: the region was resolved during environment setup without the chosen
+// profile, so a shared config holding only `[profile beta] region = ...` and no
+// [default] section looked like nothing at all, and the run dropped into the
+// interactive region selector. Whatever was typed there became the stored default
+// region, for a profile that already said which region it meant. Worse, with no
+// terminal the prompt simply fails, so a first run in a script could not get past it.
+//
+// Only a test running the binary can show this, because the fault is in the order
+// start-up does things. --local keeps it offline: no credentials are resolved and no
+// AWS call is made.
+func TestFirstRunTakesTheRegionFromTheChosenProfile(t *testing.T) {
+	bin := build(t)
+
+	awsConfig := filepath.Join(t.TempDir(), "config")
+	if err := os.WriteFile(awsConfig, []byte("[profile beta]\nregion = us-east-2\n"), 0o600); err != nil {
+		t.Fatal(err)
+	}
+
+	ctx, cancel := context.WithTimeout(context.Background(), 60*time.Second)
+	defer cancel()
+
+	cmd := exec.CommandContext(ctx, bin, "-p", "beta", "--no-sync", "--local", "list", "instances")
+	cmd.Env = append(os.Environ(),
+		"HOME="+t.TempDir(),
+		"AWS_CONFIG_FILE="+awsConfig,
+		"AWS_SHARED_CREDENTIALS_FILE="+filepath.Join(t.TempDir(), "credentials-that-do-not-exist"),
+		"AWS_EC2_METADATA_DISABLED=true",
+		"AWS_REGION=", "AWS_DEFAULT_REGION=", "AWS_PROFILE=", "AWS_DEFAULT_PROFILE=",
+		"AWS_ACCESS_KEY_ID=", "AWS_SECRET_ACCESS_KEY=",
+	)
+	// /dev/null rather than this test's stdin, so a run that does reach the prompt
+	// fails instead of blocking the suite.
+	cmd.Stdin = nil
+
+	out, err := cmd.CombinedOutput()
+	if ctx.Err() != nil {
+		t.Fatalf("the run did not finish, most likely waiting on the region prompt. Output:\n%s", out)
+	}
+	if err != nil {
+		t.Fatalf("exit status: %s. Output:\n%s", err, out)
+	}
+
+	if strings.Contains(string(out), "Please enter one region") {
+		t.Errorf("a region was asked for although the profile names one. Output:\n%s", out)
+	}
+	if !strings.Contains(string(out), "region 'us-east-2'") {
+		t.Errorf("the region should have come from the profile, got:\n%s", out)
 	}
 }
 

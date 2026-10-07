@@ -52,7 +52,24 @@ func applyHooks(funcs ...func(*cobra.Command, []string) error) func(*cobra.Comma
 }
 
 func initAwlessEnvHook(cmd *cobra.Command, args []string) error {
-	if err := config.InitAwlessEnv(); err != nil {
+	// The profile is settled here as well as in applyRegionAndProfilePrecedence
+	// below, because a first install resolves a region inside InitAwlessEnv and has
+	// to resolve it through the profile that was asked for — otherwise
+	// `awless-ro -p beta ...` on a fresh machine asks for a region interactively
+	// while `[profile beta]` already names one, and stores the answer.
+	//
+	// The stored value is deliberately not consulted: the configuration is not
+	// loaded yet. That loses nothing, because the only thing InitAwlessEnv does with
+	// the profile happens when there is no stored configuration to consult. The
+	// flags, by contrast, are already parsed — PersistentPreRun runs after parsing.
+	// Everything else keeps coming from applyRegionAndProfilePrecedence, which runs
+	// straight after with the configuration loaded.
+	firstRunProfile, explicit, _ := chooseAWSProfile(awsProfileGlobalFlag, "")
+	if !explicit {
+		firstRunProfile = ""
+	}
+
+	if err := config.InitAwlessEnv(firstRunProfile); err != nil {
 		return fmt.Errorf("cannot init awless-ro environment: %s", err)
 	}
 
@@ -61,22 +78,45 @@ func initAwlessEnvHook(cmd *cobra.Command, args []string) error {
 
 var profileOverridenThrough, regionOverridenThrough string
 
+// chooseAWSProfile settles which AWS profile a run uses, and whether that was a
+// choice or a fallback.
+//
+// The order is the one the tool has always applied: the --aws-profile flag, then
+// AWS_DEFAULT_PROFILE, then AWS_PROFILE, then the stored aws.profile. `through`
+// describes the winner for the "profile precedence:" message and is empty when the
+// value came from the stored configuration or from nothing at all.
+//
+// `explicit` is the interesting part. It is false only when nothing names a profile
+// and the answer is the implicit "default". Everything else — including `-p default`
+// and a stored aws.profile of some other name — counts as chosen, because the
+// credential chain and the profile the run reports have to name the same thing: the
+// profile decides the local graph directory, so disagreeing would store one account's
+// resources under another account's name. For the implicit default the SDK's own
+// order is accepted instead (environment keys first), which is both the documented
+// AWS behaviour and the only way credentials in the environment can work at all.
+func chooseAWSProfile(flag, stored string) (profile string, explicit bool, through string) {
+	if flag != "" {
+		return flag, true, "command flag"
+	}
+	if envProfile := os.Getenv("AWS_DEFAULT_PROFILE"); envProfile != "" {
+		return envProfile, true, "AWS_DEFAULT_PROFILE variable"
+	}
+	if envProfile := os.Getenv("AWS_PROFILE"); envProfile != "" {
+		return envProfile, true, "AWS_PROFILE variable"
+	}
+	if stored != "" && stored != config.DefaultAWSProfile {
+		return stored, true, ""
+	}
+	return config.DefaultAWSProfile, false, ""
+}
+
 func applyRegionAndProfilePrecedence() error {
-	if awsProfileGlobalFlag != "" {
-		if err := config.SetVolatile(config.ProfileConfigKey, awsProfileGlobalFlag); err != nil {
+	chosen, _, through := chooseAWSProfile(awsProfileGlobalFlag, config.GetAWSProfile())
+	if through != "" {
+		if err := config.SetVolatile(config.ProfileConfigKey, chosen); err != nil {
 			return err
 		}
-		profileOverridenThrough = "command flag"
-	} else if envProfile := os.Getenv("AWS_DEFAULT_PROFILE"); envProfile != "" {
-		if err := config.SetVolatile(config.ProfileConfigKey, envProfile); err != nil {
-			return err
-		}
-		profileOverridenThrough = "AWS_DEFAULT_PROFILE variable"
-	} else if envProfile := os.Getenv("AWS_PROFILE"); envProfile != "" {
-		if err := config.SetVolatile(config.ProfileConfigKey, envProfile); err != nil {
-			return err
-		}
-		profileOverridenThrough = "AWS_PROFILE variable"
+		profileOverridenThrough = through
 	}
 
 	profile := config.GetAWSProfile()
@@ -129,9 +169,15 @@ func initCloudServicesHook(cmd *cobra.Command, args []string) error {
 
 	profile, region := config.GetAWSProfile(), config.GetAWSRegion()
 
+	// Asked again rather than read off awsProfileExplicit, because `switch` changes
+	// the stored profile in the command body and then runs this hook afterwards: the
+	// answer from the pre-run hook would be about the profile that was in force
+	// before the switch.
+	_, profileExplicit, _ := chooseAWSProfile(awsProfileGlobalFlag, profile)
+
 	logger.Verbosef("awless-ro %s - loading AWS session with profile '%s' and region '%s'", config.Version, profile, region)
 
-	if err := awsservices.Init(profile, region, config.GetConfigWithPrefix("aws."), logger.DefaultLogger, config.SetProfileCallback, networkMonitorFlag); err != nil {
+	if err := awsservices.Init(profile, profileExplicit, region, config.GetConfigWithPrefix("aws."), logger.DefaultLogger, config.SetProfileCallback, networkMonitorFlag); err != nil {
 		return err
 	}
 

@@ -241,7 +241,9 @@ go build -o awless-ro .
 
 Requires Go 1.26. No configuration needed if you already use the AWS CLI: existing
 `~/.aws/{credentials,config}` profiles are picked up, and anything missing is
-prompted for on first run.
+prompted for on first run. With no profile chosen, credentials in
+`AWS_ACCESS_KEY_ID` and `AWS_SECRET_ACCESS_KEY` are used, as are container and
+instance roles — the AWS SDK's own order — so nothing needs configuring in CI.
 
 State lives in `~/.awless-ro` — deliberately not `~/.awless`, so an installed
 upstream `awless` and this tool cannot overwrite each other's graph, database or
