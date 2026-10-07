@@ -30,17 +30,24 @@ var (
 	AccessService, InfraService, StorageService, MessagingService, DnsService, LambdaService, MonitoringService, CdnService, CloudformationService cloud.Service
 )
 
-func Init(profile, region string, extraConf map[string]interface{}, log *logger.Logger, profileSetterCallback func(val string) error, enableNetworkMonitor bool) error {
+// Init builds every service client from one resolved AWS config.
+//
+// profileExplicit says whether profile was chosen by somebody or is only the
+// implicit default; it travels no further than the credential resolver, which uses it
+// to decide whether to pin the shared-config profile. The precedence that answers it
+// lives in commands/hooks.go.
+func Init(profile string, profileExplicit bool, region string, extraConf map[string]interface{}, log *logger.Logger, profileSetterCallback func(val string) error, enableNetworkMonitor bool) error {
 	if region == "" {
 		return errors.New("empty AWS region. Set it with `awless-ro config set aws.region`")
 	}
 
 	params := awscredentials.Params{
-		Profile:     profile,
-		Region:      region,
-		CacheDir:    awscredentials.CacheDir(),
-		AllowPrompt: true,
-		Log:         log,
+		Profile:         profile,
+		ProfileExplicit: profileExplicit,
+		Region:          region,
+		CacheDir:        awscredentials.CacheDir(),
+		AllowPrompt:     true,
+		Log:             log,
 	}
 	if enableNetworkMonitor {
 		params.APIOptions = DefaultNetworkMonitor.APIOptions()

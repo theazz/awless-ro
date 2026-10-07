@@ -18,26 +18,36 @@ package awsservices
 
 import (
 	"context"
+	"errors"
 	"fmt"
 	"net/http"
 	"os"
 	"time"
 
+	awssdk "github.com/aws/aws-sdk-go-v2/aws"
 	"github.com/aws/aws-sdk-go-v2/config"
 	"github.com/aws/aws-sdk-go-v2/feature/ec2/imds"
 
 	awsconfig "github.com/theazz/awless-ro/aws/config"
 )
 
+// regionSelector asks the user for a region. A variable so that a test can prove the
+// interactive prompt is never reached, instead of hanging on stdin waiting for it.
+var regionSelector = awsconfig.StdinRegionSelector
+
 // ResolveRegionFromEnv works out a region to start from on first run: the one
 // the environment or the shared config already names, failing that the one this
 // machine runs in if it is an EC2 instance, and failing that it asks.
-func ResolveRegionFromEnv() (region string) {
+//
+// profile is the profile the run chose, or empty when it chose none. It has to be
+// passed in: without it, a first run of `awless-ro -p beta ...` could not see the
+// region `[profile beta]` already names and asked for one interactively, then stored
+// that answer. Only a chosen profile is passed, because pinning the implicit default
+// would stop the environment from answering at all.
+func ResolveRegionFromEnv(profile string) (region string) {
 	ctx := context.Background()
 
-	cfg, err := config.LoadDefaultConfig(ctx,
-		config.WithHTTPClient(&http.Client{Timeout: 1 * time.Second}),
-	)
+	cfg, err := loadConfigForRegion(ctx, profile)
 	if err == nil {
 		region = cfg.Region
 	}
@@ -53,11 +63,41 @@ func ResolveRegionFromEnv() (region string) {
 	}
 
 	if !awsconfig.IsValidRegion(region) {
-		region = awsconfig.StdinRegionSelector()
+		region = regionSelector()
 		fmt.Println()
 	}
 
 	return
+}
+
+// loadConfigForRegion reads just enough configuration to answer "which region", with
+// a short timeout because the chain may try to reach instance metadata.
+//
+// A profile that does not exist is not a failure here, it is the answer "no region
+// from the profile": a stale name in AWS_PROFILE or a typo after --aws-profile should
+// still let the environment and the shared default answer. Same treatment as
+// hasEmbeddedRegionInSharedConfigForProfile in commands/hooks.go, which asks the same
+// question later in the run.
+func loadConfigForRegion(ctx context.Context, profile string) (awssdk.Config, error) {
+	opts := []func(*config.LoadOptions) error{
+		config.WithHTTPClient(&http.Client{Timeout: 1 * time.Second}),
+	}
+	if profile == "" {
+		return config.LoadDefaultConfig(ctx, opts...)
+	}
+
+	cfg, err := config.LoadDefaultConfig(ctx, append(opts, config.WithSharedConfigProfile(profile))...)
+	if err == nil {
+		return cfg, nil
+	}
+	// Matched by value, not by pointer: the SDK declares Error() on the value
+	// receiver and returns the struct itself, so errors.As with a **T target
+	// silently never matches.
+	var missing config.SharedConfigProfileNotExistError
+	if errors.As(err, &missing) {
+		return config.LoadDefaultConfig(ctx, opts...)
+	}
+	return cfg, err
 }
 
 // Resolving credentials lives in aws/credentials. It used to be a builder here, but
