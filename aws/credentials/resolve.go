@@ -58,6 +58,22 @@ type Params struct {
 	Profile string
 	Region  string
 
+	// ProfileExplicit says whether Profile was actually chosen by somebody — the
+	// --aws-profile flag, AWS_PROFILE, AWS_DEFAULT_PROFILE or a stored aws.profile
+	// naming something other than the implicit default — rather than being the
+	// default we fall back to. commands/hooks.go owns that question.
+	//
+	// It decides whether the shared-config profile is pinned. The SDK treats a
+	// programmatically set profile as exclusive: it then resolves credentials from
+	// that profile alone and never consults AWS_ACCESS_KEY_ID and
+	// AWS_SECRET_ACCESS_KEY. Pinning the implicit "default" therefore broke the
+	// arrangement every CI job and container uses — keys in the environment and no
+	// ~/.aws at all — with either "failed to get shared config profile, default" or
+	// a walk all the way down the chain to instance metadata. With nothing chosen
+	// the option is omitted and the SDK's documented order applies: environment,
+	// then shared config, then container and instance roles.
+	ProfileExplicit bool
+
 	// APIOptions are passed through to every client, used for the network monitor.
 	APIOptions []func(*middleware.Stack) error
 
@@ -93,7 +109,7 @@ func Resolve(ctx context.Context, p Params) (awssdk.Config, error) {
 	// The distinction matters, because offering to type access keys is bad advice
 	// when the real problem is an expired SSO session or a role that will not
 	// assume.
-	if isConfigured(p.Profile) {
+	if isConfigured(p.Profile, p.ProfileExplicit) {
 		return cfg, fmt.Errorf("AWS credentials for profile %q are configured but cannot be used: %w", p.Profile, err)
 	}
 
@@ -107,8 +123,10 @@ func Resolve(ctx context.Context, p Params) (awssdk.Config, error) {
 	}
 
 	// Reloaded rather than patched: the stored profile may carry a region, and the
-	// SDK is what knows how to read it.
+	// SDK is what knows how to read it. The profile just written is by definition a
+	// choice, so it is pinned even if the run started with none.
 	p.Profile = profile
+	p.ProfileExplicit = true
 	cfg, err = loadAndVerify(ctx, p, log)
 	if err != nil {
 		return cfg, fmt.Errorf("the credentials just stored for profile %q do not work: %w", profile, err)
@@ -132,8 +150,13 @@ func loadAndVerify(ctx context.Context, p Params, log *logger.Logger) (awssdk.Co
 
 // isConfigured reports whether anything defines credentials for this profile: the
 // environment, or a section in the shared config or credentials file.
-func isConfigured(profile string) bool {
-	if os.Getenv("AWS_ACCESS_KEY_ID") != "" || os.Getenv("AWS_SECRET_ACCESS_KEY") != "" {
+//
+// When the profile was explicitly asked for, only a section counts. Keys in the
+// environment say nothing about it — resolution was pinned to that profile and never
+// looked at them — so counting them would answer a request for a profile that does
+// not exist with "configured but cannot be used" instead of naming it.
+func isConfigured(profile string, explicit bool) bool {
+	if !explicit && (os.Getenv("AWS_ACCESS_KEY_ID") != "" || os.Getenv("AWS_SECRET_ACCESS_KEY") != "") {
 		return true
 	}
 	if profile == "" {
@@ -149,12 +172,15 @@ func isConfigured(profile string) bool {
 
 func load(ctx context.Context, p Params) (awssdk.Config, error) {
 	opts := []func(*config.LoadOptions) error{
-		config.WithSharedConfigProfile(p.Profile),
 		// MFA token codes are read from the terminal, the same way the AWS CLI does
 		// it.
 		config.WithAssumeRoleCredentialOptions(func(o *stscreds.AssumeRoleOptions) {
 			o.TokenProvider = stscreds.StdinTokenProvider
 		}),
+	}
+	// Only when a profile was chosen; see Params.ProfileExplicit for why.
+	if p.ProfileExplicit && p.Profile != "" {
+		opts = append(opts, config.WithSharedConfigProfile(p.Profile))
 	}
 	if p.Region != "" {
 		opts = append(opts, config.WithRegion(p.Region))

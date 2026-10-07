@@ -5,6 +5,7 @@ import (
 	"testing"
 
 	"github.com/spf13/cobra"
+	"github.com/theazz/awless-ro/config"
 )
 
 // A command whose work fails must not have the flag list printed over the error.
@@ -76,6 +77,96 @@ func TestIncludeHookIfReadsTheFlagAtRunTime(t *testing.T) {
 	}
 	if ran != 1 {
 		t.Errorf("the hook ran %d times after its flag was turned on, want 1", ran)
+	}
+}
+
+// chooseAWSProfile is the one place that decides which profile a run uses, and
+// whether that was a choice. The second answer is what keeps the AWS SDK from being
+// pinned to the implicit "default": pinned, it stops looking at AWS_ACCESS_KEY_ID and
+// AWS_SECRET_ACCESS_KEY altogether.
+func TestChooseAWSProfile(t *testing.T) {
+	cases := []struct {
+		name         string
+		flag, stored string
+		env          map[string]string
+		wantProfile  string
+		wantExplicit bool
+		wantThrough  string
+	}{
+		{
+			name:        "nothing names a profile",
+			wantProfile: config.DefaultAWSProfile,
+		},
+		{
+			name:         "the flag wins",
+			flag:         "beta",
+			stored:       "prod",
+			env:          map[string]string{"AWS_PROFILE": "gamma", "AWS_DEFAULT_PROFILE": "delta"},
+			wantProfile:  "beta",
+			wantExplicit: true,
+			wantThrough:  "command flag",
+		},
+		{
+			name:         "-p default is still a choice",
+			flag:         "default",
+			wantProfile:  "default",
+			wantExplicit: true,
+			wantThrough:  "command flag",
+		},
+		{
+			name:         "AWS_DEFAULT_PROFILE comes before AWS_PROFILE",
+			env:          map[string]string{"AWS_PROFILE": "gamma", "AWS_DEFAULT_PROFILE": "delta"},
+			wantProfile:  "delta",
+			wantExplicit: true,
+			wantThrough:  "AWS_DEFAULT_PROFILE variable",
+		},
+		{
+			name:         "AWS_PROFILE beats the stored value",
+			stored:       "prod",
+			env:          map[string]string{"AWS_PROFILE": "gamma"},
+			wantProfile:  "gamma",
+			wantExplicit: true,
+			wantThrough:  "AWS_PROFILE variable",
+		},
+		{
+			// Nothing overrode it, so there is nothing to report as a precedence,
+			// but it is still a profile somebody configured.
+			name:         "a stored profile is a choice with nothing to report",
+			stored:       "prod",
+			wantProfile:  "prod",
+			wantExplicit: true,
+			wantThrough:  "",
+		},
+		{
+			// GetAWSProfile answers "default" when nothing is stored, so this is
+			// indistinguishable from nothing being configured at all — and has to
+			// behave that way, or credentials in the environment never get a look.
+			name:        "a stored default is not a choice",
+			stored:      config.DefaultAWSProfile,
+			wantProfile: config.DefaultAWSProfile,
+		},
+	}
+
+	for _, tc := range cases {
+		t.Run(tc.name, func(t *testing.T) {
+			t.Setenv("AWS_PROFILE", "")
+			t.Setenv("AWS_DEFAULT_PROFILE", "")
+			for k, v := range tc.env {
+				t.Setenv(k, v)
+			}
+
+			profile, explicit, through := chooseAWSProfile(tc.flag, tc.stored)
+
+			if profile != tc.wantProfile {
+				t.Errorf("profile = %q, want %q", profile, tc.wantProfile)
+			}
+			if explicit != tc.wantExplicit {
+				t.Errorf("explicit = %t, want %t", explicit, tc.wantExplicit)
+			}
+			if through != tc.wantThrough {
+				t.Errorf("through = %q, want %q", through, tc.wantThrough)
+			}
+		})
 	}
 }
 
