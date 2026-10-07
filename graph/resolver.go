@@ -46,17 +46,23 @@ func (r *ByTypeAndProperty) Resolve(snap triplestore.RDFGraph) ([]*Resource, err
 		return resources, fmt.Errorf("resolve by property: unmarshaling property '%s': %s", r.Key, err)
 	}
 	for _, t := range snap.WithPredObj(rdfpropLabel, obj) {
-		rt, err := resolveResourceType(snap, t.Subject())
+		// A subject may carry several types — see resolveResourceTypes — so keep
+		// it when the asked-for type is among them rather than comparing against
+		// a single resolved type.
+		types, err := resolveResourceTypes(snap, t.Subject())
 		if err != nil {
 			return resources, err
 		}
-		if rt == r.Type {
-			r := InitResource(rt, t.Subject())
+		for _, rt := range types {
+			if rt != r.Type {
+				continue
+			}
+			res := InitResource(rt, t.Subject())
 
-			if err := r.unmarshalFullRdf(snap); err != nil {
+			if err := res.unmarshalFullRdf(snap); err != nil {
 				return resources, err
 			}
-			resources = append(resources, r)
+			resources = append(resources, res)
 		}
 	}
 	return resources, nil
@@ -85,16 +91,21 @@ func (r *ByProperty) Resolve(snap triplestore.RDFGraph) ([]*Resource, error) {
 		return resources, fmt.Errorf("resolve by property: unmarshaling property '%s': %s", r.Key, err)
 	}
 	for _, t := range snap.WithPredObj(rdfpropLabel, obj) {
-		rt, err := resolveResourceType(snap, t.Subject())
+		// One resource per type the subject carries — see resolveResourceTypes.
+		// Each carries the union of the subject's properties, which the per-type
+		// column definitions then project back down.
+		types, err := resolveResourceTypes(snap, t.Subject())
 		if err != nil {
 			return resources, err
 		}
-		r := InitResource(rt, t.Subject())
+		for _, rt := range types {
+			res := InitResource(rt, t.Subject())
 
-		if err := r.unmarshalFullRdf(snap); err != nil {
-			return resources, err
+			if err := res.unmarshalFullRdf(snap); err != nil {
+				return resources, err
+			}
+			resources = append(resources, res)
 		}
-		resources = append(resources, r)
 	}
 	return resources, nil
 }

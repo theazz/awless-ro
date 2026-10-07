@@ -26,6 +26,11 @@ func refGraph(t *testing.T) cloud.GraphAPI {
 		// Two resources sharing a name, which is allowed in AWS.
 		resource("volume", "vol-1", p.Name, "shared"),
 		resource("volume", "vol-2", p.Name, "shared"),
+		// Two resources sharing an *id*: both use a bare AWS name as their id,
+		// and a name is only unique per type, so they are one graph subject
+		// carrying two rdf:type triples.
+		resource("keypair", "prod", p.Name, "prod"),
+		resource("classicloadbalancer", "prod", p.Name, "prod"),
 	)
 	if err != nil {
 		t.Fatal(err)
@@ -106,6 +111,15 @@ func TestResolveResourceFromRef(t *testing.T) {
 			ref:      "@shared",
 			wantIDs:  []string{"vol-1", "vol-2"},
 			wantProp: p.Name,
+		},
+		{
+			// A shared id is one subject with two types, and it resolves to one
+			// resource per type. An id is tried before a name, so a bare 'prod'
+			// comes back through p.ID.
+			name:     "a shared id returns one resource per type",
+			ref:      "prod",
+			wantIDs:  []string{"prod", "prod"},
+			wantProp: p.ID,
 		},
 		{
 			name:     "nothing matches",
