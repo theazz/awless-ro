@@ -18,7 +18,11 @@ package console
 
 import (
 	"bytes"
+	"encoding/json"
+	"fmt"
 	"net"
+	"reflect"
+	"strings"
 	"testing"
 
 	p "github.com/theazz/awless-ro/cloud/properties"
@@ -165,6 +169,135 @@ func TestNetmaskFilterUnchanged(t *testing.T) {
 				t.Errorf("got\n%q\nwant\n%q", got, tc.want)
 			}
 		})
+	}
+}
+
+// assertCIDRString fails unless v is a string net.ParseCIDR accepts.
+func assertCIDRString(t *testing.T, where string, v any) {
+	t.Helper()
+	s, ok := v.(string)
+	if !ok {
+		t.Errorf("%s: %#v (%T) is not a string", where, v, v)
+		return
+	}
+	if _, _, err := net.ParseCIDR(s); err != nil {
+		t.Errorf("%s: %q is not a CIDR: %s", where, s, err)
+	}
+}
+
+// walkCIDRs checks every CIDR-bearing value in one decoded resource.
+func walkCIDRs(t *testing.T, res map[string]any) {
+	t.Helper()
+	id := res["ID"]
+	for _, key := range []string{p.InboundRules, p.OutboundRules} {
+		rules, _ := res[key].([]any)
+		for i, r := range rules {
+			ranges, _ := r.(map[string]any)["IPRanges"].([]any)
+			for j, v := range ranges {
+				assertCIDRString(t, fmt.Sprintf("%v %s[%d].IPRanges[%d]", id, key, i, j), v)
+			}
+		}
+	}
+	routes, _ := res[p.Routes].([]any)
+	for i, r := range routes {
+		for _, key := range []string{"Destination", "DestinationIPv6"} {
+			if v := r.(map[string]any)[key]; v != nil {
+				assertCIDRString(t, fmt.Sprintf("%v Routes[%d].%s", id, i, key), v)
+			}
+		}
+	}
+}
+
+func TestNetmaskJSON(t *testing.T) {
+	g := netmaskGraph(t)
+	cases := []struct {
+		rdfType, want string
+	}{
+		{"securitygroup", `[
+		 {"ID":"sg-1","Name":"web",
+		  "InboundRules":[{"PortRange":{"FromPort":9000,"ToPort":9003,"Any":false},"Protocol":"tcp","IPRanges":["10.0.0.0/16"],"Sources":null}],
+		  "OutboundRules":[{"PortRange":{"FromPort":0,"ToPort":0,"Any":true},"Protocol":"any","IPRanges":["0.0.0.0/0"],"Sources":null}]},
+		 {"ID":"sg-2","Name":"v6",
+		  "InboundRules":[{"PortRange":{"FromPort":22,"ToPort":22,"Any":false},"Protocol":"tcp","IPRanges":["2001:db8::/32"],"Sources":null}],
+		  "OutboundRules":[{"PortRange":{"FromPort":0,"ToPort":0,"Any":true},"Protocol":"tcp","IPRanges":["::/0"],"Sources":null}]},
+		 {"ID":"sg-3","Name":"app",
+		  "InboundRules":[{"PortRange":{"FromPort":8080,"ToPort":8080,"Any":false},"Protocol":"tcp","IPRanges":null,"Sources":["sg-src"]}]}
+		]`},
+		{"routetable", `[
+		 {"ID":"rtb-1","Name":"local","Routes":[{"Destination":"10.0.0.0/16","DestinationIPv6":null,"DestinationPrefixListId":"","Targets":[{"Type":1,"Ref":"local","Owner":""}]}]},
+		 {"ID":"rtb-2","Name":"public","Routes":[{"Destination":"0.0.0.0/0","DestinationIPv6":"::/0","DestinationPrefixListId":"","Targets":[{"Type":1,"Ref":"igw-1","Owner":""}]}]},
+		 {"ID":"rtb-3","Name":"v6","Routes":[{"Destination":null,"DestinationIPv6":"2001:db8::/32","DestinationPrefixListId":"","Targets":[{"Type":4,"Ref":"eni-1","Owner":""}]}]},
+		 {"ID":"rtb-4","Name":"prefix","Routes":[{"Destination":null,"DestinationIPv6":null,"DestinationPrefixListId":"pl-1","Targets":[{"Type":2,"Ref":"i-1","Owner":""}]}]}
+		]`},
+	}
+	for _, tc := range cases {
+		t.Run(tc.rdfType, func(t *testing.T) {
+			out := renderNetmask(t, g, tc.rdfType, WithFormat("json"))
+			compareJSON(t, out, tc.want)
+			if strings.Contains(out, "Mask") {
+				t.Errorf("netmask leaked:\n%s", out)
+			}
+			var decoded []map[string]any
+			if err := json.Unmarshal([]byte(out), &decoded); err != nil {
+				t.Fatal(err)
+			}
+			for _, res := range decoded {
+				walkCIDRs(t, res)
+			}
+		})
+	}
+}
+
+// TestNetmaskMultiResourceJSON covers the other JSON path: a whole service
+// listed at once (`list infra --format json`).
+func TestNetmaskMultiResourceJSON(t *testing.T) {
+	prev := DefaultsColumnDefinitions
+	DefaultsColumnDefinitions = map[string][]ColumnDefinition{
+		"securitygroup": netmaskColumns["securitygroup"],
+		"routetable":    netmaskColumns["routetable"],
+	}
+	t.Cleanup(func() { DefaultsColumnDefinitions = prev })
+
+	displayer, err := BuildOptions(WithFormat("json")).SetSource(netmaskGraph(t)).Build()
+	if err != nil {
+		t.Fatal(err)
+	}
+	var w bytes.Buffer
+	if err := displayer.Print(&w); err != nil {
+		t.Fatal(err)
+	}
+	if strings.Contains(w.String(), "Mask") {
+		t.Errorf("netmask leaked:\n%s", w.String())
+	}
+	var decoded map[string][]map[string]any
+	if err := json.Unmarshal(w.Bytes(), &decoded); err != nil {
+		t.Fatal(err)
+	}
+	byID := make(map[string]map[string]any)
+	for _, group := range []string{"securitygroups", "routetables"} {
+		if len(decoded[group]) == 0 {
+			t.Fatalf("no %s in %s", group, w.String())
+		}
+		for _, res := range decoded[group] {
+			walkCIDRs(t, res)
+			byID[res["ID"].(string)] = res
+		}
+	}
+
+	first := func(id, key string) map[string]any {
+		return byID[id][key].([]any)[0].(map[string]any)
+	}
+	if got := first("sg-1", p.InboundRules)["IPRanges"]; !reflect.DeepEqual(got, []any{"10.0.0.0/16"}) {
+		t.Errorf("sg-1 inbound IPRanges = %#v", got)
+	}
+	if got := first("sg-2", p.OutboundRules)["IPRanges"]; !reflect.DeepEqual(got, []any{"::/0"}) {
+		t.Errorf("sg-2 outbound IPRanges = %#v", got)
+	}
+	if r := first("rtb-2", p.Routes); r["Destination"] != "0.0.0.0/0" || r["DestinationIPv6"] != "::/0" {
+		t.Errorf("rtb-2 route = %#v", r)
+	}
+	if r := first("rtb-3", p.Routes); r["Destination"] != nil || r["DestinationIPv6"] != "2001:db8::/32" {
+		t.Errorf("rtb-3 route = %#v", r)
 	}
 }
 
