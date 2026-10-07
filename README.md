@@ -296,6 +296,19 @@ carries, not only the default columns. `--format` covers `table`, `csv`, `tsv`,
 `json` and `porcelain`; `--ids` prints one id per line and nothing else, for scripts.
 `-r` and `-p` override the region and profile for one command.
 
+`--tag`, `--tag-key` and `--tag-value` take several values separated by commas
+(`--tag Env=Production,Team=Payments`), so a value that itself contains a comma is
+quoted twice: double quotes for awless-ro, single quotes around them for the shell
+(bash, zsh and fish alike).
+
+```sh
+awless-ro list instances --tag '"Environment=Not, tagged"'
+awless-ro list instances --tag-value '"Not, tagged"'
+```
+
+Without them, `--tag 'Environment=Not, tagged'` is read as two tags and refused, and
+a backslash does not escape the comma.
+
 **`show`** — one resource by id, by name, or by `@name`, with its relations. Names
 are not unique in AWS, so an ambiguous one lists the candidates.
 
