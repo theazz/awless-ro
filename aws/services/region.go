@@ -95,9 +95,30 @@ func loadConfigForRegion(ctx context.Context, profile string) (awssdk.Config, er
 	// silently never matches.
 	var missing config.SharedConfigProfileNotExistError
 	if errors.As(err, &missing) {
-		return config.LoadDefaultConfig(ctx, opts...)
+		return loadConfigWithoutAnyProfile(ctx, opts)
 	}
 	return cfg, err
+}
+
+// loadConfigWithoutAnyProfile loads configuration with no profile chosen at all, so
+// the environment and the shared default get to answer.
+//
+// Dropping config.WithSharedConfigProfile is not enough: the SDK reads AWS_PROFILE and
+// AWS_DEFAULT_PROFILE itself, so a stale name there would be loaded a second time and
+// fail again — and while AWS_PROFILE is set the SDK treats a missing profile as fatal
+// rather than as "no profile". The two variables are therefore cleared for the duration
+// of this one load and put back afterwards, which is safe because first-run region
+// discovery runs before anything else in the process looks at them. This only relaxes
+// the answer to "which region"; resolving credentials still fails closed on a profile
+// that was asked for and does not exist.
+func loadConfigWithoutAnyProfile(ctx context.Context, opts []func(*config.LoadOptions) error) (awssdk.Config, error) {
+	for _, key := range []string{"AWS_PROFILE", "AWS_DEFAULT_PROFILE"} {
+		if value, set := os.LookupEnv(key); set {
+			defer os.Setenv(key, value)
+			os.Unsetenv(key)
+		}
+	}
+	return config.LoadDefaultConfig(ctx, opts...)
 }
 
 // Resolving credentials lives in aws/credentials. It used to be a builder here, but

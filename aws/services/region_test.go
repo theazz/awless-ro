@@ -94,3 +94,25 @@ func TestResolveRegionFromEnvToleratesAProfileThatDoesNotExist(t *testing.T) {
 		t.Errorf("the interactive selector was reached %d times", *calls)
 	}
 }
+
+// Same tolerance when the stale name came from AWS_PROFILE rather than a flag. This
+// needs its own case because the SDK reads AWS_PROFILE itself: simply retrying without
+// the profile option loaded 'ghost' a second time — and, with AWS_PROFILE set, the SDK
+// treats a missing profile as fatal — so the environment region was never reached and
+// a first run dropped into the interactive selector.
+func TestResolveRegionFromEnvToleratesAStaleProfileInTheEnvironment(t *testing.T) {
+	isolateRegionLookup(t, "[profile beta]\nregion = us-east-2\n")
+	t.Setenv("AWS_PROFILE", "ghost")
+	t.Setenv("AWS_REGION", "eu-central-1")
+	calls := stubRegionSelector(t, "eu-west-3")
+
+	if got := ResolveRegionFromEnv("ghost"); got != "eu-central-1" {
+		t.Errorf("region = %q, want the one in the environment", got)
+	}
+	if *calls != 0 {
+		t.Errorf("the interactive selector was reached %d times", *calls)
+	}
+	if got := os.Getenv("AWS_PROFILE"); got != "ghost" {
+		t.Errorf("AWS_PROFILE = %q after the call, want it left as it was", got)
+	}
+}
