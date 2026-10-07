@@ -18,7 +18,10 @@ package console
 
 import (
 	"bytes"
+	"math"
+	"reflect"
 	"testing"
+	"time"
 
 	p "github.com/theazz/awless-ro/cloud/properties"
 	"github.com/theazz/awless-ro/graph"
@@ -194,4 +197,170 @@ func TestValueLowerOrEqualUnsortableTypeDoesNotPanic(t *testing.T) {
 	// Mismatched types on the same column must not panic either.
 	valueLowerOrEqual(a, "a string")
 	valueLowerOrEqual(1, "a string")
+}
+
+// sortLess is the "less" defaultSorter.sort hands to sort.Slice for a single
+// column: DeepEqual pairs are skipped, every other pair goes to
+// valueLowerOrEqual.
+func sortLess(a, b interface{}) bool {
+	return !reflect.DeepEqual(a, b) && valueLowerOrEqual(a, b)
+}
+
+// Distinct types that share a type key: local types of the same package and
+// name. The int and string ones print the same value ("1") but differ in
+// Go-syntax form; the second int one is identical to the first on every key.
+func sameKeyValues() (localInt, localString, localIntTwin interface{}) {
+	{
+		type collide int
+		localInt = collide(1)
+	}
+	{
+		type collide string
+		localString = collide("1")
+	}
+	{
+		type collide int
+		localIntTwin = collide(1)
+	}
+	return
+}
+
+// Values that print identically but are not equal. A fallback ordering on the
+// printed form alone with '<=' reported "lower or equal" in both directions for
+// each pair, which left ascending and --reverse order undefined. Each pair must
+// now have one and only one order, the same whichever way round the rows arrive.
+func TestSortFallbackOnPrintedKeyCollision(t *testing.T) {
+	localInt, localString, _ := sameKeyValues()
+	if typeOrderKey(localInt) != typeOrderKey(localString) {
+		t.Fatalf("fixture no longer exercises a type key tie: %q vs %q", typeOrderKey(localInt), typeOrderKey(localString))
+	}
+
+	cases := []struct {
+		name string
+		a, b interface{}
+	}{
+		{"int and string printing as 1", 1, "1"},
+		{"distinct types sharing a type key", localInt, localString},
+		{"nil and empty []string", []string(nil), []string{}},
+		{"[]string{\"a b\"} and []string{\"a\", \"b\"}", []string{"a b"}, []string{"a", "b"}},
+	}
+	for _, c := range cases {
+		t.Run(c.name, func(t *testing.T) {
+			testCollidingPairSorts(t, c.a, c.b)
+		})
+	}
+}
+
+func testCollidingPairSorts(t *testing.T, a, b interface{}) {
+	t.Helper()
+	rowA := []interface{}{"row-a", a}
+	rowB := []interface{}{"row-b", b}
+
+	// At comparator level: exactly one direction may be lower.
+	lower, higher := sortLess(a, b), sortLess(b, a)
+	if lower && higher {
+		t.Fatalf("comparator is not antisymmetric: %#v and %#v are both lower than each other", a, b)
+	}
+	if !lower && !higher {
+		t.Fatalf("comparator is not total: %#v and %#v are neither lower than the other", a, b)
+	}
+
+	sortIDs := func(descending bool, rows ...[]interface{}) []string {
+		lines := make(table, 0, len(rows))
+		for _, r := range rows {
+			lines = append(lines, append([]interface{}{}, r...))
+		}
+		(&defaultSorter{sortBy: []int{1}, descending: descending}).sort(lines)
+		ids := make([]string, 0, len(lines))
+		for _, l := range lines {
+			ids = append(ids, l[0].(string))
+		}
+		return ids
+	}
+
+	ascending := sortIDs(false, rowA, rowB)
+	reversed := sortIDs(true, rowA, rowB)
+
+	if reflect.DeepEqual(ascending, reversed) {
+		t.Fatalf("--reverse did not flip the colliding pair: ascending %v, reverse %v", ascending, reversed)
+	}
+	if len(ascending) != 2 || len(reversed) != 2 ||
+		ascending[0] != reversed[1] || ascending[1] != reversed[0] {
+		t.Fatalf("ascending and reverse are not mirror images: ascending %v, reverse %v", ascending, reversed)
+	}
+
+	// Neither direction may depend on the order the rows arrive in, nor on the
+	// run: repeat both with the input swapped.
+	for i := 0; i < 20; i++ {
+		if got := sortIDs(false, rowA, rowB); !reflect.DeepEqual(got, ascending) {
+			t.Fatalf("ascending order is not stable: got %v, want %v", got, ascending)
+		}
+		if got := sortIDs(false, rowB, rowA); !reflect.DeepEqual(got, ascending) {
+			t.Fatalf("ascending order depends on input order: got %v, want %v", got, ascending)
+		}
+		if got := sortIDs(true, rowA, rowB); !reflect.DeepEqual(got, reversed) {
+			t.Fatalf("reverse order is not stable: got %v, want %v", got, reversed)
+		}
+		if got := sortIDs(true, rowB, rowA); !reflect.DeepEqual(got, reversed) {
+			t.Fatalf("reverse order depends on input order: got %v, want %v", got, reversed)
+		}
+	}
+}
+
+// The sort "less" must be a strict weak ordering over every kind of value a
+// column can hold, mixed together, or sort.Slice's result is undefined:
+// irreflexive, asymmetric, transitive, and with "neither lower" transitive too.
+// Checked for both directions, since --reverse swaps the operands.
+func TestSortLessIsStrictWeakOrdering(t *testing.T) {
+	type unsortable struct{ n int }
+	localInt, localString, localIntTwin := sameKeyValues()
+	t1 := time.Date(2020, 1, 1, 0, 0, 0, 0, time.UTC)
+	t2 := t1.Add(time.Hour)
+
+	values := []interface{}{
+		nil,
+		-3, 1, 2, 10,
+		1.5, 2.0, math.NaN(), math.NaN(), math.Inf(-1),
+		"", "1", "10", "2", "a",
+		false, true,
+		t1, t2,
+		[]string(nil), []string{}, []string{"a b"}, []string{"a", "b"},
+		[]int(nil), []int{1}, []int{1, 2}, []int{12},
+		unsortable{1}, unsortable{2},
+		localInt, localString, localIntTwin,
+	}
+
+	directions := map[string]func(a, b interface{}) bool{
+		"ascending":  sortLess,
+		"descending": func(a, b interface{}) bool { return sortLess(b, a) },
+	}
+	for name, less := range directions {
+		t.Run(name, func(t *testing.T) {
+			equiv := func(a, b interface{}) bool { return !less(a, b) && !less(b, a) }
+			for _, a := range values {
+				if less(a, a) {
+					t.Errorf("not irreflexive: %#v < itself", a)
+				}
+				for _, b := range values {
+					if less(a, b) && less(b, a) {
+						t.Errorf("not asymmetric: %#v and %#v are both lower than each other", a, b)
+					}
+					for _, c := range values {
+						if less(a, b) && less(b, c) && !less(a, c) {
+							t.Errorf("not transitive: %#v < %#v < %#v but not %#v < %#v", a, b, c, a, c)
+						}
+						if equiv(a, b) && equiv(b, c) && !equiv(a, c) {
+							t.Errorf("incomparability not transitive: %#v ~ %#v ~ %#v but not %#v ~ %#v", a, b, c, a, c)
+						}
+					}
+				}
+			}
+		})
+	}
+
+	// Values identical on type key, printed form and Go-syntax form are
+	// equivalent: neither may be lower.
+	if sortLess(localInt, localIntTwin) || sortLess(localIntTwin, localInt) {
+		t.Fatalf("indistinguishable values %#v and %#v must compare as equivalent", localInt, localIntTwin)
+	}
 }
