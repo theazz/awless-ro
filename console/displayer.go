@@ -74,13 +74,15 @@ func (b *Builder) SetSource(i interface{}) *Builder {
 func (b *Builder) buildQuery() (cloud.Query, error) {
 	var matchers []cloud.Matcher
 	for _, f := range b.filters {
-		splits := strings.SplitN(f, "=", 2)
-		if len(splits) == 2 {
-			name, val := strings.TrimSpace(strings.Title(splits[0])), strings.TrimSpace(splits[1])
+		// match.ParseFilter tells `key=value` (substring) from `key==value`
+		// (whole value) apart. Splitting on the first "=" here instead would
+		// read `state==Active` as the value "=Active".
+		if parsed, ok := match.ParseFilter(f); ok {
+			name, val := strings.TrimSpace(strings.Title(parsed.Key)), strings.TrimSpace(parsed.Value)
 			key := ColumnDefinitions(b.columnDefinitions).resolveKey(name)
 
 			if key != "" {
-				matchers = append(matchers, match.Property(key, val).IgnoreCase().MatchString().Contains())
+				matchers = append(matchers, match.PropertyFilter(key, val, parsed.Exact))
 			} else {
 				var allowed []string
 				for _, h := range b.columnDefinitions {
