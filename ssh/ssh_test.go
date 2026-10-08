@@ -19,10 +19,9 @@ func TestInitClient(t *testing.T) {
 		t.Fatal(err)
 	}
 	defer os.RemoveAll(f)
-	err = os.Setenv("HOME", f)
-	if err != nil {
-		t.Fatal(err)
-	}
+	t.Setenv("HOME", f)
+	// No agent: every case below has to be answered by the key lookup alone.
+	t.Setenv("SSH_AUTH_SOCK", "")
 	sshPath := filepath.Join(f, ".ssh")
 	err = os.MkdirAll(sshPath, 0755)
 	if err != nil {
@@ -54,12 +53,21 @@ hTSx5geAH2W73IyiTK8zIdgPMJPh69//5OhFzhQ8Ug==
 	}
 	keypath2 := filepath.Join(awlessKeysPath, "mysecondkey.pem")
 	os.WriteFile(keypath2, []byte(rawkey), 0644)
+	// A key saved without an extension, as `ssh-keygen` names them.
+	plainkey := filepath.Join(awlessKeysPath, "plainkey")
+	os.WriteFile(plainkey, []byte(rawkey), 0600)
+	missingFolder := filepath.Join(f, "does-not-exist")
 
 	tcases := []struct {
 		keyname    string
 		keyfolders []string
 		expkeypath string
 	}{
+		{"plainkey", []string{sshPath, awlessKeysPath}, plainkey},
+		// A first folder that does not exist does not stop the lookup (#153: the
+		// awless keys dir is often absent, ~/.ssh is where the key really is).
+		{"mysecondkey", []string{missingFolder, awlessKeysPath}, keypath2},
+		{"mykey.pem", []string{missingFolder, sshPath}, keypath1},
 		{"mykey", []string{sshPath, awlessKeysPath}, keypath1},
 		{"mykey.pem", []string{sshPath, awlessKeysPath}, keypath1},
 		{filepath.Join(sshPath, "mykey.pem"), []string{sshPath, awlessKeysPath}, keypath1},
@@ -92,10 +100,8 @@ func TestCheckHostKey(t *testing.T) {
 		t.Fatal(err)
 	}
 	defer os.RemoveAll(f)
-	err = os.Setenv("HOME", f)
-	if err != nil {
-		t.Fatal(err)
-	}
+	t.Setenv("HOME", f)
+	t.Setenv("__AWLESS_HOME", filepath.Join(f, ".awless-ro"))
 	err = os.MkdirAll(filepath.Join(f, ".ssh"), 0755)
 	if err != nil {
 		t.Fatal(err)
@@ -120,10 +126,12 @@ func TestCheckHostKey(t *testing.T) {
 	}
 	knownKeys := make(map[string]gossh.PublicKey)
 	numberKeysAdded := 0
-	trustKeyFunc = func(hostname string, remote net.Addr, key gossh.PublicKey, _ string) bool {
+	previousTrust := trustKeyFunc
+	t.Cleanup(func() { trustKeyFunc = previousTrust })
+	trustKeyFunc = func(hostname string, remote net.Addr, key gossh.PublicKey, _ string) (bool, error) {
 		knownKeys[hostname] = key
 		numberKeysAdded++
-		return true
+		return true, nil
 	}
 	tcases := []struct {
 		ip     string

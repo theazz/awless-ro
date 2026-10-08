@@ -11,6 +11,7 @@ import (
 	"regexp"
 	"strconv"
 	"strings"
+	"sync"
 	"syscall"
 	"text/template"
 	"time"
@@ -33,6 +34,17 @@ type Client struct {
 	logger                  *logger.Logger
 }
 
+// ErrKeyNotFound says the key that was asked for is in none of the key folders.
+var ErrKeyNotFound = errors.New("cannot find SSH key")
+
+// ResolveKeyPath finds the file a key name refers to, with the same lookup as
+// InitClient, but without parsing it: no passphrase is asked for and no agent is
+// needed. It is what printing a command line or a config stanza uses.
+func ResolveKeyPath(keyname string, keyFolders ...string) (string, bool) {
+	priv, ok := findPrivateKeyFromName(keyname, keyFolders...)
+	return priv.path, ok
+}
+
 func InitClient(keyname string, keyFolders ...string) (*Client, error) {
 	var auths []gossh.AuthMethod
 
@@ -48,6 +60,9 @@ func InitClient(keyname string, keyFolders ...string) (*Client, error) {
 	}
 
 	if len(auths) == 0 {
+		if keyname != "" && !ok {
+			return nil, fmt.Errorf("%w %q in %s, and no SSH agent is available (SSH_AUTH_SOCK)", ErrKeyNotFound, keyname, strings.Join(keyFolders, ", "))
+		}
 		return nil, fmt.Errorf("No key provided and no SSH_AUTH_SOCK env variable set, unable to resolve auth")
 	}
 
@@ -72,48 +87,142 @@ func (c *Client) SetStrictHostKeyChecking(hostKeyChecking bool) {
 	c.StrictHostKeyChecking = hostKeyChecking
 }
 
+// hostKeyVerdict remembers why a host-key callback refused, so that a handshake
+// failure can be told apart from an authentication failure. The callback runs on
+// the handshake goroutine, hence the lock.
+type hostKeyVerdict struct {
+	mu  sync.Mutex
+	err error
+}
+
+func (v *hostKeyVerdict) wrap(cb gossh.HostKeyCallback) gossh.HostKeyCallback {
+	return func(hostname string, remote net.Addr, key gossh.PublicKey) error {
+		err := cb(hostname, remote, key)
+		if err != nil {
+			v.mu.Lock()
+			v.err = err
+			v.mu.Unlock()
+		}
+		return err
+	}
+}
+
+func (v *hostKeyVerdict) refusal() error {
+	v.mu.Lock()
+	defer v.mu.Unlock()
+	return v.err
+}
+
+// hostKeyError is a connection that reached the host and was refused because of its
+// host key: unknown and not confirmed, declined, or changed.
+type hostKeyError struct {
+	hostport string
+	err      error
+}
+
+func (e *hostKeyError) Error() string { return e.hostport + ": " + e.err.Error() }
+func (e *hostKeyError) Unwrap() error { return e.err }
+
+// IsHostKeyError reports whether err is a refusal of the remote host key, as opposed
+// to a network or authentication failure. The host was reached, so there is no point
+// diagnosing its reachability.
+func IsHostKeyError(err error) bool {
+	var h *hostKeyError
+	return errors.As(err, &h)
+}
+
+// configFor is the client config for one login attempt: c's config with the user
+// set and the host-key callback wrapped so its verdict can be read back.
+func (c *Client) configFor(user string, auths []gossh.AuthMethod, verdict *hostKeyVerdict) *gossh.ClientConfig {
+	cfg := *c.Config
+	cfg.User = user
+	if auths != nil {
+		cfg.Auth = auths
+	}
+	callback := cfg.HostKeyCallback
+	if !c.StrictHostKeyChecking {
+		callback = gossh.InsecureIgnoreHostKey()
+	}
+	cfg.HostKeyCallback = verdict.wrap(callback)
+	return &cfg
+}
+
+// DialWithUsers connects to c.IP:c.Port, trying each user in turn until one
+// authenticates.
+//
+// Only an authentication failure moves on to the next user. A refused host key is
+// about the host, not the user, so it is returned at once: upstream treated it as a
+// wrong user, which re-ran the host-key check, and re-prompted, for every candidate.
+// A TCP-level failure is returned at once too, since another user cannot fix it.
 func (c *Client) DialWithUsers(usernames ...string) error {
 	var err error
-	var client *gossh.Client
 
-	hostport := fmt.Sprintf("%s:%d", c.IP, c.Port)
+	hostport := net.JoinHostPort(c.IP, strconv.Itoa(c.Port))
 
 	for _, user := range usernames {
-		newConfig := *c.Config
-		newConfig.User = user
-		if !c.StrictHostKeyChecking {
-			newConfig.HostKeyCallback = gossh.InsecureIgnoreHostKey()
+		verdict := &hostKeyVerdict{}
+		cfg := c.configFor(user, nil, verdict)
+
+		conn, dialErr := net.DialTimeout("tcp", hostport, cfg.Timeout)
+		if dialErr != nil {
+			return fmt.Errorf("cannot connect to %s: %w", hostport, dialErr)
 		}
-		client, err = gossh.Dial("tcp", hostport, &newConfig)
-		if err != nil {
+		sshConn, chans, reqs, handshakeErr := gossh.NewClientConn(conn, hostport, cfg)
+		if handshakeErr != nil {
+			conn.Close()
+			if refusal := verdict.refusal(); refusal != nil {
+				return &hostKeyError{hostport: hostport, err: refusal}
+			}
+			c.logger.ExtraVerbosef("cannot authenticate to %s with user %s (err: %s)", hostport, user, handshakeErr)
+			err = handshakeErr
 			continue
-		} else {
-			c.logger.ExtraVerbosef("dialed %s successfully with user %s", hostport, user)
-			c.User = user
-			c.Client = client
-			return nil
+		}
+
+		c.logger.ExtraVerbosef("dialed %s successfully with user %s", hostport, user)
+		c.User = user
+		c.Client = gossh.NewClient(sshConn, chans, reqs)
+		return nil
+	}
+
+	return fmt.Errorf("unable to authenticate to %s for users %q. Last error: %v", hostport, usernames, err)
+}
+
+// NewClientWithProxy opens a session to destinationHost through c, which must be
+// connected already.
+//
+// destKeypath is the destination's own key: it is tried before c's auth methods,
+// because a private instance usually has a key pair of its own. It may be empty.
+// As in DialWithUsers, a refused host key stops the user loop.
+func (c *Client) NewClientWithProxy(destinationHost string, destinationPort int, destKeypath string, usernames ...string) (*Client, error) {
+	hostport := net.JoinHostPort(destinationHost, strconv.Itoa(destinationPort))
+
+	var auths []gossh.AuthMethod
+	if destKeypath != "" {
+		if body, err := os.ReadFile(destKeypath); err == nil {
+			if a, err := privateKeyAuth(privateKey{path: destKeypath, body: body}); err == nil {
+				auths = append([]gossh.AuthMethod{a}, c.Config.Auth...)
+			}
 		}
 	}
 
-	return fmt.Errorf("unable to authenticate to %s for users %q. Last error: %s", hostport, usernames, err)
-}
+	keypath := c.Keypath
+	if destKeypath != "" {
+		keypath = destKeypath
+	}
 
-func (c *Client) NewClientWithProxy(destinationHost string, destinationPort int, usernames ...string) (*Client, error) {
-	hostport := fmt.Sprintf("%s:%d", destinationHost, destinationPort)
 	for _, user := range usernames {
 		netConn, err := c.Dial("tcp", hostport)
 		if err != nil {
 			return nil, fmt.Errorf("cannot dial from %s:%d to %s:%d - %s", c.IP, c.Port, destinationHost, destinationPort, err)
 		}
 		c.logger.ExtraVerbosef("successful tcp connection from %s:%d to %s:%d", c.IP, c.Port, destinationHost, destinationPort)
-		newConfig := *c.Config
-		newConfig.User = user
-		if !c.StrictHostKeyChecking {
-			newConfig.HostKeyCallback = gossh.InsecureIgnoreHostKey()
-		}
-		conn, chans, reqs, err := gossh.NewClientConn(netConn, hostport, &newConfig)
+		verdict := &hostKeyVerdict{}
+		conn, chans, reqs, err := gossh.NewClientConn(netConn, hostport, c.configFor(user, auths, verdict))
 		if err != nil {
 			netConn.Close()
+			if refusal := verdict.refusal(); refusal != nil {
+				return nil, &hostKeyError{hostport: hostport, err: refusal}
+			}
 			c.logger.ExtraVerbosef("cannot proxy with user %s (err: %s)", user, err)
 			continue
 		}
@@ -124,11 +233,11 @@ func (c *Client) NewClientWithProxy(destinationHost string, destinationPort int,
 			Proxy:                   c,
 			IP:                      destinationHost,
 			User:                    user,
-			Keypath:                 c.Keypath,
+			Keypath:                 keypath,
 			Port:                    destinationPort,
-			InteractiveTerminalFunc: func(*gossh.Client) error { return nil },
+			InteractiveTerminalFunc: c.InteractiveTerminalFunc,
 			StrictHostKeyChecking:   c.StrictHostKeyChecking,
-			logger:                  logger.DiscardLogger,
+			logger:                  c.logger,
 		}, nil
 	}
 
@@ -311,7 +420,7 @@ func findPrivateKeyFromName(keyname string, keyFolders ...string) (privateKey, b
 	keyPaths := []string{
 		keyname,
 	}
-	if !strings.HasPrefix(keyname, ".pem") {
+	if !strings.HasSuffix(keyname, ".pem") {
 		keyPaths = append(keyPaths, fmt.Sprintf("%s.pem", keyname))
 	}
 	for _, folder := range keyFolders {
@@ -322,7 +431,7 @@ func findPrivateKeyFromName(keyname string, keyFolders ...string) (privateKey, b
 			continue
 		}
 		keyPaths = append(keyPaths, filepath.Join(folder, keyname))
-		if !strings.HasPrefix(keyname, ".pem") {
+		if !strings.HasSuffix(keyname, ".pem") {
 			keyPaths = append(keyPaths, filepath.Join(folder, fmt.Sprintf("%s.pem", keyname)))
 		}
 	}
@@ -417,7 +526,11 @@ func checkHostKey(hostname string, remote net.Addr, key gossh.PublicKey) error {
 		return knownhostsErr
 	}
 	if len(keyError.Want) == 0 {
-		if trustKeyFunc(hostname, remote, key, fileToAddKnownKey) {
+		trusted, err := trustKeyFunc(hostname, remote, key, fileToAddKnownKey)
+		if err != nil {
+			return err
+		}
+		if trusted {
 			f, err := os.OpenFile(fileToAddKnownKey, os.O_WRONLY|os.O_APPEND|os.O_CREATE, 0644)
 			if err != nil {
 				return err
@@ -451,14 +564,8 @@ You persisted:%s
 To get rid of this message, update %s`, hostname, key.Type(), gossh.FingerprintSHA256(key), knownKeyInfos, strings.Join(knownKeyFiles, ","))
 }
 
-var trustKeyFunc func(hostname string, remote net.Addr, key gossh.PublicKey, keyFileName string) bool = func(hostname string, remote net.Addr, key gossh.PublicKey, keyFileName string) bool {
-	fmt.Printf("awless-ro could not validate the authenticity of '%s' (unknown host)\n", hostname)
-	fmt.Printf("%s public key fingerprint is %s.\n", key.Type(), gossh.FingerprintSHA256(key))
-	fmt.Printf("Do you want to continue connecting and persist this key to '%s' (yes/no)? ", keyFileName)
-	var yesorno string
-	_, err := fmt.Scanln(&yesorno)
-	if err != nil {
-		return false
-	}
-	return strings.ToLower(yesorno) == "yes"
+// trustKeyFunc decides whether an unknown host key is accepted and persisted. A
+// variable so the tests can answer without a terminal.
+var trustKeyFunc = func(hostname string, remote net.Addr, key gossh.PublicKey, keyFileName string) (bool, error) {
+	return confirmHostKey(hostKeyTerminal, hostname, key, keyFileName)
 }

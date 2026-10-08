@@ -1,0 +1,493 @@
+package ssh
+
+import (
+	"bytes"
+	"crypto/ed25519"
+	"crypto/rand"
+	"encoding/pem"
+	"errors"
+	"fmt"
+	"io"
+	"net"
+	"os"
+	"path/filepath"
+	"strconv"
+	"strings"
+	"sync"
+	"sync/atomic"
+	"testing"
+	"time"
+
+	gossh "golang.org/x/crypto/ssh"
+	"golang.org/x/crypto/ssh/knownhosts"
+)
+
+// These tests run the client against a real SSH server, in process, on 127.0.0.1.
+// No network beyond the loopback and no system ssh are involved.
+
+func newSigner(t *testing.T) gossh.Signer {
+	t.Helper()
+	_, priv, err := ed25519.GenerateKey(rand.Reader)
+	if err != nil {
+		t.Fatal(err)
+	}
+	signer, err := gossh.NewSignerFromKey(priv)
+	if err != nil {
+		t.Fatal(err)
+	}
+	return signer
+}
+
+// writeClientKey writes a fresh private key to dir/name and returns its signer.
+func writeClientKey(t *testing.T, dir, name string) gossh.Signer {
+	t.Helper()
+	_, priv, err := ed25519.GenerateKey(rand.Reader)
+	if err != nil {
+		t.Fatal(err)
+	}
+	block, err := gossh.MarshalPrivateKey(priv, "")
+	if err != nil {
+		t.Fatal(err)
+	}
+	if err := os.WriteFile(filepath.Join(dir, name), pem.EncodeToMemory(block), 0o600); err != nil {
+		t.Fatal(err)
+	}
+	signer, err := gossh.NewSignerFromKey(priv)
+	if err != nil {
+		t.Fatal(err)
+	}
+	return signer
+}
+
+type testServer struct {
+	addr  string
+	host  string
+	port  int
+	conns atomic.Int32
+}
+
+// startServer serves SSH on 127.0.0.1 with hostKey, letting in only allowUser
+// authenticating with clientKey. It forwards direct-tcpip channels, which is what
+// a jump host does, and counts every TCP connection it accepts.
+func startServer(t *testing.T, hostKey gossh.Signer, allowUser string, clientKey gossh.PublicKey) *testServer {
+	t.Helper()
+
+	cfg := &gossh.ServerConfig{
+		PublicKeyCallback: func(meta gossh.ConnMetadata, key gossh.PublicKey) (*gossh.Permissions, error) {
+			if meta.User() == allowUser && bytes.Equal(key.Marshal(), clientKey.Marshal()) {
+				return nil, nil
+			}
+			return nil, fmt.Errorf("user %s not allowed", meta.User())
+		},
+	}
+	cfg.AddHostKey(hostKey)
+
+	ln, err := net.Listen("tcp", "127.0.0.1:0")
+	if err != nil {
+		t.Fatal(err)
+	}
+	srv := &testServer{addr: ln.Addr().String()}
+	host, port, _ := net.SplitHostPort(srv.addr)
+	srv.host = host
+	srv.port, _ = strconv.Atoi(port)
+
+	var mu sync.Mutex
+	var open []net.Conn
+	t.Cleanup(func() {
+		ln.Close()
+		mu.Lock()
+		defer mu.Unlock()
+		for _, c := range open {
+			c.Close()
+		}
+	})
+
+	go func() {
+		for {
+			conn, err := ln.Accept()
+			if err != nil {
+				return
+			}
+			srv.conns.Add(1)
+			mu.Lock()
+			open = append(open, conn)
+			mu.Unlock()
+			go serveConn(conn, cfg)
+		}
+	}()
+	return srv
+}
+
+func serveConn(conn net.Conn, cfg *gossh.ServerConfig) {
+	defer conn.Close()
+	sshConn, chans, reqs, err := gossh.NewServerConn(conn, cfg)
+	if err != nil {
+		return
+	}
+	defer sshConn.Close()
+	go gossh.DiscardRequests(reqs)
+	for nc := range chans {
+		if nc.ChannelType() != "direct-tcpip" {
+			nc.Reject(gossh.UnknownChannelType, "only direct-tcpip")
+			continue
+		}
+		// RFC 4254 7.2.
+		var target struct {
+			Host     string
+			Port     uint32
+			OrigHost string
+			OrigPort uint32
+		}
+		if err := gossh.Unmarshal(nc.ExtraData(), &target); err != nil {
+			nc.Reject(gossh.ConnectionFailed, err.Error())
+			continue
+		}
+		upstream, err := net.Dial("tcp", net.JoinHostPort(target.Host, strconv.Itoa(int(target.Port))))
+		if err != nil {
+			nc.Reject(gossh.ConnectionFailed, err.Error())
+			continue
+		}
+		ch, chReqs, err := nc.Accept()
+		if err != nil {
+			upstream.Close()
+			continue
+		}
+		go gossh.DiscardRequests(chReqs)
+		go func() {
+			defer ch.Close()
+			defer upstream.Close()
+			done := make(chan struct{}, 2)
+			go func() { io.Copy(upstream, ch); done <- struct{}{} }()
+			go func() { io.Copy(ch, upstream); done <- struct{}{} }()
+			<-done
+		}()
+	}
+}
+
+// useTerminal makes fake the terminal the host-key question goes to.
+func useTerminal(t *testing.T, fake terminal) {
+	t.Helper()
+	previous := hostKeyTerminal
+	hostKeyTerminal = fake
+	t.Cleanup(func() { hostKeyTerminal = previous })
+}
+
+// within fails the test instead of hanging the suite when fn does not return: a
+// regression back into the prompt loop would otherwise never finish.
+func within(t *testing.T, d time.Duration, fn func()) {
+	t.Helper()
+	done := make(chan struct{})
+	go func() {
+		defer close(done)
+		fn()
+	}()
+	select {
+	case <-done:
+	case <-time.After(d):
+		t.Fatalf("did not return within %s", d)
+	}
+}
+
+type sshEnv struct {
+	home, awlessHome, keyDir string
+	clientKey                gossh.Signer
+}
+
+func (e sshEnv) opensshKnownHosts() string { return filepath.Join(e.home, ".ssh", "known_hosts") }
+func (e sshEnv) awlessKnownHosts() string  { return filepath.Join(e.awlessHome, "known_hosts") }
+
+// newSSHEnv isolates HOME, the awless home and the agent, and writes a client key.
+func newSSHEnv(t *testing.T) sshEnv {
+	t.Helper()
+	root := t.TempDir()
+	e := sshEnv{
+		home:       filepath.Join(root, "home"),
+		awlessHome: filepath.Join(root, "awless"),
+		keyDir:     filepath.Join(root, "keys"),
+	}
+	for _, dir := range []string{filepath.Join(e.home, ".ssh"), e.awlessHome, e.keyDir} {
+		if err := os.MkdirAll(dir, 0o700); err != nil {
+			t.Fatal(err)
+		}
+	}
+	t.Setenv("HOME", e.home)
+	t.Setenv("__AWLESS_HOME", e.awlessHome)
+	t.Setenv("SSH_AUTH_SOCK", "")
+	e.clientKey = writeClientKey(t, e.keyDir, "client.pem")
+	return e
+}
+
+func (e sshEnv) client(t *testing.T, srv *testServer) *Client {
+	t.Helper()
+	c, err := InitClient("client", e.keyDir)
+	if err != nil {
+		t.Fatal(err)
+	}
+	c.IP, c.Port = srv.host, srv.port
+	t.Cleanup(func() { c.CloseAll() })
+	return c
+}
+
+func writeKnownHost(t *testing.T, file, addr string, key gossh.PublicKey) {
+	t.Helper()
+	f, err := os.OpenFile(file, os.O_WRONLY|os.O_APPEND|os.O_CREATE, 0o600)
+	if err != nil {
+		t.Fatal(err)
+	}
+	defer f.Close()
+	if _, err := f.WriteString(knownhosts.Line([]string{addr}, key) + "\n"); err != nil {
+		t.Fatal(err)
+	}
+}
+
+func mustNotExist(t *testing.T, path string) {
+	t.Helper()
+	if _, err := os.Stat(path); !errors.Is(err, os.ErrNotExist) {
+		t.Errorf("%s exists (err %v); nothing should have been persisted", path, err)
+	}
+}
+
+func TestDialUnknownHostKeyAcceptedAndPersisted(t *testing.T) {
+	env := newSSHEnv(t)
+	hostKey := newSigner(t)
+	srv := startServer(t, hostKey, "ec2-user", env.clientKey.PublicKey())
+	fake := &fakeTerminal{interactive: true, answers: []string{"yes"}}
+	useTerminal(t, fake)
+
+	c := env.client(t, srv)
+	var err error
+	within(t, 10*time.Second, func() { err = c.DialWithUsers("ec2-user") })
+	if err != nil {
+		t.Fatal(err)
+	}
+	if c.User != "ec2-user" {
+		t.Errorf("user %q, want ec2-user", c.User)
+	}
+	if n := fake.readCount(); n != 1 {
+		t.Errorf("asked %d times, want 1", n)
+	}
+
+	// No ~/.ssh/known_hosts, so the key goes to the awless one.
+	content, err := os.ReadFile(env.awlessKnownHosts())
+	if err != nil {
+		t.Fatal(err)
+	}
+	if want := knownhosts.Line([]string{srv.addr}, hostKey.PublicKey()); !strings.Contains(string(content), want) {
+		t.Errorf("known_hosts is %q, want it to contain %q", content, want)
+	}
+	mustNotExist(t, env.opensshKnownHosts())
+}
+
+func TestDialKnownHostKey(t *testing.T) {
+	env := newSSHEnv(t)
+	hostKey := newSigner(t)
+	srv := startServer(t, hostKey, "ec2-user", env.clientKey.PublicKey())
+	writeKnownHost(t, env.opensshKnownHosts(), srv.addr, hostKey.PublicKey())
+	useTerminal(t, &fakeTerminal{interactive: true, onRead: func() {
+		t.Error("asked about a host key that is already known")
+	}})
+
+	c := env.client(t, srv)
+	var err error
+	within(t, 10*time.Second, func() { err = c.DialWithUsers("ec2-user") })
+	if err != nil {
+		t.Fatal(err)
+	}
+	if c.User != "ec2-user" {
+		t.Errorf("user %q, want ec2-user", c.User)
+	}
+}
+
+func TestDialChangedHostKeyRefused(t *testing.T) {
+	env := newSSHEnv(t)
+	srv := startServer(t, newSigner(t), "ec2-user", env.clientKey.PublicKey())
+	// What we remember for this address is some other key.
+	writeKnownHost(t, env.opensshKnownHosts(), srv.addr, newSigner(t).PublicKey())
+	before, err := os.ReadFile(env.opensshKnownHosts())
+	if err != nil {
+		t.Fatal(err)
+	}
+	fake := &fakeTerminal{interactive: true, answers: []string{"yes"}}
+	useTerminal(t, fake)
+
+	c := env.client(t, srv)
+	within(t, 10*time.Second, func() { err = c.DialWithUsers("ec2-user", "ubuntu", "root") })
+	if err == nil || !strings.Contains(err.Error(), "HAS CHANGED") {
+		t.Fatalf("got %v, want the changed-host-key refusal", err)
+	}
+	if !IsHostKeyError(err) {
+		t.Error("a changed host key is not reported as a host-key error")
+	}
+	if n := srv.conns.Load(); n != 1 {
+		t.Errorf("%d connections, want 1: a changed host key is not a reason to try another user", n)
+	}
+	if n := fake.readCount(); n != 0 {
+		t.Errorf("asked %d times about a changed key, want 0", n)
+	}
+	after, err := os.ReadFile(env.opensshKnownHosts())
+	if err != nil {
+		t.Fatal(err)
+	}
+	if !bytes.Equal(before, after) {
+		t.Errorf("known_hosts changed:\nbefore %q\nafter  %q", before, after)
+	}
+	mustNotExist(t, env.awlessKnownHosts())
+}
+
+// The reported defect: with stdin not a terminal, the question was re-asked for
+// every candidate user and never answered.
+func TestDialWithoutTerminalFailsFast(t *testing.T) {
+	env := newSSHEnv(t)
+	srv := startServer(t, newSigner(t), "ec2-user", env.clientKey.PublicKey())
+	fake := &fakeTerminal{interactive: false}
+	useTerminal(t, fake)
+
+	c := env.client(t, srv)
+	var err error
+	within(t, 10*time.Second, func() {
+		err = c.DialWithUsers("ec2-user", "ubuntu", "centos", "core", "bitnami", "admin", "root")
+	})
+	if !errors.Is(err, ErrNoTerminal) {
+		t.Fatalf("got %v, want ErrNoTerminal", err)
+	}
+	if !IsHostKeyError(err) {
+		t.Error("an unconfirmed host key is not reported as a host-key error")
+	}
+	if n := srv.conns.Load(); n != 1 {
+		t.Errorf("%d connections, want 1", n)
+	}
+	if n := fake.readCount(); n != 0 {
+		t.Errorf("%d reads from a non-terminal, want 0", n)
+	}
+	if n := strings.Count(fake.written(), "(yes/no)"); n > 1 {
+		t.Errorf("question written %d times, want at most once", n)
+	}
+	mustNotExist(t, env.opensshKnownHosts())
+	mustNotExist(t, env.awlessKnownHosts())
+}
+
+func TestDialDeclinedHostKeyStops(t *testing.T) {
+	env := newSSHEnv(t)
+	srv := startServer(t, newSigner(t), "ec2-user", env.clientKey.PublicKey())
+	fake := &fakeTerminal{interactive: true, answers: []string{"no", "no", "no"}}
+	useTerminal(t, fake)
+
+	c := env.client(t, srv)
+	var err error
+	within(t, 10*time.Second, func() { err = c.DialWithUsers("ec2-user", "ubuntu", "root") })
+	if err == nil || !strings.Contains(err.Error(), "verification failed") {
+		t.Fatalf("got %v, want the host key refusal", err)
+	}
+	if !IsHostKeyError(err) {
+		t.Error("a declined host key is not reported as a host-key error")
+	}
+	if n := srv.conns.Load(); n != 1 {
+		t.Errorf("%d connections, want 1", n)
+	}
+	if n := fake.readCount(); n != 1 {
+		t.Errorf("asked %d times, want 1", n)
+	}
+	mustNotExist(t, env.opensshKnownHosts())
+	mustNotExist(t, env.awlessKnownHosts())
+}
+
+// Stopping on a host-key verdict must not stop the search for the right user.
+func TestDialTriesNextUserOnAuthFailure(t *testing.T) {
+	env := newSSHEnv(t)
+	hostKey := newSigner(t)
+	srv := startServer(t, hostKey, "ubuntu", env.clientKey.PublicKey())
+	writeKnownHost(t, env.awlessKnownHosts(), srv.addr, hostKey.PublicKey())
+	useTerminal(t, &fakeTerminal{interactive: false})
+
+	c := env.client(t, srv)
+	var err error
+	within(t, 10*time.Second, func() { err = c.DialWithUsers("ec2-user", "ubuntu") })
+	if err != nil {
+		t.Fatal(err)
+	}
+	if c.User != "ubuntu" {
+		t.Errorf("user %q, want ubuntu", c.User)
+	}
+	if IsHostKeyError(errors.New("ssh: unable to authenticate")) {
+		t.Error("an authentication failure is reported as a host-key error")
+	}
+	if n := srv.conns.Load(); n != 2 {
+		t.Errorf("%d connections, want 2 (one per user tried)", n)
+	}
+}
+
+func TestProxyHopHostKeyWithoutTerminal(t *testing.T) {
+	env := newSSHEnv(t)
+	jumpKey, destKey := newSigner(t), newSigner(t)
+	jump := startServer(t, jumpKey, "ec2-user", env.clientKey.PublicKey())
+	dest := startServer(t, destKey, "ec2-user", env.clientKey.PublicKey())
+	writeKnownHost(t, env.awlessKnownHosts(), jump.addr, jumpKey.PublicKey())
+	fake := &fakeTerminal{interactive: false}
+	useTerminal(t, fake)
+
+	c := env.client(t, jump)
+	if err := c.DialWithUsers("ec2-user"); err != nil {
+		t.Fatal(err)
+	}
+
+	var err error
+	within(t, 10*time.Second, func() {
+		_, err = c.NewClientWithProxy(dest.host, dest.port, "", "ec2-user", "ubuntu", "root")
+	})
+	if !errors.Is(err, ErrNoTerminal) {
+		t.Fatalf("got %v, want ErrNoTerminal", err)
+	}
+	if n := dest.conns.Load(); n != 1 {
+		t.Errorf("destination saw %d connections, want 1", n)
+	}
+	if n := fake.readCount(); n != 0 {
+		t.Errorf("%d reads from a non-terminal, want 0", n)
+	}
+
+	writeKnownHost(t, env.awlessKnownHosts(), dest.addr, destKey.PublicKey())
+	var proxied *Client
+	within(t, 10*time.Second, func() {
+		proxied, err = c.NewClientWithProxy(dest.host, dest.port, "", "ec2-user", "ubuntu", "root")
+	})
+	if err != nil {
+		t.Fatal(err)
+	}
+	t.Cleanup(func() { proxied.Client.Close() })
+	if proxied.Proxy != c {
+		t.Error("the proxied client does not point at its jump host")
+	}
+	if proxied.User != "ec2-user" {
+		t.Errorf("user %q, want ec2-user", proxied.User)
+	}
+}
+
+// The destination's own key goes first on the second hop: the jump host's key is
+// not accepted by the destination here, only the destination's is.
+func TestProxyHopUsesDestinationKey(t *testing.T) {
+	env := newSSHEnv(t)
+	jumpKey, destKey := newSigner(t), newSigner(t)
+	destClientKey := writeClientKey(t, env.keyDir, "dest.pem")
+	jump := startServer(t, jumpKey, "ec2-user", env.clientKey.PublicKey())
+	dest := startServer(t, destKey, "ubuntu", destClientKey.PublicKey())
+	writeKnownHost(t, env.awlessKnownHosts(), jump.addr, jumpKey.PublicKey())
+	writeKnownHost(t, env.awlessKnownHosts(), dest.addr, destKey.PublicKey())
+	useTerminal(t, &fakeTerminal{interactive: false})
+
+	c := env.client(t, jump)
+	if err := c.DialWithUsers("ec2-user"); err != nil {
+		t.Fatal(err)
+	}
+	destKeypath := filepath.Join(env.keyDir, "dest.pem")
+	var proxied *Client
+	var err error
+	within(t, 10*time.Second, func() {
+		proxied, err = c.NewClientWithProxy(dest.host, dest.port, destKeypath, "ec2-user", "ubuntu")
+	})
+	if err != nil {
+		t.Fatal(err)
+	}
+	t.Cleanup(func() { proxied.Client.Close() })
+	if proxied.User != "ubuntu" || proxied.Keypath != destKeypath {
+		t.Errorf("got user %q key %q, want ubuntu and %q", proxied.User, proxied.Keypath, destKeypath)
+	}
+}

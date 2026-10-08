@@ -20,11 +20,11 @@ import (
 	"context"
 	"errors"
 	"fmt"
+	"io"
 	"net"
 	"os"
 	"path/filepath"
 	"strings"
-	"sync"
 	"time"
 
 	"github.com/spf13/cobra"
@@ -37,6 +37,7 @@ import (
 	"github.com/theazz/awless-ro/graph"
 	"github.com/theazz/awless-ro/logger"
 	"github.com/theazz/awless-ro/ssh"
+	"github.com/theazz/awless-ro/sync"
 )
 
 var keyPathFlag, proxyInstanceThroughFlag string
@@ -60,56 +61,17 @@ func init() {
 
 var defaultAMIUsers = []string{"ec2-user", "ubuntu", "centos", "core", "bitnami", "admin", "root"}
 
-// sshDisabledReason is what `awless-ro ssh` says instead of running.
-//
-// The command is kept, rather than removed, so that trying it explains itself instead
-// of answering "unknown command" — a fork that quietly dropped a headline feature
-// would be worse than one that says it is not ready.
-//
-// What was found against a live account, and what has to be fixed before this comes
-// back on:
-//
-//   - `ssh <instance> --local` panics. initCloudServicesHook returns early for
-//     --local, so awsservices.InfraService is nil, and fetchConnectionInfo fetches
-//     from AWS regardless and dereferences it. The command should read the local
-//     graph when told to work offline, which is the whole point of the flag.
-//   - `--print-cli` and `--print-config` connect to the instance. They exist to print
-//     a command line and a config stanza, so they must resolve and print without
-//     opening a connection.
-//   - The host key prompt loops when there is no terminal, re-asking for every
-//     candidate login user and never reading an answer. Same defect that was fixed in
-//     credentials: a prompt has to check for a TTY and fail with a message when there
-//     is none.
-//
-// Encouragingly, the parts underneath work: the name resolved to the instance's
-// private IP through the local graph, and the connection reached it and returned a
-// real host key.
-const sshDisabledReason = `ssh is not available in this release.
-
-The connection logic works, but three things have to be fixed first: --local panics,
---print-cli connects instead of printing, and the host key prompt loops when there is
-no terminal. Shipping it would crash on the first offline use.
-
-Meanwhile, awless-ro will tell you what to connect to:
-
-    awless-ro show %s --local
-
-and ssh does the rest:
-
-    ssh -i ~/.ssh/<key>.pem <user>@<ip>
-
-Progress: https://github.com/theazz/awless-ro/issues/1`
-
 var sshCmd = &cobra.Command{
 	Use:               "ssh [USER@]INSTANCE",
 	ValidArgsFunction: completeSSHTarget,
-	Short:             "[not in this release] Launch a SSH session to an instance given an id or alias",
+	Short:             "Launch a SSH session to an instance given an id or alias",
 	Long:              "Launch a SSH session to an instance given an id or alias. All connection details are derived from a given instance name/id.",
 	Example: `  awless-ro ssh i-8d43b21b                       # using the instance id
   awless-ro ssh redis-prod                       # using name only (other infos are derived)
   awless-ro ssh ec2-user@redis-prod              # forcing the user
   awless-ro ssh 34.215.29.221                    # using the IP
   awless-ro ssh root@34.215.29.221 --port 23     # specifying a port
+  awless-ro ssh redis-prod --local               # resolve from the synced graph, no AWS call
 
   awless-ro ssh redis-prod -i keyname            # using AWS keyname (look into ~/.ssh/keyname.pem & ~/.awless-ro/keys/keyname.pem)
   awless-ro ssh redis-prod -i ~/path/toward/key  # specifying a full key path
@@ -127,264 +89,502 @@ var sshCmd = &cobra.Command{
 	PersistentPreRun:  applyHooks(initLoggerHook, initAwlessEnvHook, initCloudServicesHook, firstInstallDoneHook),
 	PersistentPostRun: applyHooks(onVersionUpgrade, networkMonitorHook),
 
-	RunE: func(cmd *cobra.Command, args []string) error {
-		if len(args) != 1 {
-			return fmt.Errorf("instance required")
-		}
-
-		// Refused before anything else, and before any AWS call. See
-		// sshDisabledReason for what is wrong and what has to be fixed; runSSH below
-		// is the command as it stands, kept whole so that turning it back on is
-		// deleting this line.
-		return fmt.Errorf(sshDisabledReason, args[0])
-	},
+	RunE: runSSH,
 }
 
-// runSSH is the ssh command, not currently reachable. See sshDisabledReason.
+// sshOptions is the command line of `ssh`, gathered so the pieces below can be
+// tested without the package-level flag variables.
+type sshOptions struct {
+	identity, through                                      string
+	port, throughPort                                      int
+	private, noStrictHostKey, printCLI, printConfig, local bool
+}
+
+func sshOptionsFromFlags() sshOptions {
+	return sshOptions{
+		identity:        keyPathFlag,
+		through:         proxyInstanceThroughFlag,
+		port:            sshPortFlag,
+		throughPort:     sshTroughPortFlag,
+		private:         privateIPFlag,
+		noStrictHostKey: disableStrictHostKeyCheckingFlag,
+		printCLI:        printSSHCLIFlag,
+		printConfig:     printSSHConfigFlag,
+		local:           localGlobalFlag,
+	}
+}
+
 func runSSH(cmd *cobra.Command, args []string) error {
-	{
-		var err error
-		var connectionCtx *instanceConnectionContext
+	if len(args) != 1 {
+		return fmt.Errorf("instance required")
+	}
+	opts := sshOptionsFromFlags()
 
-		if proxyInstanceThroughFlag != "" {
-			connectionCtx, err = initInstanceConnectionContext(proxyInstanceThroughFlag, keyPathFlag)
-		} else {
-			connectionCtx, err = initInstanceConnectionContext(args[0], keyPathFlag)
-		}
-		exitOn(err)
+	g, err := connectionGraph(opts.local, awsservices.InfraService, localInfraGraph)
+	exitOn(err)
 
-		firsHopClient, err := ssh.InitClient(connectionCtx.keypath, config.KeysDir, filepath.Join(os.Getenv("HOME"), ".ssh"))
-		exitOn(err)
-
-		if err != nil && strings.Contains(err.Error(), "cannot find SSH key") && keyPathFlag == "" {
-			logger.Info("you may want to specify a key filepath with `-i /path/to/key.pem`")
-		}
-		exitOn(err)
-
-		firsHopClient.SetLogger(logger.DefaultLogger)
-		firsHopClient.SetStrictHostKeyChecking(!disableStrictHostKeyCheckingFlag)
-		firsHopClient.InteractiveTerminalFunc = console.InteractiveTerminal
-		if proxyInstanceThroughFlag != "" {
-			firsHopClient.Port = sshTroughPortFlag
-		} else {
-			firsHopClient.Port = sshPortFlag
-		}
-
-		if privateIPFlag {
-			if priv := connectionCtx.privip; priv != "" {
-				firsHopClient.IP = connectionCtx.privip
-			} else {
-				exitOn(fmt.Errorf(
-					"no private IP resolved for instance %s (state '%s')",
-					connectionCtx.instance.Id(), connectionCtx.state,
-				))
-			}
-		} else {
-			if pub := connectionCtx.ip; pub != "" {
-				firsHopClient.IP = connectionCtx.ip
-			} else if priv := connectionCtx.privip; priv != "" {
-				firsHopClient.IP = connectionCtx.privip
-			} else {
-				exitOn(fmt.Errorf("no public/private IP resolved for instance %s (state '%s')", connectionCtx.instance.Id(), connectionCtx.state))
-			}
-		}
-
-		if connectionCtx.user != "" {
-			err = firsHopClient.DialWithUsers(connectionCtx.user)
-		} else {
-			err = firsHopClient.DialWithUsers(defaultAMIUsers...)
-		}
-
-		if isConnectionRefusedErr(err) {
-			logger.Warning("cannot connect to this instance, maybe the system is still booting?")
-			exitOn(err)
-			return nil
-		}
-
-		if err != nil {
-			if e := connectionCtx.checkInstanceAccessible(); e != nil {
-				logger.Error(e.Error())
-			}
-			exitOn(err)
-		}
-
-		targetClient := firsHopClient
-
-		if proxyInstanceThroughFlag != "" {
-			destInstanceCtx, err := initInstanceConnectionContext(args[0], keyPathFlag)
-			exitOn(err)
-			if destInstanceCtx.user != "" {
-				targetClient, err = firsHopClient.NewClientWithProxy(destInstanceCtx.privip, sshPortFlag, destInstanceCtx.user)
-			} else {
-				targetClient, err = firsHopClient.NewClientWithProxy(destInstanceCtx.privip, sshPortFlag, defaultAMIUsers...)
-			}
-			exitOn(err)
-		}
-
-		if printSSHConfigFlag {
-			host := connectionCtx.instanceName
-			if proxyInstanceThroughFlag != "" {
-				host = args[0]
-			}
-			fmt.Println(targetClient.SSHConfigString(host))
-			return nil
-		}
-
-		if printSSHCLIFlag {
-			fmt.Println(targetClient.ConnectString())
-			return nil
-		}
-
-		exitOn(targetClient.Connect())
+	// Printing resolves from the graph and returns before anything dials: no
+	// connection is opened and no host key is checked, so it works when the host
+	// is unreachable.
+	if opts.printCLI || opts.printConfig {
+		exitOn(decorateSSHNotFound(opts, printSSH(cmd.OutOrStdout(), opts, g, args[0])))
 		return nil
 	}
+
+	myIP := getMyIP
+	if opts.local {
+		// --local means no network call to anything but the instance itself.
+		myIP = func() net.IP { return nil }
+	}
+	exitOn(decorateSSHNotFound(opts, connectSSH(opts, g, args[0], myIP)))
+	return nil
 }
 
 func isConnectionRefusedErr(err error) bool {
 	return err != nil && strings.Contains(err.Error(), "connection refused")
 }
 
-type instanceConnectionContext struct {
-	ip, privip          string
-	myip                net.IP
-	user, keypath       string
-	state, instanceName string
-	instance            cloud.Resource
-	resourcesGraph      cloud.GraphAPI
+// infraFetcher is the part of the infra service ssh needs.
+type infraFetcher interface {
+	FetchByType(context.Context, string) (cloud.GraphAPI, error)
 }
 
-func initInstanceConnectionContext(userhost, keypath string) (*instanceConnectionContext, error) {
-	ctx := &instanceConnectionContext{}
-
-	if strings.Contains(userhost, "@") {
-		ctx.user = strings.Split(userhost, "@")[0]
-		ctx.instanceName = strings.Split(userhost, "@")[1]
-	} else {
-		ctx.instanceName = userhost
+// connectionGraph is what ssh resolves its target against: the synced graph with
+// --local, a fresh fetch otherwise.
+//
+// With --local, initCloudServicesHook never builds the AWS services, so infra is nil
+// and must not be touched; reading the graph is the whole point of the flag.
+// Upstream fetched from AWS regardless, and panicked.
+func connectionGraph(local bool, infra infraFetcher, loadLocal func() (cloud.GraphAPI, error)) (cloud.GraphAPI, error) {
+	if local {
+		return loadLocal()
+	}
+	if infra == nil {
+		return nil, errors.New("the AWS infra service is not initialised, cannot fetch instances (use --local to read the synced graph)")
 	}
 
-	ctx.fetchConnectionInfo()
+	type result struct {
+		typ string
+		g   cloud.GraphAPI
+		err error
+	}
+	types := []string{cloud.Instance, cloud.SecurityGroup, cloud.Image}
+	results := make(chan result, len(types))
+	ctx := context.WithValue(context.Background(), "force", true)
+	for _, typ := range types {
+		go func() {
+			g, err := infra.FetchByType(ctx, typ)
+			results <- result{typ, g, err}
+		}()
+	}
 
-	instanceMatchers := match.Or(match.Property(properties.Name, ctx.instanceName), match.Property(properties.PublicIP, ctx.instanceName), match.Property(properties.PrivateIP, ctx.instanceName))
-	resources, err := ctx.resourcesGraph.Find(cloud.NewQuery(cloud.Instance).Match(instanceMatchers))
-	exitOn(err)
+	merged := graph.NewGraph()
+	var firstErr error
+	for range types {
+		r := <-results
+		if r.err != nil {
+			// Images only tell which login user to try first; without them every
+			// default user is tried, which is how upstream always worked.
+			if r.typ == cloud.Image {
+				logger.Verbosef("cannot fetch images, login users will be guessed: %s", r.err)
+				continue
+			}
+			if firstErr == nil {
+				firstErr = r.err
+			}
+			continue
+		}
+		if r.g != nil {
+			if err := merged.Merge(r.g); err != nil && firstErr == nil {
+				firstErr = err
+			}
+		}
+	}
+	if firstErr != nil {
+		return nil, firstErr
+	}
+	return merged, nil
+}
+
+// localInfraGraph reads the synced infra file, which holds the instances, their
+// security groups and the account's images.
+func localInfraGraph() (cloud.GraphAPI, error) {
+	warnIfNothingSynced()
+	return sync.LoadLocalGraphForService("infra", config.GetAWSProfile(), config.GetAWSRegion())
+}
+
+// instanceNotFoundError keeps findResource's wording, but can be recognised, so
+// that --local can say where it looked.
+type instanceNotFoundError struct{ name string }
+
+func (e instanceNotFoundError) Error() string {
+	return fmt.Sprintf("%s '%s' not found", cloud.Instance, e.name)
+}
+
+func decorateSSHNotFound(opts sshOptions, err error) error {
+	var nf instanceNotFoundError
+	if opts.local && errors.As(err, &nf) {
+		return fmt.Errorf("%w in the synced graph: run `awless-ro sync` or drop --local", err)
+	}
+	return err
+}
+
+func parseUserHost(s string) (user, host string) {
+	if u, h, ok := strings.Cut(s, "@"); ok {
+		return u, h
+	}
+	return "", s
+}
+
+// resolveInstance finds the instance a name, public IP, private IP or id refers to.
+// Several matches resolve to the single running one, if there is exactly one.
+func resolveInstance(g cloud.GraphAPI, name string) (cloud.Resource, error) {
+	instanceMatchers := match.Or(match.Property(properties.Name, name), match.Property(properties.PublicIP, name), match.Property(properties.PrivateIP, name))
+	resources, err := g.Find(cloud.NewQuery(cloud.Instance).Match(instanceMatchers))
+	if err != nil {
+		return nil, err
+	}
 	switch len(resources) {
 	case 0:
 		// No instance with that name, use the id
-		ctx.instance, err = findResource(ctx.resourcesGraph, ctx.instanceName, cloud.Instance)
-		exitOn(err)
+		inst, err := findResource(g, name, cloud.Instance)
+		if err != nil {
+			return nil, instanceNotFoundError{name}
+		}
+		return inst, nil
 	case 1:
-		ctx.instance = resources[0]
+		return resources[0], nil
+	}
+
+	idStatus := cloud.Resources(resources).Map(func(r cloud.Resource) string {
+		return fmt.Sprintf("%s (%s)", r.Id(), r.Properties()[properties.State])
+	})
+	logger.Infof("Found %d resources with name '%s': %s", len(resources), name, strings.Join(idStatus, ", "))
+
+	running, err := g.Find(cloud.NewQuery(cloud.Instance).Match(match.And(instanceMatchers, match.Property(properties.State, "running"))))
+	if err != nil {
+		return nil, err
+	}
+
+	switch len(running) {
+	case 0:
+		logger.Warning("None of them is running, cannot connect through SSH")
+		return nil, errors.New("non running instances")
+	case 1:
+		logger.Infof("Found only one instance running: %s. Will connect to this instance.", running[0].Id())
+		return running[0], nil
 	default:
-		idStatus := cloud.Resources(resources).Map(func(r cloud.Resource) string {
-			return fmt.Sprintf("%s (%s)", r.Id(), r.Properties()[properties.State])
-		})
-		logger.Infof("Found %d resources with name '%s': %s", len(resources), ctx.instanceName, strings.Join(idStatus, ", "))
-
-		var running []cloud.Resource
-		running, err = ctx.resourcesGraph.Find(cloud.NewQuery(cloud.Instance).Match(match.And(instanceMatchers, match.Property(properties.State, "running"))))
-		exitOn(err)
-
-		switch len(running) {
-		case 0:
-			logger.Warning("None of them is running, cannot connect through SSH")
-			return ctx, errors.New("non running instances")
-		case 1:
-			logger.Infof("Found only one instance running: %s. Will connect to this instance.", running[0].Id())
-			ctx.instance = running[0]
-		default:
-			logger.Warning("Connect through the running ones using their id:")
-			for _, res := range running {
-				var up string
-				if uptime, ok := res.Properties()[properties.Launched].(time.Time); ok {
-					up = fmt.Sprintf("\t\t(uptime: %s)", console.HumanizeTime(uptime))
-				}
-				logger.Warningf("\t`awless-ro ssh %s`%s", res.Id(), up)
+		logger.Warning("Connect through the running ones using their id:")
+		for _, res := range running {
+			var up string
+			if uptime, ok := res.Properties()[properties.Launched].(time.Time); ok {
+				up = fmt.Sprintf("\t\t(uptime: %s)", console.HumanizeTime(uptime))
 			}
-			return ctx, errors.New("use instances ids")
+			logger.Warningf("\t`awless-ro ssh %s`%s", res.Id(), up)
 		}
+		return nil, errors.New("use instances ids")
+	}
+}
+
+// sshTarget is one hop, resolved from the graph: which instance, its addresses, the
+// users to log in as and the key to use.
+type sshTarget struct {
+	name, user string
+	// users are the login users to try, in order; never empty.
+	users []string
+	// userKnown says users[0] is not a guess: given explicitly, or derived from
+	// the instance's image.
+	userKnown                           bool
+	instance                            cloud.Resource
+	publicIP, privateIP, state, keyName string
+}
+
+func resolveTarget(g cloud.GraphAPI, userhost, identity string) (*sshTarget, error) {
+	user, name := parseUserHost(userhost)
+	inst, err := resolveInstance(g, name)
+	if err != nil {
+		return nil, err
 	}
 
-	ctx.privip, _ = ctx.instance.Properties()[properties.PrivateIP].(string)
-	ctx.ip, _ = ctx.instance.Properties()[properties.PublicIP].(string)
-	ctx.state, _ = ctx.instance.Properties()[properties.State].(string)
-
-	if keypath != "" {
-		ctx.keypath = keypath
+	t := &sshTarget{name: name, user: user, instance: inst}
+	t.privateIP, _ = inst.Properties()[properties.PrivateIP].(string)
+	t.publicIP, _ = inst.Properties()[properties.PublicIP].(string)
+	t.state, _ = inst.Properties()[properties.State].(string)
+	if identity != "" {
+		t.keyName = identity
 	} else {
-		keypair, ok := ctx.instance.Properties()[properties.KeyPair].(string)
-		if ok {
-			ctx.keypath = fmt.Sprint(keypair)
+		t.keyName, _ = inst.Properties()[properties.KeyPair].(string)
+	}
+	t.users, t.userKnown = loginUsers(g, inst, user)
+	return t, nil
+}
+
+// address is the IP to connect to: the private one with --private, otherwise the
+// public one and, failing that, the private one.
+func (t *sshTarget) address(private bool) (string, error) {
+	if private {
+		if t.privateIP != "" {
+			return t.privateIP, nil
+		}
+		return "", fmt.Errorf("no private IP resolved for instance %s (state '%s')", t.instance.Id(), t.state)
+	}
+	if t.publicIP != "" {
+		return t.publicIP, nil
+	}
+	if t.privateIP != "" {
+		return t.privateIP, nil
+	}
+	return "", fmt.Errorf("no public/private IP resolved for instance %s (state '%s')", t.instance.Id(), t.state)
+}
+
+// loginUsers lists the users to try, most likely first. An explicit user is the
+// only one tried. Otherwise the user that goes with the instance's image comes
+// first, when the image is in the graph and recognised, followed by the defaults.
+// known reports that the first user is not a guess.
+func loginUsers(g cloud.GraphAPI, inst cloud.Resource, explicit string) (users []string, known bool) {
+	if explicit != "" {
+		return []string{explicit}, true
+	}
+	if imageID, _ := inst.Properties()[properties.Image].(string); imageID != "" {
+		if img, err := findResource(g, imageID, cloud.Image); err == nil {
+			if u := userForImage(img); u != "" {
+				users = []string{u}
+				for _, d := range defaultAMIUsers {
+					if d != u {
+						users = append(users, d)
+					}
+				}
+				return users, true
+			}
+		}
+	}
+	return append([]string(nil), defaultAMIUsers...), false
+}
+
+// imageUsers maps a fragment of an image name or description to its login user.
+// Order matters: Bitnami names contain their base distro, and Fedora CoreOS names
+// contain "fedora".
+var imageUsers = []struct {
+	fragments []string
+	user      string
+}{
+	{[]string{"bitnami"}, "bitnami"},
+	{[]string{"ubuntu"}, "ubuntu"},
+	{[]string{"debian"}, "admin"},
+	{[]string{"centos"}, "centos"},
+	{[]string{"flatcar", "coreos"}, "core"},
+	{[]string{"fedora"}, "fedora"},
+	{[]string{"rocky"}, "rocky"},
+	{[]string{"amzn", "al2023", "amazon linux", "rhel", "red hat", "suse", "sles", "almalinux"}, "ec2-user"},
+}
+
+// userForImage is the login user an image's name, then its description, points to;
+// "" when neither is recognised.
+func userForImage(img cloud.Resource) string {
+	for _, prop := range []string{properties.Name, properties.Description} {
+		text, _ := img.Properties()[prop].(string)
+		text = strings.ToLower(text)
+		if text == "" {
+			continue
+		}
+		for _, entry := range imageUsers {
+			for _, fragment := range entry.fragments {
+				if strings.Contains(text, fragment) {
+					return entry.user
+				}
+			}
+		}
+	}
+	return ""
+}
+
+// sshKeyFolders is where a key name is looked up, in order: the awless-ro keys
+// directory, then ~/.ssh (#153).
+func sshKeyFolders() []string {
+	return []string{config.KeysDir, filepath.Join(os.Getenv("HOME"), ".ssh")}
+}
+
+// resolveTargets resolves the hop to dial first and, with --through, the
+// destination behind it.
+func resolveTargets(opts sshOptions, g cloud.GraphAPI, arg string) (first, dest *sshTarget, err error) {
+	if opts.through == "" {
+		first, err = resolveTarget(g, arg, opts.identity)
+		return first, nil, err
+	}
+	if first, err = resolveTarget(g, opts.through, opts.identity); err != nil {
+		return nil, nil, err
+	}
+	if dest, err = resolveTarget(g, arg, opts.identity); err != nil {
+		return nil, nil, err
+	}
+	return first, dest, nil
+}
+
+// plannedKeyPath finds the target's key file without reading it, warning when it is
+// missing: ssh may still authenticate with the agent or ~/.ssh/config.
+func plannedKeyPath(t *sshTarget) string {
+	if t.keyName == "" {
+		return ""
+	}
+	path, ok := ssh.ResolveKeyPath(t.keyName, sshKeyFolders()...)
+	if !ok {
+		logger.Warningf("cannot find SSH key '%s' for %s in %s; printing without -i", t.keyName, t.instance.Id(), strings.Join(sshKeyFolders(), ", "))
+	}
+	return path
+}
+
+func warnAboutPlannedTarget(t *sshTarget) {
+	if !t.userKnown {
+		logger.Warningf("cannot tell the login user of %s from its image, guessing '%s'. Force it with USER@%s", t.name, t.users[0], t.name)
+	}
+	if t.state != "running" {
+		logger.Warningf("instance %s is '%s', not running", t.instance.Id(), t.state)
+	}
+}
+
+// plannedClient describes the connection --print-cli and --print-config print, from
+// the graph and the flags alone. It does no network I/O: the user cannot be learnt by
+// connecting, so it comes from loginUsers, and the key is found but never parsed.
+func plannedClient(opts sshOptions, first, dest *sshTarget) (*ssh.Client, error) {
+	port := opts.port
+	if dest != nil {
+		port = opts.throughPort
+	}
+	ip, err := first.address(opts.private)
+	if err != nil {
+		return nil, err
+	}
+	warnAboutPlannedTarget(first)
+	hop := &ssh.Client{
+		IP:                    ip,
+		Port:                  port,
+		User:                  first.users[0],
+		Keypath:               plannedKeyPath(first),
+		StrictHostKeyChecking: !opts.noStrictHostKey,
+	}
+	if dest == nil {
+		return hop, nil
+	}
+
+	if dest.privateIP == "" {
+		return nil, fmt.Errorf("no private IP resolved for instance %s (state '%s')", dest.instance.Id(), dest.state)
+	}
+	warnAboutPlannedTarget(dest)
+	keypath := hop.Keypath
+	if dest.keyName != first.keyName {
+		if p := plannedKeyPath(dest); p != "" {
+			keypath = p
+		}
+	}
+	return &ssh.Client{
+		IP:                    dest.privateIP,
+		Port:                  opts.port,
+		User:                  dest.users[0],
+		Keypath:               keypath,
+		Proxy:                 hop,
+		StrictHostKeyChecking: !opts.noStrictHostKey,
+	}, nil
+}
+
+// printSSH writes the ssh command line, or the ~/.ssh/config stanza, for arg.
+func printSSH(w io.Writer, opts sshOptions, g cloud.GraphAPI, arg string) error {
+	first, dest, err := resolveTargets(opts, g, arg)
+	if err != nil {
+		return err
+	}
+	client, err := plannedClient(opts, first, dest)
+	if err != nil {
+		return err
+	}
+	if opts.printConfig {
+		host := first.name
+		if opts.through != "" {
+			host = arg
+		}
+		_, err = fmt.Fprintln(w, client.SSHConfigString(host))
+		return err
+	}
+	_, err = fmt.Fprintln(w, client.ConnectString())
+	return err
+}
+
+// connectSSH dials the instance, through the jump host with --through, and hands
+// the session over. myIP is only asked after a failed dial, to explain it.
+func connectSSH(opts sshOptions, g cloud.GraphAPI, arg string, myIP func() net.IP) error {
+	first, dest, err := resolveTargets(opts, g, arg)
+	if err != nil {
+		return err
+	}
+
+	firstHop, err := ssh.InitClient(first.keyName, sshKeyFolders()...)
+	if err != nil {
+		if errors.Is(err, ssh.ErrKeyNotFound) && opts.identity == "" {
+			logger.Info("you may want to specify a key filepath with `-i /path/to/key.pem`")
+		}
+		return err
+	}
+	firstHop.SetLogger(logger.DefaultLogger)
+	firstHop.SetStrictHostKeyChecking(!opts.noStrictHostKey)
+	firstHop.InteractiveTerminalFunc = console.InteractiveTerminal
+	firstHop.Port = opts.port
+	if dest != nil {
+		firstHop.Port = opts.throughPort
+	}
+	if firstHop.IP, err = first.address(opts.private); err != nil {
+		return err
+	}
+
+	err = firstHop.DialWithUsers(first.users...)
+	if isConnectionRefusedErr(err) {
+		logger.Warning("cannot connect to this instance, maybe the system is still booting?")
+		return err
+	}
+	if err != nil {
+		// A refused host key means the host was reached: nothing to diagnose.
+		if !ssh.IsHostKeyError(err) {
+			if e := checkInstanceAccessible(first, g, myIP()); e != nil {
+				logger.Error(e.Error())
+			}
+		}
+		return err
+	}
+
+	targetClient := firstHop
+	if dest != nil {
+		if dest.privateIP == "" {
+			return fmt.Errorf("no private IP resolved for instance %s (state '%s')", dest.instance.Id(), dest.state)
+		}
+		// The destination's own key pair first, unless -i chose the key for both.
+		var destKeypath string
+		if opts.identity == "" {
+			destKeypath, _ = ssh.ResolveKeyPath(dest.keyName, sshKeyFolders()...)
+		}
+		targetClient, err = firstHop.NewClientWithProxy(dest.privateIP, opts.port, destKeypath, dest.users...)
+		if err != nil {
+			return err
 		}
 	}
 
-	return ctx, nil
+	return targetClient.Connect()
 }
 
-func (ctx *instanceConnectionContext) fetchConnectionInfo() {
-	var resourcesGraph, sgroupsGraph cloud.GraphAPI
-	var myip net.IP
-	var wg sync.WaitGroup
-	var errc = make(chan error)
-
-	wg.Add(1)
-	go func() {
-		var err error
-		defer wg.Done()
-		resourcesGraph, err = awsservices.InfraService.FetchByType(context.WithValue(context.Background(), "force", true), cloud.Instance)
-		if err != nil {
-			errc <- err
-		}
-	}()
-
-	wg.Add(1)
-	go func() {
-		var err error
-		defer wg.Done()
-		sgroupsGraph, err = awsservices.InfraService.FetchByType(context.WithValue(context.Background(), "force", true), cloud.SecurityGroup)
-		if err != nil {
-			errc <- err
-		}
-	}()
-
-	wg.Add(1)
-	go func() {
-		defer wg.Done()
-		myip = getMyIP()
-	}()
-	go func() {
-		wg.Wait()
-		close(errc)
-	}()
-	for err := range errc {
-		if err != nil {
-			exitOn(err)
-		}
-	}
-	resourcesGraph.Merge(sgroupsGraph)
-
-	ctx.resourcesGraph = resourcesGraph
-	ctx.myip = myip
-	return
-}
-
-func (ctx *instanceConnectionContext) checkInstanceAccessible() (err error) {
-	if st := ctx.state; st != "running" {
+func checkInstanceAccessible(t *sshTarget, g cloud.GraphAPI, myip net.IP) (err error) {
+	if st := t.state; st != "running" {
 		logger.Warningf("this instance is '%s' (cannot ssh to a non running state)", st)
 		if st == "stopped" {
-			logger.Warningf("awless-ro is read-only; you can start it with `aws ec2 start-instances --instance-ids %s`", ctx.instance.Id())
+			logger.Warningf("awless-ro is read-only; you can start it with `aws ec2 start-instances --instance-ids %s`", t.instance.Id())
 		}
 		return errors.New("instance not accessible")
 	}
 
-	sgroups, ok := ctx.instance.Properties()[properties.SecurityGroups].([]string)
+	sgroups, ok := t.instance.Properties()[properties.SecurityGroups].([]string)
 	if ok {
 		var sshPortOpen, myIPAllowed bool
 		for _, id := range sgroups {
 			var sgroup cloud.Resource
-			sgroup, err = findResource(ctx.resourcesGraph, id, cloud.SecurityGroup)
+			sgroup, err = findResource(g, id, cloud.SecurityGroup)
 			if err != nil {
-				logger.Errorf("cannot get securitygroup '%s' for instance '%s': %s", id, ctx.instance.Id(), err)
+				logger.Errorf("cannot get securitygroup '%s' for instance '%s': %s", id, t.instance.Id(), err)
 				break
 			}
 
@@ -394,7 +594,7 @@ func (ctx *instanceConnectionContext) checkInstanceAccessible() (err error) {
 					if r.PortRange.Contains(22) {
 						sshPortOpen = true
 					}
-					if ctx.myip != nil && r.Contains(ctx.myip.String()) {
+					if myip != nil && r.Contains(myip.String()) {
 						myIPAllowed = true
 					}
 				}
@@ -406,13 +606,13 @@ func (ctx *instanceConnectionContext) checkInstanceAccessible() (err error) {
 			return errors.New("instance not accessible")
 		}
 
-		if !myIPAllowed && ctx.myip != nil {
-			logger.Warningf("your ip %s is not authorized for this instance. You might want to update the securitygroup with:", ctx.myip)
+		if !myIPAllowed && myip != nil {
+			logger.Warningf("your ip %s is not authorized for this instance. You might want to update the securitygroup with:", myip)
 			var group = "mygroup"
 			if len(sgroups) == 1 {
 				group = sgroups[0]
 			}
-			logger.Warningf("`aws ec2 authorize-security-group-ingress --group-id %s --protocol tcp --port 22 --cidr %s/32`", group, ctx.myip)
+			logger.Warningf("`aws ec2 authorize-security-group-ingress --group-id %s --protocol tcp --port 22 --cidr %s/32`", group, myip)
 			return errors.New("instance not accessible")
 		}
 	}
