@@ -4,12 +4,14 @@ import (
 	"context"
 	"fmt"
 	"io"
+	"os"
 	"sort"
 	"time"
 
 	awssdk "github.com/aws/aws-sdk-go-v2/aws"
 	"github.com/aws/aws-sdk-go-v2/service/autoscaling"
 	autoscalingtypes "github.com/aws/aws-sdk-go-v2/service/autoscaling/types"
+	awsfetch "github.com/theazz/awless-ro/aws/fetch"
 	"github.com/theazz/awless-ro/aws/services"
 )
 
@@ -18,10 +20,15 @@ type scalingActivitiesTailer struct {
 	pollingFrequency time.Duration
 	lastEventTime    time.Time
 	nbEvents         int
+	// notice receives what is said about the output rather than the output itself,
+	// so that stdout stays the events alone.
+	notice io.Writer
+	// api is the autoscaling client; nil means the one set up for the session.
+	api awsfetch.AutoscalingAPI
 }
 
 func NewScalingActivitiesTailer(nbEvents int, follow bool, frequency time.Duration) *scalingActivitiesTailer {
-	return &scalingActivitiesTailer{nbEvents: nbEvents, follow: follow, pollingFrequency: frequency}
+	return &scalingActivitiesTailer{nbEvents: nbEvents, follow: follow, pollingFrequency: frequency, notice: os.Stderr}
 }
 
 func (t *scalingActivitiesTailer) Name() string {
@@ -29,30 +36,44 @@ func (t *scalingActivitiesTailer) Name() string {
 }
 
 func (t *scalingActivitiesTailer) Tail(w io.Writer) error {
-	infra, ok := awsservices.InfraService.(*awsservices.Infra)
-	if !ok {
-		return fmt.Errorf("invalid cloud service, expected awsservices.Infra, got %T", awsservices.InfraService)
+	api := t.api
+	if api == nil {
+		infra, ok := awsservices.InfraService.(*awsservices.Infra)
+		if !ok {
+			return fmt.Errorf("invalid cloud service, expected awsservices.Infra, got %T", awsservices.InfraService)
+		}
+		api = infra.AutoscalingAPI
 	}
-	if err := t.displayLastEvents(infra, w); err != nil {
+	if t.follow && t.pollingFrequency < 5*time.Second {
+		return fmt.Errorf("invalid polling frequency: %s, must be at least 5s", t.pollingFrequency)
+	}
+
+	if err := t.displayLastEvents(api, w); err != nil {
 		return err
 	}
 
+	// No activity printed nothing and exited 0, which reads the same as a command
+	// that silently failed. Autoscaling keeps six weeks of history, so an empty answer
+	// is common in a quiet account and worth saying.
 	if t.lastEventTime.IsZero() {
-		return nil
+		fmt.Fprintln(t.notice, "no scaling activities in the last six weeks (the history autoscaling keeps)")
+		if !t.follow {
+			return nil
+		}
+		// --follow used to return here, so waiting for the first scaling event —
+		// the case it is most wanted for — ended immediately. Start from now
+		// instead: anything newer is new.
+		t.lastEventTime = time.Now()
 	}
 
 	if !t.follow {
 		return nil
 	}
 
-	if t.pollingFrequency < 5*time.Second {
-		return fmt.Errorf("invalid polling frequency: %s", t.pollingFrequency)
-	}
-
 	ticker := time.NewTicker(t.pollingFrequency)
 	defer ticker.Stop()
 	for range ticker.C {
-		if err := t.displayNewEvents(infra, w); err != nil {
+		if err := t.displayNewEvents(api, w); err != nil {
 			return err
 		}
 	}
@@ -60,8 +81,8 @@ func (t *scalingActivitiesTailer) Tail(w io.Writer) error {
 
 }
 
-func (t *scalingActivitiesTailer) displayLastEvents(infra *awsservices.Infra, w io.Writer) error {
-	out, err := infra.AutoscalingAPI.DescribeScalingActivities(context.Background(), &autoscaling.DescribeScalingActivitiesInput{MaxRecords: awssdk.Int32(int32(t.nbEvents))})
+func (t *scalingActivitiesTailer) displayLastEvents(api awsfetch.AutoscalingAPI, w io.Writer) error {
+	out, err := api.DescribeScalingActivities(context.Background(), &autoscaling.DescribeScalingActivitiesInput{MaxRecords: awssdk.Int32(int32(t.nbEvents))})
 	if err != nil {
 		return err
 	}
@@ -82,12 +103,12 @@ func (t *scalingActivitiesTailer) displayLastEvents(infra *awsservices.Infra, w 
 	return nil
 }
 
-func (t *scalingActivitiesTailer) displayNewEvents(infra *awsservices.Infra, w io.Writer) error {
+func (t *scalingActivitiesTailer) displayNewEvents(api awsfetch.AutoscalingAPI, w io.Writer) error {
 	var eventFound bool
 	var newEvents []*event
 	lastEventTime := t.lastEventTime
 	ctx := context.Background()
-	paginator := autoscaling.NewDescribeScalingActivitiesPaginator(infra.AutoscalingAPI,
+	paginator := autoscaling.NewDescribeScalingActivitiesPaginator(api,
 		&autoscaling.DescribeScalingActivitiesInput{})
 	for paginator.HasMorePages() && !eventFound {
 		page, err := paginator.NextPage(ctx)

@@ -21,6 +21,7 @@ import (
 	"encoding/json"
 	"fmt"
 	"io"
+	"math"
 	"os"
 	"reflect"
 	"sort"
@@ -33,11 +34,6 @@ import (
 	"github.com/theazz/awless-ro/cloud/match"
 	"github.com/theazz/awless-ro/cloud/rdf"
 	"github.com/theazz/awless-ro/graph"
-)
-
-var (
-	tableColWidth   = 30
-	autowrapMaxSize = 35
 )
 
 type Displayer interface {
@@ -74,13 +70,15 @@ func (b *Builder) SetSource(i interface{}) *Builder {
 func (b *Builder) buildQuery() (cloud.Query, error) {
 	var matchers []cloud.Matcher
 	for _, f := range b.filters {
-		splits := strings.SplitN(f, "=", 2)
-		if len(splits) == 2 {
-			name, val := strings.TrimSpace(strings.Title(splits[0])), strings.TrimSpace(splits[1])
+		// match.ParseFilter tells `key=value` (substring) from `key==value`
+		// (whole value) apart. Splitting on the first "=" here instead would
+		// read `state==Active` as the value "=Active".
+		if parsed, ok := match.ParseFilter(f); ok {
+			name, val := strings.TrimSpace(strings.Title(parsed.Key)), strings.TrimSpace(parsed.Value)
 			key := ColumnDefinitions(b.columnDefinitions).resolveKey(name)
 
 			if key != "" {
-				matchers = append(matchers, match.Property(key, val).IgnoreCase().MatchString().Contains())
+				matchers = append(matchers, match.PropertyFilter(key, val, parsed.Exact))
 			} else {
 				var allowed []string
 				for _, h := range b.columnDefinitions {
@@ -556,59 +554,50 @@ func (d *tableDisplayer) Print(w io.Writer) error {
 		markColumnAsc = d.sorter.columns()[0]
 	}
 
-	columnsToDisplay := d.columnDefinitions
-	maxWidthNoWraping := 1
-	if d.maxwidth != 0 {
-		columnsToDisplay = []ColumnDefinition{}
-		currentWidth := 1 // first border
-		for j, h := range d.columnDefinitions {
-			var symbol string
-			if markColumnAsc == j {
-				symbol = d.sorter.symbol()
-			}
-			colW := colWidth(j, values, h, symbol) + 3 // +3 (tables margin + border)
-			if currentWidth+colW > d.maxwidth {
-				break
-			}
-			currentWidth += colW
-			maxWidthNoWraping += colWidthNoWraping(j, values, h, symbol) + 3
-			columnsToDisplay = append(columnsToDisplay, h)
+	// Every cell is formatted once, measured, and only then laid out: the widths
+	// depend on the content and on d.maxwidth alone (<= 0: no limit).
+	headers := make([]string, len(d.columnDefinitions))
+	natural := make([]int, len(d.columnDefinitions))
+	for j, h := range d.columnDefinitions {
+		var symbol string
+		if markColumnAsc == j {
+			symbol = d.sorter.symbol()
+		}
+		headers[j] = h.title(symbol)
+		if !d.noHeaders {
+			natural[j] = cellWidth(headers[j])
 		}
 	}
+	cells := make([][]string, len(values))
+	for i := range values {
+		cells[i] = make([]string, len(d.columnDefinitions))
+		for j, h := range d.columnDefinitions {
+			cells[i][j] = h.format(values[i][j])
+			natural[j] = max(natural[j], cellWidth(cells[i][j]))
+		}
+	}
+
+	widths := columnWidths(natural, d.maxwidth, true)
+	columnsToDisplay := d.columnDefinitions[:len(widths)]
 
 	table := tablewriter.NewWriter(w)
 	table.SetBorders(tablewriter.Border{Left: true, Top: false, Right: true, Bottom: false})
 	table.SetCenterSeparator("|")
 	table.SetAlignment(tablewriter.ALIGN_LEFT)
-	table.SetColWidth(tableColWidth)
+	// All wrapping is wrapCell's; tablewriter's own would rewrap at its default width.
+	table.SetAutoWrapText(false)
 	if !d.noHeaders {
-		var displayHeaders []string
-		for i, h := range columnsToDisplay {
-			var symbol string
-			if markColumnAsc == i {
-				symbol = d.sorter.symbol()
-			}
-			displayHeaders = append(displayHeaders, h.title(symbol))
+		displayHeaders := make([]string, len(widths))
+		for j := range widths {
+			displayHeaders[j] = wrapCell(headers[j], widths[j])
 		}
 		table.SetHeader(displayHeaders)
 	}
 
-	var enableWraping bool
-	if d.maxwidth <= maxWidthNoWraping {
-		enableWraping = true
-	}
-
-	wraper := autoWraper{maxWidth: autowrapMaxSize, wrappingChar: " "}
-	for i := range values {
-		var props []string
-		for j, h := range columnsToDisplay {
-			val := h.format(values[i][j])
-			if enableWraping {
-				props = append(props, wraper.Wrap(val))
-			} else {
-				props = append(props, val)
-			}
-
+	for i := range cells {
+		props := make([]string, len(widths))
+		for j := range widths {
+			props[j] = wrapCell(cells[i][j], widths[j])
 		}
 		table.Append(props)
 	}
@@ -726,20 +715,36 @@ func (d *multiResourcesTableDisplayer) Print(w io.Writer) error {
 	ds := defaultSorter{sortBy: []int{0, 1, 2, 3}}
 	ds.sort(values)
 
+	headers := []string{"Type" + ds.symbol(), "Name/Id", "Property", "Value"}
+	natural := make([]int, len(headers))
+	for j, h := range headers {
+		natural[j] = cellWidth(h)
+	}
+	rows := make([][]string, len(values))
+	for i := range values {
+		rows[i] = make([]string, len(values[i]))
+		for j := range values[i] {
+			rows[i][j] = fmt.Sprint(values[i][j])
+			natural[j] = max(natural[j], cellWidth(rows[i][j]))
+		}
+	}
+	// Every column is needed to read a row, so none is dropped.
+	widths := columnWidths(natural, d.maxwidth, false)
+
 	table := tablewriter.NewWriter(w)
 	table.SetAutoMergeCells(true)
 	table.SetAlignment(tablewriter.ALIGN_LEFT)
-	table.SetColWidth(tableColWidth)
+	table.SetAutoWrapText(false)
 	table.SetBorders(tablewriter.Border{Left: true, Top: false, Right: true, Bottom: false})
 	table.SetCenterSeparator("|")
-	table.SetHeader([]string{"Type" + ds.symbol(), "Name/Id", "Property", "Value"})
+	for j := range headers {
+		headers[j] = wrapCell(headers[j], widths[j])
+	}
+	table.SetHeader(headers)
 
-	wraper := autoWraper{maxWidth: autowrapMaxSize, wrappingChar: " "}
-
-	for i := range values {
-		row := make([]string, len(values[i]))
-		for j := range values[i] {
-			row[j] = wraper.Wrap(fmt.Sprint(values[i][j]))
+	for _, row := range rows {
+		for j := range row {
+			row[j] = wrapCell(row[j], widths[j])
 		}
 		table.Append(row)
 	}
@@ -984,6 +989,11 @@ func (d *defaultSorter) symbol() string {
 	return " ▲"
 }
 
+// valueLowerOrEqual reports whether a sorts at or before b. defaultSorter.sort
+// skips reflect.DeepEqual pairs before calling it, so on the pairs it does see
+// the result must be a strict weak ordering: never true in both directions, and
+// transitive. --reverse swaps the operands rather than negating the result, so
+// the same holds descending.
 func valueLowerOrEqual(a, b interface{}) bool {
 	if a == nil && b == nil {
 		return true
@@ -999,7 +1009,11 @@ func valueLowerOrEqual(a, b interface{}) bool {
 		return false
 	}
 	if reflect.TypeOf(a) != reflect.TypeOf(b) {
-		panic(fmt.Sprintf("can not compare values of type %T and %T", a, b))
+		// Mismatched types for the same column should not happen, but this is a
+		// read-only inspection CLI: fall back to a strict order instead of
+		// panicking on data we don't control. a and b are of different types,
+		// so they are never equal here.
+		return fallbackLess(a, b)
 	}
 	switch a.(type) {
 	case int:
@@ -1009,6 +1023,12 @@ func valueLowerOrEqual(a, b interface{}) bool {
 	case float64:
 		aa := a.(float64)
 		bb := b.(float64)
+		if math.IsNaN(aa) || math.IsNaN(bb) {
+			// NaN compares false against everything, which would make it
+			// equivalent to both 1 and 2 while 1 < 2. Sort NaN first instead,
+			// and never report one NaN lower than another.
+			return math.IsNaN(aa) && !math.IsNaN(bb)
+		}
 		return aa <= bb
 	case string:
 		aa := a.(string)
@@ -1018,11 +1038,67 @@ func valueLowerOrEqual(a, b interface{}) bool {
 		aa := a.(time.Time)
 		bb := b.(time.Time)
 		return aa.After(bb)
-	case []string, []int:
-		return fmt.Sprint(a) <= fmt.Sprint(b)
+	case bool:
+		aa := a.(bool)
+		bb := b.(bool)
+		// false before true, so unchecked/disabled rows sort ahead of checked/enabled ones.
+		return !aa || bb
 	default:
-		panic(fmt.Sprintf("can not compare values of type %T", a))
+		// []string and []int land here, and so does any type this switch
+		// doesn't know about: a read-only inspection CLI should not abort on a
+		// column it cannot order naturally. Equal values keep the "or equal"
+		// answer; distinct ones get the strict fallback order.
+		return reflect.DeepEqual(a, b) || fallbackLess(a, b)
 	}
+}
+
+// fallbackLess is a strict weak ordering over values the natural orders in
+// valueLowerOrEqual do not cover. It compares, in turn:
+//
+//  1. the type key, so values of different types never interleave. Printed
+//     forms disagree with the natural orders ("10" < "2" as text, 10 > 2 as
+//     numbers), and mixing the two would allow 9 < 10 < "2" < 9. It also keeps
+//     int(1) and string("1") apart although both print as "1";
+//  2. the printed form, which is what the user sees in the column;
+//  3. the Go-syntax form, which tells apart values that print identically:
+//     []string{"a b"} and []string{"a", "b"} both print as [a b],
+//     []string(nil) and []string{} both print as [], and two distinct types
+//     sharing a type key (see typeOrderKey) may print the same value.
+//
+// Each step is a strict comparison of strings and the steps are applied
+// lexicographically, so the result is never true in both directions and is
+// transitive. Values identical on all three keys compare as neither lower,
+// i.e. as equivalent. Pointer, func and chan values print as addresses, so
+// their relative order is consistent within a run but not across runs; no
+// graph literal has such a type.
+func fallbackLess(a, b interface{}) bool {
+	if aKey, bKey := typeOrderKey(a), typeOrderKey(b); aKey != bKey {
+		return aKey < bKey
+	}
+	if aStr, bStr := fmt.Sprint(a), fmt.Sprint(b); aStr != bStr {
+		return aStr < bStr
+	}
+	return fmt.Sprintf("%#v", a) < fmt.Sprintf("%#v", b)
+}
+
+// typeOrderKey identifies the dynamic type of v for ordering purposes: package
+// path and name for a named type, the structural rendering for an unnamed one
+// such as []string. It comes from the program's types, never from map iteration
+// or input order. It is not unique: a type declared inside a function shares
+// its package path and name with any same-named local type of that package,
+// and unnamed types render package names rather than paths. fallbackLess breaks
+// such ties on the values. The types valueLowerOrEqual orders naturally (int,
+// float64, string, bool, time.Time) have keys no other type can produce, so a
+// tie never mixes a natural order with the fallback one.
+func typeOrderKey(v interface{}) string {
+	t := reflect.TypeOf(v)
+	if t == nil {
+		return ""
+	}
+	if pkg := t.PkgPath(); pkg != "" {
+		return pkg + "." + t.Name()
+	}
+	return t.String()
 }
 
 func resolveSortIndexes(headers []ColumnDefinition, sortingBy ...string) ([]int, error) {
@@ -1046,49 +1122,6 @@ func resolveSortIndexes(headers []ColumnDefinition, sortingBy ...string) ([]int,
 	}
 
 	return ids, nil
-}
-
-func colWidth(j int, t table, h ColumnDefinition, sortSymbol string) int {
-	max := tablewriter.DisplayWidth(h.title(sortSymbol))
-	wraper := autoWraper{maxWidth: autowrapMaxSize, wrappingChar: " "}
-	for i := range t {
-		val := wraper.Wrap(h.format(t[i][j]))
-		valLen := tablewriter.DisplayWidth(val)
-		if valLen > tableColWidth {
-			if tableColWidth > max {
-				max = tableColWidth
-			}
-		}
-		lines, _ := tablewriter.WrapString(val, tableColWidth)
-		for _, line := range lines {
-			width := tablewriter.DisplayWidth(line)
-			if width > max {
-				max = width
-			}
-		}
-	}
-	return max
-}
-
-func colWidthNoWraping(j int, t table, h ColumnDefinition, sortSymbol string) int {
-	max := tablewriter.DisplayWidth(h.title(sortSymbol))
-	for i := range t {
-		val := h.format(t[i][j])
-		valLen := tablewriter.DisplayWidth(val)
-		if valLen > tableColWidth {
-			if tableColWidth > max {
-				max = tableColWidth
-			}
-		}
-		lines, _ := tablewriter.WrapString(val, tableColWidth)
-		for _, line := range lines {
-			width := tablewriter.DisplayWidth(line)
-			if width > max {
-				max = width
-			}
-		}
-	}
-	return max
 }
 
 func nameOrID(res cloud.Resource) string {

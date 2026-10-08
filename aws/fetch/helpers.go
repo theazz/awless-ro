@@ -3,6 +3,8 @@ package awsfetch
 import (
 	"context"
 	"strings"
+
+	"github.com/theazz/awless-ro/cloud/match"
 )
 
 func getBoolFromContext(ctx context.Context, key string) bool {
@@ -15,8 +17,13 @@ func getUserFiltersFromContext(ctx context.Context) map[string]string {
 	arr, ok := ctx.Value("filters").([]string)
 	if ok {
 		for _, keyval := range arr {
-			if splits := strings.SplitN(keyval, "=", 2); len(splits) == 2 {
-				out[strings.ToLower(splits[0])] = splits[1]
+			// The same grammar the displayer uses, so the exact form narrows
+			// server-side on the value rather than on a leading "=". The
+			// fetchers reading this map narrow by prefix or substring, which
+			// stays a superset of the exact predicate the displayer then
+			// applies.
+			if f, ok := match.ParseFilter(keyval); ok {
+				out[strings.ToLower(f.Key)] = f.Value
 			}
 		}
 	}

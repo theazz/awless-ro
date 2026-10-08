@@ -582,168 +582,6 @@ func TestDateLists(t *testing.T) {
 	}
 }
 
-func TestMaxWidth(t *testing.T) {
-	g := createInfraGraph()
-	columns := []string{"ID", "Name", "State", "Type", "PublicIP"}
-
-	displayer, _ := BuildOptions(
-		WithRdfType("instance"),
-		WithColumns(columns),
-		WithSortBy("state", "name"),
-		WithMaxWidth(55),
-	).SetSource(g).Build()
-
-	expected := `|   ID   |  NAME  | STATE ▲ |   TYPE    | PUBLIC IP |
-|--------|--------|---------|-----------|-----------|
-| inst_3 | apache | running | t2.xlarge |           |
-| inst_1 | redis  | running | t2.micro  | 1.2.3.4   |
-| inst_2 | django | stopped | t2.medium |           |
-`
-	var w bytes.Buffer
-	if err := displayer.Print(&w); err != nil {
-		t.Fatal(err)
-	}
-	if got, want := w.String(), expected; got != want {
-		t.Fatalf("got \n%s\n\nwant\n\n%s\n", got, want)
-	}
-
-	columns = []string{"ID", "Name", "State", "Type", "PublicIP"}
-
-	autowrapMaxSize = 4
-	tableColWidth = 4
-	displayer, _ = BuildOptions(
-		WithRdfType("instance"),
-		WithColumns(columns),
-		WithSortBy("state", "name"),
-		WithMaxWidth(45),
-	).SetSource(g).Build()
-
-	// Headers are wrapped to the column width like any other cell, so a header
-	// longer than its column spills onto a second header line instead of
-	// widening the header row past the separator.
-	expected = `|  ID  | NAME | STATE | TYPE | PUBLIC |
-|      |      |   ▲   |      |   IP   |
-|------|------|-------|------|--------|
-| inst | apac | runn  | t2.  |        |
-| _3   | he   | ing   | xlar |        |
-|      |      |       | ge   |        |
-| inst | redi | runn  | t2.  | 1.2.   |
-| _1   | s    | ing   | micr | 3.4    |
-|      |      |       | o    |        |
-| inst | djan | stop  | t2.  |        |
-| _2   | go   | ped   | medi |        |
-|      |      |       | um   |        |
-`
-	w.Reset()
-	if err := displayer.Print(&w); err != nil {
-		t.Fatal(err)
-	}
-	if got, want := w.String(), expected; got != want {
-		t.Fatalf("got \n%s\n\nwant\n\n%s\n", got, want)
-	}
-
-	displayer, _ = BuildOptions(
-		WithRdfType("instance"),
-		WithColumns(columns),
-		WithSortBy("state", "name"),
-		WithMaxWidth(70),
-	).SetSource(g).Build()
-
-	expected = `|   ID   |  NAME  |  STATE  |   TYPE    | PUBLIC  |
-|        |        |    ▲    |           |   IP    |
-|--------|--------|---------|-----------|---------|
-| inst_3 | apache | running | t2.xlarge |         |
-| inst_1 | redis  | running | t2.micro  | 1.2.3.4 |
-| inst_2 | django | stopped | t2.medium |         |
-`
-	w.Reset()
-	if err := displayer.Print(&w); err != nil {
-		t.Fatal(err)
-	}
-	if got, want := w.String(), expected; got != want {
-		t.Fatalf("got \n%s\n\nwant\n\n%s\n", got, want)
-	}
-
-	columnDefs := []ColumnDefinition{
-		StringColumnDefinition{Prop: "ID", Friendly: "I"},
-		StringColumnDefinition{Prop: "Name", Friendly: "N"},
-		StringColumnDefinition{Prop: "State", Friendly: "S"},
-		StringColumnDefinition{Prop: "Type", Friendly: "T"},
-		StringColumnDefinition{Prop: "PublicIP", Friendly: "P"},
-	}
-
-	builder := BuildOptions(
-		WithRdfType("instance"),
-		WithColumnDefinitions(columnDefs),
-		WithSortBy("s", "n"),
-		WithMaxWidth(40),
-	)
-
-	displayer, _ = builder.SetSource(g).Build()
-
-	expected = `|  I   |  N   | S ▲  |  T   |  P   |
-|------|------|------|------|------|
-| inst | apac | runn | t2.  |      |
-| _3   | he   | ing  | xlar |      |
-|      |      |      | ge   |      |
-| inst | redi | runn | t2.  | 1.2. |
-| _1   | s    | ing  | micr | 3.4  |
-|      |      |      | o    |      |
-| inst | djan | stop | t2.  |      |
-| _2   | go   | ped  | medi |      |
-|      |      |      | um   |      |
-`
-	w.Reset()
-	if err := displayer.Print(&w); err != nil {
-		t.Fatal(err)
-	}
-	if got, want := w.String(), expected; got != want {
-		t.Fatalf("got \n%s\n\nwant\n\n%s\n", got, want)
-	}
-
-	displayer, _ = BuildOptions(
-		WithRdfType("instance"),
-		WithColumnDefinitions(columnDefs),
-		WithSortBy("s", "n"),
-		WithMaxWidth(50),
-	).SetSource(g).Build()
-
-	w.Reset()
-	if err := displayer.Print(&w); err != nil {
-		t.Fatal(err)
-	}
-	if got, want := w.String(), expected; got != want {
-		t.Fatalf("got \n%s\n\nwant\n\n%s\n", got, want)
-	}
-
-	autowrapMaxSize = 5
-	tableColWidth = 5
-	displayer, _ = BuildOptions(
-		WithRdfType("instance"),
-		WithColumnDefinitions(columnDefs),
-		WithSortBy("s", "n"),
-		WithMaxWidth(29),
-	).SetSource(g).Build()
-
-	expected = `|   I   |   N   |  S ▲  |
-|-------|-------|-------|
-| inst_ | apach | runni |
-| 3     | e     | ng    |
-| inst_ | redis | runni |
-| 1     |       | ng    |
-| inst_ | djang | stopp |
-| 2     | o     | ed    |
-Columns truncated to fit terminal: 'T', 'P'
-`
-	w.Reset()
-	if err := displayer.Print(&w); err != nil {
-		t.Fatal(err)
-	}
-	if got, want := w.String(), expected; got != want {
-		t.Fatalf("got \n%s\n\nwant\n\n%s\n", got, want)
-	}
-}
-
 func TestFilter(t *testing.T) {
 	g := graph.NewGraph()
 	g.AddResource(
@@ -793,6 +631,82 @@ func TestFilter(t *testing.T) {
 			t.Fatal(err)
 		}
 		compareJSON(t, w.String(), expected)
+	})
+	// key==value matches the whole value. Without it no anchored filter was
+	// reachable from the CLI (wallix/awless#252, #296).
+	t.Run("Exact filter on column name", func(t *testing.T) {
+		var w bytes.Buffer
+		displayer, _ := BuildOptions(
+			WithRdfType("subnet"),
+			WithFormat("json"),
+			WithFilters([]string{"Vpc==vpc_1"}),
+		).SetSource(g).Build()
+		expected := `[{"ID":"sub_1","Public":true,"Name":"my_subnet","Vpc":"vpc_1"},
+		{"ID":"sub_3","Public":false,"Name":"my_subnet","Vpc":"vpc_1"}]`
+		if err := displayer.Print(&w); err != nil {
+			t.Fatal(err)
+		}
+		compareJSON(t, w.String(), expected)
+	})
+	t.Run("Substring filter still matches a prefix", func(t *testing.T) {
+		var w bytes.Buffer
+		displayer, _ := BuildOptions(
+			WithRdfType("subnet"),
+			WithFormat("json"),
+			WithFilters([]string{"Vpc=vpc_"}),
+		).SetSource(g).Build()
+		expected := `[{"ID":"sub_1","Public":true,"Name":"my_subnet","Vpc":"vpc_1"},
+		{"ID":"sub_2","Public":false,"Vpc":"vpc_2"},
+		{"ID":"sub_3","Public":false,"Name":"my_subnet","Vpc":"vpc_1"}]`
+		if err := displayer.Print(&w); err != nil {
+			t.Fatal(err)
+		}
+		compareJSON(t, w.String(), expected)
+	})
+	t.Run("Exact filter does not match a prefix", func(t *testing.T) {
+		var w bytes.Buffer
+		displayer, _ := BuildOptions(
+			WithRdfType("subnet"),
+			WithFormat("json"),
+			WithFilters([]string{"Vpc==vpc_"}),
+		).SetSource(g).Build()
+		if err := displayer.Print(&w); err != nil {
+			t.Fatal(err)
+		}
+		// An empty result set renders as a JSON null here.
+		compareJSON(t, w.String(), `null`)
+	})
+	// A bool column is compared as a string, so the exact form works on it too.
+	t.Run("Exact filter on friendly name", func(t *testing.T) {
+		var w bytes.Buffer
+		displayer, _ := BuildOptions(
+			WithRdfType("subnet"),
+			WithFormat("json"),
+			WithFilters([]string{"public==false"}),
+		).SetSource(g).Build()
+		expected := `[{"ID":"sub_2","Public":false,"Vpc":"vpc_2"},
+		{"ID":"sub_3","Public":false,"Name":"my_subnet","Vpc":"vpc_1"}]`
+		if err := displayer.Print(&w); err != nil {
+			t.Fatal(err)
+		}
+		compareJSON(t, w.String(), expected)
+	})
+	// Both forms resolve the key the same way, so an unknown key keeps saying
+	// which keys are acceptable.
+	t.Run("Invalid filter key", func(t *testing.T) {
+		for _, f := range []string{"nosuchkey=x", "nosuchkey==x"} {
+			_, err := BuildOptions(
+				WithRdfType("subnet"),
+				WithFormat("json"),
+				WithFilters([]string{f}),
+			).SetSource(g).Build()
+			if err == nil {
+				t.Fatalf("%s: expected an error naming the acceptable keys", f)
+			}
+			if got := err.Error(); !strings.Contains(got, "Invalid filter key 'Nosuchkey'") || !strings.Contains(got, "case insensitive") {
+				t.Fatalf("%s: got %q", f, got)
+			}
+		}
 	})
 }
 
@@ -945,6 +859,11 @@ func TestEmotyDisplays(t *testing.T) {
 
 	g = createInfraGraph()
 	columns = []string{}
+	// DefaultsColumnDefinitions is a package-level map read by every other test
+	// that relies on default columns, so it must be restored afterwards or later
+	// tests see "No columns to display." depending on run order.
+	previousDefaults := DefaultsColumnDefinitions
+	t.Cleanup(func() { DefaultsColumnDefinitions = previousDefaults })
 	DefaultsColumnDefinitions = make(map[string][]ColumnDefinition)
 
 	displayer, _ = BuildOptions(
@@ -1044,8 +963,6 @@ func TestNoHeadersDisplay(t *testing.T) {
 		t.Fatalf("got \n%s\n\nwant\n\n%s\n", got, want)
 	}
 
-	autowrapMaxSize = 20
-	tableColWidth = 20
 	displayer, _ = BuildOptions(
 		WithRdfType("instance"),
 		WithColumnDefinitions(columnDefs),

@@ -7,12 +7,7 @@ you can pipe. Optionally, a local copy of the account to explore offline.
 It cannot change anything. Not by convention: every AWS operation it is capable of
 calling is a `Describe`, `Get`, `List` or `Head`, and a test enforces that.
 
-```sh
-awless-ro list instances
-awless-ro show my-database
-awless-ro list volumes --filter state=available --format csv
-awless-ro search images canonical --latest-id
-```
+![awless-ro listing instances and databases, showing a database and an instance with their relations, completing a name with Tab, and scanning security groups](docs/demo.gif)
 
 ## Why this exists
 
@@ -44,43 +39,28 @@ nervous about — and the guarantee does not depend on how carefully you typed.
 
 ## What it is good for
 
-Nothing to set up beyond the AWS profile you already have, and no step to run first:
-`list`, `search`, `whoami` and `tail` ask AWS directly, and `show` and `inspect`
-fetch what they need on their own. Keeping a local copy with `sync` is optional: it
-is there for working offline, not a prerequisite.
+Looking up what is in an AWS account from the terminal, instead of clicking through
+the console: what runs where, how it is configured, and what it is connected to. It
+uses the AWS profiles you already have.
+
+It works in two ways:
+
+- **Straight from the AWS API.** `list`, `search`, `whoami` and `tail` ask AWS each
+  time, so the answer is current.
+- **From a synced local copy.** `show` and `inspect` work on a graph of the account,
+  which is where the extra information comes from: which subnet and VPC an instance
+  is in, what a security group applies to, what depends on what. They refresh the copy
+  themselves before answering; `awless-ro sync` fetches the whole account at once.
+
+`list`, `show` and `inspect` also take `--local`: they then answer from the local copy
+as it is, without calling AWS — instantly, and offline.
 
 **"What is running here, and since when?"** A table you can read, sorted and filtered,
 instead of a page of `describe-instances` JSON.
 
-```
-$ awless-ro list instances
-|        ID ▲         |    ZONE    |     NAME      |  STATE  |    TYPE    |  PUBLIC IP   | PRIVATE IP |  UPTIME  | KEYPAIR |
-|---------------------|------------|---------------|---------|------------|--------------|------------|----------|---------|
-| i-0a1b2c3d4e5f60718 | eu-west-1a | web-1         | running | t3.medium  | 34.245.17.89 | 10.0.1.21  | 5 weeks  | deploy  |
-| i-0b2c3d4e5f6071829 | eu-west-1b | web-2         | running | t3.medium  | 52.18.203.4  | 10.0.2.37  | 5 weeks  | deploy  |
-| i-0c3d4e5f607182930 | eu-west-1a | api-1         | running | m7g.large  |              | 10.0.11.8  | 9 days   | deploy  |
-| i-0d4e5f60718293a41 | eu-west-1b | worker-spot-1 | running | c7g.xlarge |              | 10.0.12.54 | 3 hours  |         |
-| i-0e5f60718293a4b52 | eu-west-1c | worker-spot-2 | running | c7g.xlarge |              | 10.0.13.19 | 50 mins  |         |
-| i-0f60718293a4b5c63 | eu-west-1a | bastion       | stopped | t3.micro   |              | 10.0.0.5   | 7 months | admin   |
-```
-
-Pick your own columns — any property an instance carries, not only the defaults. Here,
-which ones are spot (an empty `LIFECYCLE` is on-demand):
-
-```
-$ awless-ro list instances --columns name,state,type,lifecycle,uptime
-|    NAME ▲     |  STATE  |    TYPE    | LIFECYCLE |  UPTIME  |
-|---------------|---------|------------|-----------|----------|
-| api-1         | running | m7g.large  |           | 9 days   |
-| bastion       | stopped | t3.micro   |           | 7 months |
-| web-1         | running | t3.medium  |           | 5 weeks  |
-| web-2         | running | t3.medium  |           | 5 weeks  |
-| worker-spot-1 | running | c7g.xlarge | spot      | 3 hours  |
-| worker-spot-2 | running | c7g.xlarge | spot      | 50 mins  |
-```
-
 ```sh
 awless-ro list instances --sort uptime
+awless-ro list instances --columns name,state,type,lifecycle,uptime   # which are spot
 awless-ro list instances --filter state=running --filter type=t3
 awless-ro list instances --tag Env=Production,Team=Payments
 awless-ro list databases -r eu-west-1
@@ -108,9 +88,8 @@ awless-ro list accesskeys --sort created
 awless-ro list elasticips
 ```
 
-**"What is exposed?"** Every security group with the ports it opens, to which
-addresses, and what it is attached to; buckets readable by anyone, or by anyone with
-an AWS account.
+**"What is exposed?"** Every security group with the ports it opens and what it is
+attached to; buckets readable by anyone, or by anyone with an AWS account.
 
 ```sh
 awless-ro inspect -i port_scanner
@@ -262,7 +241,9 @@ go build -o awless-ro .
 
 Requires Go 1.26. No configuration needed if you already use the AWS CLI: existing
 `~/.aws/{credentials,config}` profiles are picked up, and anything missing is
-prompted for on first run.
+prompted for on first run. With no profile chosen, credentials in
+`AWS_ACCESS_KEY_ID` and `AWS_SECRET_ACCESS_KEY` are used, as are container and
+instance roles — the AWS SDK's own order — so nothing needs configuring in CI.
 
 State lives in `~/.awless-ro` — deliberately not `~/.awless`, so an installed
 upstream `awless` and this tool cannot overwrite each other's graph, database or
@@ -311,11 +292,49 @@ awless-ro list volumes --tag-key Dept --format tsv
 awless-ro list users --format json
 ```
 
-`--filter` matches any column, case-insensitively, by substring; `--tag`,
-`--tag-key` and `--tag-value` match tags. `--columns` reaches any property a resource
-carries, not only the default columns. `--format` covers `table`, `csv`, `tsv`,
+`--filter` matches any column, case-insensitively, in one of two forms:
+
+| Form | Matches | Example |
+|---|---|---|
+| `key=value` | any column containing the value | `--filter type=t3` finds `t3.micro` and `t3.large` |
+| `key==value` | the whole column value | `--filter state==Active` finds `Active` and not `Inactive` |
+
+The substring form cannot exclude a longer value that contains the one you asked
+for, which is what the exact form is for:
+
+```sh
+awless-ro list accesskeys --filter state==Active   # only the active keys
+awless-ro list accesskeys --filter state=active    # also the Inactive ones: "inactive" contains "active"
+```
+
+Both forms compare the value as it is stored rather than the cell as it is
+printed, so a date column is matched on its full timestamp and not on the `2
+days` the table shows.
+
+`--tag`, `--tag-key` and `--tag-value` match tags. `--columns` reaches any property a
+resource carries, not only the default columns. `--format` covers `table`, `csv`, `tsv`,
 `json` and `porcelain`; `--ids` prints one id per line and nothing else, for scripts.
 `-r` and `-p` override the region and profile for one command.
+
+Tables fit the terminal: long values wrap only as much as the width requires, and
+columns that still do not fit are dropped from the right, with a note saying which.
+When the output goes to a pipe or a file there is no width to fit, so tables are not
+wrapped at all: one row per line, values whole, as `ps` or `kubectl get` do.
+`--max-width N` sets the width explicitly, on a terminal or not, and `--max-width 0`
+turns the limit off; `show` takes it too. It has no effect on the other formats.
+
+`--tag`, `--tag-key` and `--tag-value` take several values separated by commas
+(`--tag Env=Production,Team=Payments`), so a value that itself contains a comma is
+quoted twice: double quotes for awless-ro, single quotes around them for the shell
+(bash, zsh and fish alike).
+
+```sh
+awless-ro list instances --tag '"Environment=Not, tagged"'
+awless-ro list instances --tag-value '"Not, tagged"'
+```
+
+Without them, `--tag 'Environment=Not, tagged'` is read as two tags and refused, and
+a backslash does not escape the comma.
 
 **`show`** — one resource by id, by name, or by `@name`, with its relations. Names
 are not unique in AWS, so an ambiguous one lists the candidates.
@@ -361,7 +380,7 @@ awless-ro switch my-profile eu-west-1
 ### Offline mode (optional)
 
 `awless-ro sync` fetches every supported service in parallel and stores the result
-as a local graph under `~/.awless-ro`. After that, any command with `--local` answers
+as a local graph under `~/.awless-ro`. After that, `list`, `show` and `inspect` with `--local` answer
 from that copy without calling AWS. A service you lack permission for is reported
 and skipped; the rest still land.
 

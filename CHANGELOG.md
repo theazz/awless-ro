@@ -1,5 +1,35 @@
 # Changelog
 
+## v0.2.3
+
+### Fixed
+
+- Credentials exported in `AWS_ACCESS_KEY_ID` / `AWS_SECRET_ACCESS_KEY` are used when
+  `~/.aws` is absent (CI, containers); they were ignored since v0.1.0. (#32)
+- A first run with `--aws-profile` takes the region from the profile instead of
+  prompting for one. (#32)
+
+## v0.2.2
+
+### Fixed
+
+- **`tail` is listed in `--help` and offered by completion.** It had been hidden since
+  it first appeared upstream, as an experiment, though it works and the README
+  documents it. Its help now says what it does, with examples.
+- **`tail scaling-activities` with no activity said nothing and exited 0**, which reads
+  the same as a silent failure. It now says there were no scaling activities in the
+  last six weeks (as long as autoscaling keeps history), on stderr so stdout stays the
+  events alone. (Inherited.)
+- **`tail scaling-activities --follow` returned at once when there was no activity
+  yet** — exactly when one wants to wait for the first. It now polls from that moment
+  on. An invalid `--frequency` is refused before any AWS call. (Inherited.)
+
+### Documentation
+
+- The README opens with a recorded demo, and says plainly what the tool is for and how
+  it gets its data: some commands ask the AWS API every time, `show` and `inspect` work
+  on a synced graph, and `--local` answers from that copy without calling AWS.
+
 ## v0.2.1
 
 ### Fixed

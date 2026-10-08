@@ -69,10 +69,6 @@ var syncCmd = &cobra.Command{
 				services = append(services, srv)
 			}
 		}
-		localGraphs := make(map[string]cloud.GraphAPI)
-		for _, service := range services {
-			localGraphs[service.Name()] = sync.LoadLocalGraphForService(service.Name(), config.GetAWSProfile(), config.GetAWSRegion())
-		}
 		logger.Infof("running sync for region '%s'", config.GetAWSRegion())
 
 		var syncErr error

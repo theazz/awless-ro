@@ -39,12 +39,22 @@ func NewGraphFromFiles(files ...string) (cloud.GraphAPI, error) {
 	g := NewGraph()
 
 	var readers []io.Reader
-	for _, f := range files {
-		if reader, err := os.Open(f); err != nil {
-			return g, err
-		} else {
-			readers = append(readers, reader)
+	var opened []*os.File
+	// Close every file we opened once decoding is done; the loader used to leak them.
+	defer func() {
+		for _, f := range opened {
+			f.Close()
 		}
+	}()
+	for _, f := range files {
+		reader, err := os.Open(f)
+		if err != nil {
+			// Wrap with %w so a caller can still tell "no such file" apart from a
+			// real read failure via errors.Is(err, fs.ErrNotExist).
+			return g, fmt.Errorf("opening %s: %w", f, err)
+		}
+		opened = append(opened, reader)
+		readers = append(readers, reader)
 	}
 
 	err := g.UnmarshalFromReaders(readers...)

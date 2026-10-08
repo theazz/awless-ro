@@ -47,6 +47,7 @@ func init() {
 	showCmd.Flags().BoolVar(&listAllSiblingsFlag, "siblings", false, "List all the resource's siblings")
 	showCmd.Flags().BoolVar(&noAliasFlag, "no-alias", false, "Disable the resolution of ID to alias")
 	showCmd.Flags().StringSliceVar(&showPropertiesValuesOnlyFlag, "values-for", []string{}, "Output values only for given properties keys")
+	showCmd.Flags().Var(&maxWidthFlag, "max-width", maxWidthUsage)
 }
 
 var showCmd = &cobra.Command{
@@ -157,7 +158,7 @@ func showResource(resource cloud.Resource, gph cloud.GraphAPI) {
 	displayer, err := console.BuildOptions(
 		console.WithColumnDefinitions(console.DefaultsColumnDefinitions[resource.Type()]),
 		console.WithFormat(listingFormat),
-		console.WithMaxWidth(console.GetTerminalWidth()),
+		console.WithMaxWidth(tableMaxWidth()),
 	).SetSource(resource).Build()
 	exitOn(err)
 
