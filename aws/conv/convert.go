@@ -694,6 +694,10 @@ var extractTagsFn = func(i interface{}) (interface{}, error) {
 		for _, t := range tags {
 			out = append(out, fmt.Sprintf("%s=%s", awssdk.ToString(t.Key), awssdk.ToString(t.Value)))
 		}
+	case []iamtypes.Tag:
+		for _, t := range tags {
+			out = append(out, fmt.Sprintf("%s=%s", awssdk.ToString(t.Key), awssdk.ToString(t.Value)))
+		}
 	default:
 		return nil, fmt.Errorf("extract tags: not a tag slice, but a %T", i)
 	}

@@ -385,6 +385,7 @@ var awsResourcesDef = map[string]map[string]*propertyTransform{
 		properties.Created:          {name: "CreateDate", transform: extractTimeFn},
 		properties.PasswordLastUsed: {name: "PasswordLastUsed", transform: extractTimeFn},
 		properties.InlinePolicies:   {name: "UserPolicyList", transform: extractStringSliceValues("PolicyName")},
+		properties.Tags:             {name: "Tags", transform: extractTagsFn},
 	},
 	cloud.Role: {
 		properties.Name:           {name: "RoleName", transform: extractValueFn},
@@ -393,7 +394,9 @@ var awsResourcesDef = map[string]map[string]*propertyTransform{
 		properties.Path:           {name: "Path", transform: extractValueFn},
 		properties.InlinePolicies: {name: "RolePolicyList", transform: extractStringSliceValues("PolicyName")},
 		properties.TrustPolicy:    {name: "AssumeRolePolicyDocument", transform: extractURLEncodedJson},
+		properties.Tags:           {name: "Tags", transform: extractTagsFn},
 	},
+	// No Tags: IAM groups cannot be tagged, and iamtypes.GroupDetail has no Tags field.
 	cloud.Group: {
 		properties.Name:           {name: "GroupName", transform: extractValueFn},
 		properties.Arn:            {name: "Arn", transform: extractValueFn},
@@ -401,6 +404,8 @@ var awsResourcesDef = map[string]map[string]*propertyTransform{
 		properties.Path:           {name: "Path", transform: extractValueFn},
 		properties.InlinePolicies: {name: "GroupPolicyList", transform: extractStringSliceValues("PolicyName")},
 	},
+	// No Tags: policies are built from iamtypes.ManagedPolicyDetail, which carries
+	// none; policy tags need their own API call.
 	cloud.Policy: {
 		properties.Name:        {name: "PolicyName", transform: extractValueFn},
 		properties.Arn:         {name: "Arn", transform: extractValueFn},
