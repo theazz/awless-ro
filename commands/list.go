@@ -76,6 +76,7 @@ func init() {
 	listCmd.PersistentFlags().BoolVar(&noHeadersFlag, "no-headers", false, "Do not display headers")
 	listCmd.PersistentFlags().BoolVar(&reverseFlag, "reverse", false, "Use in conjunction with --sort to reverse sort")
 	listCmd.PersistentFlags().StringSliceVar(&sortBy, "sort", []string{"Id"}, "Sort tables by column(s) name(s)")
+	listCmd.PersistentFlags().Var(&maxWidthFlag, "max-width", maxWidthUsage)
 	// A comma inside a tag value splits it in two (#28): refuse that before any AWS call.
 	guardTagFilterFlags(listCmd)
 }
@@ -147,7 +148,7 @@ var listAllResourceInServiceCmd = func(srvName string) *cobra.Command {
 			exitOn(err)
 			displayer, err := console.BuildOptions(
 				console.WithFormat(listingFormat),
-				console.WithMaxWidth(console.GetTerminalWidth()),
+				console.WithMaxWidth(tableMaxWidth()),
 				// --columns was accepted and ignored here, so asking a
 				// service-wide listing for particular columns silently got the
 				// default ones. There is no single resource type to look the
@@ -182,7 +183,7 @@ func printResources(g cloud.GraphAPI, resType string) {
 		console.WithTagFilters(listingTagFiltersFlag),
 		console.WithTagKeyFilters(listingTagKeyFiltersFlag),
 		console.WithTagValueFilters(listingTagValueFiltersFlag),
-		console.WithMaxWidth(console.GetTerminalWidth()),
+		console.WithMaxWidth(tableMaxWidth()),
 		console.WithFormat(listingFormat),
 		console.WithIDsOnly(listOnlyIDs),
 		console.WithSortBy(sortBy...),

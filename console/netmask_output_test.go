@@ -94,15 +94,6 @@ var netmaskColumns = map[string][]ColumnDefinition{
 	},
 }
 
-// pinTableWidths fixes the package-level wrapping knobs, which other tests in this
-// package change without restoring.
-func pinTableWidths(t *testing.T) {
-	t.Helper()
-	prevWrap, prevCol := autowrapMaxSize, tableColWidth
-	autowrapMaxSize, tableColWidth = 35, 30
-	t.Cleanup(func() { autowrapMaxSize, tableColWidth = prevWrap, prevCol })
-}
-
 func renderNetmask(t *testing.T, g *graph.Graph, rdfType string, opts ...optsFn) string {
 	t.Helper()
 	all := append([]optsFn{WithRdfType(rdfType), WithColumnDefinitions(netmaskColumns[rdfType])}, opts...)
@@ -121,7 +112,6 @@ func renderNetmask(t *testing.T, g *graph.Graph, rdfType string, opts ...optsFn)
 // literals were captured before it, and every non-JSON format must still produce
 // them byte for byte.
 func TestNetmaskNonJSONFormatsUnchanged(t *testing.T) {
-	pinTableWidths(t)
 	g := netmaskGraph(t)
 
 	cases := []struct {

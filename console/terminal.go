@@ -34,6 +34,41 @@ func GetTerminalWidth() int {
 	return w
 }
 
+// StdoutTerminalWidth reports the width of the terminal stdout is, and false when
+// stdout is not a terminal (a pipe, a file) or its size cannot be read.
+func StdoutTerminalWidth() (int, bool) {
+	fd := int(os.Stdout.Fd())
+	if !term.IsTerminal(fd) {
+		return 0, false
+	}
+	w, _, err := term.GetSize(fd)
+	if err != nil || w <= 0 {
+		return 0, false
+	}
+	return w, true
+}
+
+// TableWidth is the width tables are laid out in, 0 meaning no limit.
+//
+// An explicit width (--max-width) wins, 0 included, terminal or not. Otherwise a
+// terminal's own width is used, and output that is not going to a terminal has no
+// limit at all: one row per line however long, as ps, docker ps and kubectl get do,
+// so a pipe or a file gets whole values rather than ones broken for a screen nobody
+// is looking at. COLUMNS is deliberately not read: on a terminal the ioctl is
+// authoritative, and in a pipe it is usually an unexported shell variable, so
+// honouring it would make the output depend on the shell.
+//
+// terminalWidth is StdoutTerminalWidth outside tests.
+func TableWidth(explicit int, explicitSet bool, terminalWidth func() (int, bool)) int {
+	if explicitSet {
+		return explicit
+	}
+	if w, ok := terminalWidth(); ok && w > 0 {
+		return w
+	}
+	return 0
+}
+
 func GetTerminalHeight() int {
 	_, h, err := term.GetSize(int(os.Stdout.Fd()))
 	if err != nil {
