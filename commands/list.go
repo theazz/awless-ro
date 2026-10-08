@@ -76,6 +76,8 @@ func init() {
 	listCmd.PersistentFlags().BoolVar(&noHeadersFlag, "no-headers", false, "Do not display headers")
 	listCmd.PersistentFlags().BoolVar(&reverseFlag, "reverse", false, "Use in conjunction with --sort to reverse sort")
 	listCmd.PersistentFlags().StringSliceVar(&sortBy, "sort", []string{"Id"}, "Sort tables by column(s) name(s)")
+	// A comma inside a tag value splits it in two (#28): refuse that before any AWS call.
+	guardTagFilterFlags(listCmd)
 }
 
 var listCmd = &cobra.Command{
