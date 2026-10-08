@@ -19,6 +19,7 @@ package triplestore
 import (
 	"bufio"
 	"bytes"
+	"errors"
 	"fmt"
 	"io"
 	"os"
@@ -160,27 +161,81 @@ type Decoder struct {
 
 func NewDecoder(r io.Reader) *Decoder { return &Decoder{r: r} }
 
+// maxLineBytes caps a single N-Triples line. The format imposes no limit on a line,
+// and a literal can hold a whole IAM policy document, so the real bound is available
+// memory rather than any fixed ceiling (this is what lifts the old 8 MiB cap). The
+// value is only a corruption guard: a single line past 256 MiB is almost certainly a
+// file that is not N-Triples at all — one giant "line" — and a diagnosable error
+// beats being killed by the OOM killer. It is a var, not a const, so a test can lower
+// it instead of allocating 256 MiB.
+var maxLineBytes = 256 << 20
+
+// Decode reads every triple from the underlying reader.
+//
+// A literal can be arbitrarily large — a whole IAM policy document, say — so lines
+// are read with a growing buffer rather than the fixed-size bufio.Scanner that
+// capped a line at 8 MiB. parseLine still needs the whole line in memory (parseObject
+// scans backwards, see its comment), so the accumulated buffer is memory the parser
+// needs anyway.
 func (d *Decoder) Decode() ([]Triple, error) {
 	var out []Triple
 
-	scanner := bufio.NewScanner(d.r)
-	// A literal can hold a whole IAM policy document, which is well past the 64 KiB
-	// the scanner allows by default.
-	scanner.Buffer(make([]byte, 0, 64*1024), 8*1024*1024)
+	r := bufio.NewReader(d.r)
+	var buf []byte
+	for line := 1; ; line++ {
+		buf = buf[:0]
+		eof := false
+		for {
+			frag, err := r.ReadSlice('\n')
+			if len(buf)+len(frag) > maxLineBytes {
+				return out, fmt.Errorf("line %d: single line exceeds %d bytes; is this an N-Triples file?", line, maxLineBytes)
+			}
+			buf = append(buf, frag...)
+			if err == nil {
+				break // ReadSlice stopped at the delimiter.
+			}
+			if errors.Is(err, bufio.ErrBufferFull) {
+				continue // Line longer than the reader's buffer; keep accumulating.
+			}
+			if errors.Is(err, io.EOF) {
+				eof = true
+				break
+			}
+			return out, fmt.Errorf("line %d: %s", line, err)
+		}
 
-	for line := 1; scanner.Scan(); line++ {
-		text := strings.TrimLeft(scanner.Text(), " \t")
-		if text == "" || strings.HasPrefix(text, "#") {
+		if len(buf) == 0 && eof {
+			break // Trailing newline: nothing left to read.
+		}
+
+		// Drop the line terminator ReadSlice left on, tolerating CRLF the way
+		// bufio.ScanLines did (parseObject requires the line to end with '.', so a
+		// stray '\r' would break every CRLF file).
+		text := buf
+		if n := len(text); n > 0 && text[n-1] == '\n' {
+			text = text[:n-1]
+		}
+		if n := len(text); n > 0 && text[n-1] == '\r' {
+			text = text[:n-1]
+		}
+		trimmed := strings.TrimLeft(string(text), " \t")
+		if trimmed == "" || strings.HasPrefix(trimmed, "#") {
+			if eof {
+				break
+			}
 			continue
 		}
-		t, err := parseLine(text)
+		t, err := parseLine(trimmed)
 		if err != nil {
 			return out, fmt.Errorf("line %d: %s", line, err)
 		}
 		out = append(out, t)
+		if eof {
+			break
+		}
 	}
 
-	return out, scanner.Err()
+	return out, nil
 }
 
 func parseLine(line string) (Triple, error) {
@@ -348,15 +403,23 @@ func (d *MultiDecoder) Decode() ([]Triple, error) {
 
 	// Results are collected in the order given rather than as they arrive, so that
 	// the same set of files always produces the same error and the same triples.
+	// Every failing reader is reported, not just the first: one unreadable service
+	// file must not hide another, and the caller decides what a partial read means.
 	var all []Triple
+	var errs []error
 	for _, res := range results {
 		if res.err != nil {
 			if f, ok := res.reader.(*os.File); ok {
-				return all, fmt.Errorf("file %q: %s", f.Name(), res.err)
+				errs = append(errs, fmt.Errorf("file %q: %w", f.Name(), res.err))
+			} else {
+				errs = append(errs, res.err)
 			}
-			return all, res.err
+			continue
 		}
 		all = append(all, res.triples...)
+	}
+	if len(errs) > 0 {
+		return nil, errors.Join(errs...)
 	}
 	return all, nil
 }

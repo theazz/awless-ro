@@ -17,6 +17,7 @@ import (
 	"context"
 	"errors"
 	"fmt"
+	"io/fs"
 	"os"
 	"path/filepath"
 	"strings"
@@ -172,7 +173,15 @@ func concatErrors(errs []error) error {
 	return errors.New(strings.Join(lines, "\n"))
 }
 
-func LoadLocalGraphForService(serviceName, profile, region string) cloud.GraphAPI {
+// LoadLocalGraphForService reads the one synced file a `list --local` of this
+// service's resources depends on.
+//
+// A file that was never synced is a legitimate empty answer, not an error, so a
+// not-exist error maps to an empty graph and a nil error. Any other failure — the
+// file exists but cannot be opened or parsed — is returned so the caller can fail
+// closed instead of presenting unread data as "No results found.". The returned
+// graph is always non-nil so a caller that ignores the error cannot nil-deref.
+func LoadLocalGraphForService(serviceName, profile, region string) (cloud.GraphAPI, error) {
 	regionDir := region
 	if serviceName == "access" || serviceName == "dns" || serviceName == "cdn" {
 		regionDir = "global"
@@ -180,9 +189,12 @@ func LoadLocalGraphForService(serviceName, profile, region string) cloud.GraphAP
 	path := filepath.Join(repo.BaseDir(), profile, regionDir, fmt.Sprintf("%s%s", serviceName, fileExt))
 	g, err := graph.NewGraphFromFiles(path)
 	if err != nil {
-		return graph.NewGraph()
+		if errors.Is(err, fs.ErrNotExist) {
+			return graph.NewGraph(), nil
+		}
+		return g, err
 	}
-	return g
+	return g, nil
 }
 
 func LoadLocalGraphs(profile, region string) (cloud.GraphAPI, error) {
