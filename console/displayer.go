@@ -21,6 +21,7 @@ import (
 	"encoding/json"
 	"fmt"
 	"io"
+	"math"
 	"os"
 	"reflect"
 	"sort"
@@ -986,6 +987,11 @@ func (d *defaultSorter) symbol() string {
 	return " ▲"
 }
 
+// valueLowerOrEqual reports whether a sorts at or before b. defaultSorter.sort
+// skips reflect.DeepEqual pairs before calling it, so on the pairs it does see
+// the result must be a strict weak ordering: never true in both directions, and
+// transitive. --reverse swaps the operands rather than negating the result, so
+// the same holds descending.
 func valueLowerOrEqual(a, b interface{}) bool {
 	if a == nil && b == nil {
 		return true
@@ -1001,7 +1007,11 @@ func valueLowerOrEqual(a, b interface{}) bool {
 		return false
 	}
 	if reflect.TypeOf(a) != reflect.TypeOf(b) {
-		panic(fmt.Sprintf("can not compare values of type %T and %T", a, b))
+		// Mismatched types for the same column should not happen, but this is a
+		// read-only inspection CLI: fall back to a strict order instead of
+		// panicking on data we don't control. a and b are of different types,
+		// so they are never equal here.
+		return fallbackLess(a, b)
 	}
 	switch a.(type) {
 	case int:
@@ -1011,6 +1021,12 @@ func valueLowerOrEqual(a, b interface{}) bool {
 	case float64:
 		aa := a.(float64)
 		bb := b.(float64)
+		if math.IsNaN(aa) || math.IsNaN(bb) {
+			// NaN compares false against everything, which would make it
+			// equivalent to both 1 and 2 while 1 < 2. Sort NaN first instead,
+			// and never report one NaN lower than another.
+			return math.IsNaN(aa) && !math.IsNaN(bb)
+		}
 		return aa <= bb
 	case string:
 		aa := a.(string)
@@ -1020,11 +1036,67 @@ func valueLowerOrEqual(a, b interface{}) bool {
 		aa := a.(time.Time)
 		bb := b.(time.Time)
 		return aa.After(bb)
-	case []string, []int:
-		return fmt.Sprint(a) <= fmt.Sprint(b)
+	case bool:
+		aa := a.(bool)
+		bb := b.(bool)
+		// false before true, so unchecked/disabled rows sort ahead of checked/enabled ones.
+		return !aa || bb
 	default:
-		panic(fmt.Sprintf("can not compare values of type %T", a))
+		// []string and []int land here, and so does any type this switch
+		// doesn't know about: a read-only inspection CLI should not abort on a
+		// column it cannot order naturally. Equal values keep the "or equal"
+		// answer; distinct ones get the strict fallback order.
+		return reflect.DeepEqual(a, b) || fallbackLess(a, b)
 	}
+}
+
+// fallbackLess is a strict weak ordering over values the natural orders in
+// valueLowerOrEqual do not cover. It compares, in turn:
+//
+//  1. the type key, so values of different types never interleave. Printed
+//     forms disagree with the natural orders ("10" < "2" as text, 10 > 2 as
+//     numbers), and mixing the two would allow 9 < 10 < "2" < 9. It also keeps
+//     int(1) and string("1") apart although both print as "1";
+//  2. the printed form, which is what the user sees in the column;
+//  3. the Go-syntax form, which tells apart values that print identically:
+//     []string{"a b"} and []string{"a", "b"} both print as [a b],
+//     []string(nil) and []string{} both print as [], and two distinct types
+//     sharing a type key (see typeOrderKey) may print the same value.
+//
+// Each step is a strict comparison of strings and the steps are applied
+// lexicographically, so the result is never true in both directions and is
+// transitive. Values identical on all three keys compare as neither lower,
+// i.e. as equivalent. Pointer, func and chan values print as addresses, so
+// their relative order is consistent within a run but not across runs; no
+// graph literal has such a type.
+func fallbackLess(a, b interface{}) bool {
+	if aKey, bKey := typeOrderKey(a), typeOrderKey(b); aKey != bKey {
+		return aKey < bKey
+	}
+	if aStr, bStr := fmt.Sprint(a), fmt.Sprint(b); aStr != bStr {
+		return aStr < bStr
+	}
+	return fmt.Sprintf("%#v", a) < fmt.Sprintf("%#v", b)
+}
+
+// typeOrderKey identifies the dynamic type of v for ordering purposes: package
+// path and name for a named type, the structural rendering for an unnamed one
+// such as []string. It comes from the program's types, never from map iteration
+// or input order. It is not unique: a type declared inside a function shares
+// its package path and name with any same-named local type of that package,
+// and unnamed types render package names rather than paths. fallbackLess breaks
+// such ties on the values. The types valueLowerOrEqual orders naturally (int,
+// float64, string, bool, time.Time) have keys no other type can produce, so a
+// tie never mixes a natural order with the fallback one.
+func typeOrderKey(v interface{}) string {
+	t := reflect.TypeOf(v)
+	if t == nil {
+		return ""
+	}
+	if pkg := t.PkgPath(); pkg != "" {
+		return pkg + "." + t.Name()
+	}
+	return t.String()
 }
 
 func resolveSortIndexes(headers []ColumnDefinition, sortingBy ...string) ([]int, error) {
