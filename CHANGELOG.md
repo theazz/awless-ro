@@ -4,27 +4,10 @@
 
 ### Fixed
 
-- **Credentials in `AWS_ACCESS_KEY_ID` and `AWS_SECRET_ACCESS_KEY` were ignored**, in
-  v0.2.2 and v0.2.1 alike, and in the releases before them. On a machine with no
-  `~/.aws` — a CI job, a container, a fresh shell — every command failed with
-  `AWS credentials for profile "default" are configured but cannot be used`, or walked
-  past the keys and tried to reach EC2 instance metadata. The tool's own advice tells
-  you to export exactly those two variables. The cause was that the default profile was
-  always pinned on the AWS SDK, and a pinned profile is exclusive: the SDK then resolves
-  from that profile alone and never looks at the environment. The profile is now pinned
-  only when one was actually chosen — `--aws-profile`, `AWS_PROFILE`,
-  `AWS_DEFAULT_PROFILE`, or a configured `aws.profile` naming something other than
-  `default` — and otherwise the SDK's documented order applies: environment, then
-  `~/.aws/{credentials,config}`, then container and instance roles. A profile you did
-  ask for and that does not exist is still reported by name rather than quietly falling
-  through to whatever else is around.
-- **The first run with `--aws-profile` asked for a region although the profile already
-  named one**, if `~/.aws/config` had no `[default]` section. The region needed to get
-  started was looked up without the profile, found nothing, and dropped into the
-  interactive region selector — which then stored whatever was typed as the default
-  region. In a script, with no terminal to ask, the run could not get past it at all.
-  The region now comes from the chosen profile, and the selector appears only when
-  nothing names a region.
+- Credentials exported in `AWS_ACCESS_KEY_ID` / `AWS_SECRET_ACCESS_KEY` are used when
+  `~/.aws` is absent (CI, containers); they were ignored since v0.1.0. (#32)
+- A first run with `--aws-profile` takes the region from the profile instead of
+  prompting for one. (#32)
 
 ## v0.2.2
 
