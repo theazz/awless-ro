@@ -2,6 +2,7 @@ package ssh
 
 import (
 	"bytes"
+	"errors"
 	"os"
 	"path/filepath"
 	"strings"
@@ -60,6 +61,78 @@ func TestAbsoluteKeyPathIsHonoured(t *testing.T) {
 	}
 	if priv.path != key {
 		t.Fatalf("got %q, want %q", priv.path, key)
+	}
+}
+
+// ResolveKeyPath is the lookup --print-cli and --print-config use: the same search
+// as InitClient, through both key folders, with and without .pem.
+func TestResolveKeyPath(t *testing.T) {
+	root := t.TempDir()
+	awlessKeys := filepath.Join(root, "keys")
+	sshDir := filepath.Join(root, ".ssh")
+	for _, dir := range []string{awlessKeys, sshDir} {
+		if err := os.MkdirAll(dir, 0o700); err != nil {
+			t.Fatal(err)
+		}
+	}
+	write := func(path string) string {
+		if err := os.WriteFile(path, []byte("not parsed"), 0o600); err != nil {
+			t.Fatal(err)
+		}
+		return path
+	}
+	inAwless := write(filepath.Join(awlessKeys, "awlesskey.pem"))
+	plain := write(filepath.Join(awlessKeys, "plainkey"))
+	inSSH := write(filepath.Join(sshDir, "sshkey.pem"))
+
+	folders := []string{awlessKeys, sshDir}
+	cases := []struct {
+		name, want string
+		folders    []string
+	}{
+		{"awlesskey", inAwless, folders},
+		{"awlesskey.pem", inAwless, folders},
+		{"plainkey", plain, folders},
+		{"sshkey", inSSH, folders},
+		{"sshkey.pem", inSSH, folders},
+		{"sshkey", inSSH, []string{filepath.Join(root, "does-not-exist"), sshDir}},
+		{inSSH, inSSH, folders},
+	}
+	for _, tc := range cases {
+		got, ok := ResolveKeyPath(tc.name, tc.folders...)
+		if !ok || got != tc.want {
+			t.Errorf("ResolveKeyPath(%q) = (%q, %t), want (%q, true)", tc.name, got, ok, tc.want)
+		}
+	}
+
+	if got, ok := ResolveKeyPath("nosuchkey", folders...); ok || got != "" {
+		t.Errorf("ResolveKeyPath(nosuchkey) = (%q, %t), want (\"\", false)", got, ok)
+	}
+	if got, ok := ResolveKeyPath("", folders...); ok || got != "" {
+		t.Errorf("ResolveKeyPath(\"\") = (%q, %t), want (\"\", false)", got, ok)
+	}
+}
+
+// A key that was asked for and is nowhere has to say so, naming the key and where
+// it was looked for, instead of the generic "no key provided".
+func TestInitClientReportsMissingKey(t *testing.T) {
+	t.Setenv("SSH_AUTH_SOCK", "")
+	root := t.TempDir()
+	first, second := filepath.Join(root, "keys"), filepath.Join(root, ".ssh")
+
+	_, err := InitClient("nosuchkey", first, second)
+	if !errors.Is(err, ErrKeyNotFound) {
+		t.Fatalf("got %v, want ErrKeyNotFound", err)
+	}
+	for _, want := range []string{"nosuchkey", first, second} {
+		if !strings.Contains(err.Error(), want) {
+			t.Errorf("error %q does not mention %q", err, want)
+		}
+	}
+
+	// No key name at all keeps the old message: nothing was asked for.
+	if _, err := InitClient("", first, second); err == nil || errors.Is(err, ErrKeyNotFound) {
+		t.Errorf("empty key name: got %v, want the generic no-auth error", err)
 	}
 }
 

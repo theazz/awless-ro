@@ -375,12 +375,31 @@ awless-ro switch eu-west-1
 awless-ro switch my-profile eu-west-1
 ```
 
+**`ssh`** — connect to an instance by name, id or IP.
+
+```sh
+awless-ro ssh web-1                                   # user from the image, key from the instance's key pair
+awless-ro ssh ubuntu@web-1 -i ~/.ssh/other-key.pem    # force the user and the key
+awless-ro ssh db-1 --through bastion-1                # private instance through a jump host
+awless-ro ssh web-1 --local                           # resolve from the synced graph, no AWS call
+awless-ro ssh web-1 --print-cli                       # print the ssh command line, do not connect
+awless-ro ssh db-1 --through bastion-1 --print-config >> ~/.ssh/config
+```
+
+Keys are looked up by the instance's key pair name in `~/.awless-ro/keys` and then
+`~/.ssh`, with and without `.pem`. Host keys are checked against `~/.ssh/known_hosts`
+(or `~/.awless-ro/known_hosts`); an unknown host is asked about once on a terminal,
+and refused with an explanation when there is no terminal. The login user comes from
+the instance's image when the image is in the synced graph; otherwise `ec2-user`,
+`ubuntu` and the other usual users are tried in turn, and `--print-cli` /
+`--print-config` say which one they guessed. Printing never opens a connection.
+
 **Aliases.** Reference a resource by its `Name` tag anywhere an id is accepted.
 
 ### Offline mode (optional)
 
 `awless-ro sync` fetches every supported service in parallel and stores the result
-as a local graph under `~/.awless-ro`. After that, `list`, `show` and `inspect` with `--local` answer
+as a local graph under `~/.awless-ro`. After that, `list`, `show`, `inspect` and `ssh` with `--local` answer
 from that copy without calling AWS. A service you lack permission for is reported
 and skipped; the rest still land.
 
@@ -409,13 +428,6 @@ Gone, and not coming back:
 - `awless web` and the embedded HTTP server
 - the `pricer` inspector, which posted an inventory of your EC2 instances to a
   third-party host whose domain **was not registered** when this fork was made
-
-Not yet working:
-
-- **`awless-ro ssh`**. The resolution and connection logic is there and mostly
-  works, but `--local` panics, `--print-cli` connects instead of printing, and the
-  host key prompt loops when there is no terminal. The command explains this instead
-  of running. Tracked in [#1](https://github.com/theazz/awless-ro/issues/1).
 
 ## Differences you will notice if you used awless
 
