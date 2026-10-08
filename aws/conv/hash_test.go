@@ -81,15 +81,19 @@ func TestHashFieldsShape(t *testing.T) {
 // not exist. aws/services/relations.go recomputes a metric's id exactly this way to
 // link an alarm to it.
 func TestCompositeIDsMatchWhatNewResourceProduces(t *testing.T) {
-	record := route53types.ResourceRecordSet{
-		Name: awssdk.String("sub.example.com."),
-		Type: route53types.RRTypeCname,
+	record := RecordSetInZone{
+		ResourceRecordSet: route53types.ResourceRecordSet{
+			Name: awssdk.String("sub.example.com."),
+			Type: route53types.RRTypeCname,
+		},
+		ZoneId:   "/hostedzone/Z1",
+		ZoneName: "example.com.",
 	}
 	res, err := NewResource(record)
 	if err != nil {
 		t.Fatal(err)
 	}
-	if got, want := res.Id(), HashFields("sub.example.com.", "CNAME"); got != want {
+	if got, want := res.Id(), HashFields("/hostedzone/Z1", "sub.example.com.", "CNAME", ""); got != want {
 		t.Errorf("record id = %q, want %q", got, want)
 	}
 
@@ -112,11 +116,19 @@ func TestCompositeIDsMatchWhatNewResourceProduces(t *testing.T) {
 func TestRecordsWithTheSameNameButDifferentTypesAreDistinct(t *testing.T) {
 	name := "example.com."
 
-	a, err := NewResource(route53types.ResourceRecordSet{Name: awssdk.String(name), Type: route53types.RRTypeA})
+	a, err := NewResource(RecordSetInZone{
+		ResourceRecordSet: route53types.ResourceRecordSet{Name: awssdk.String(name), Type: route53types.RRTypeA},
+		ZoneId:            "/hostedzone/Z1",
+		ZoneName:          name,
+	})
 	if err != nil {
 		t.Fatal(err)
 	}
-	txt, err := NewResource(route53types.ResourceRecordSet{Name: awssdk.String(name), Type: route53types.RRTypeTxt})
+	txt, err := NewResource(RecordSetInZone{
+		ResourceRecordSet: route53types.ResourceRecordSet{Name: awssdk.String(name), Type: route53types.RRTypeTxt},
+		ZoneId:            "/hostedzone/Z1",
+		ZoneName:          name,
+	})
 	if err != nil {
 		t.Fatal(err)
 	}

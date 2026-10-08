@@ -385,6 +385,7 @@ var awsResourcesDef = map[string]map[string]*propertyTransform{
 		properties.Created:          {name: "CreateDate", transform: extractTimeFn},
 		properties.PasswordLastUsed: {name: "PasswordLastUsed", transform: extractTimeFn},
 		properties.InlinePolicies:   {name: "UserPolicyList", transform: extractStringSliceValues("PolicyName")},
+		properties.Tags:             {name: "Tags", transform: extractTagsFn},
 	},
 	cloud.Role: {
 		properties.Name:           {name: "RoleName", transform: extractValueFn},
@@ -393,7 +394,9 @@ var awsResourcesDef = map[string]map[string]*propertyTransform{
 		properties.Path:           {name: "Path", transform: extractValueFn},
 		properties.InlinePolicies: {name: "RolePolicyList", transform: extractStringSliceValues("PolicyName")},
 		properties.TrustPolicy:    {name: "AssumeRolePolicyDocument", transform: extractURLEncodedJson},
+		properties.Tags:           {name: "Tags", transform: extractTagsFn},
 	},
+	// No Tags: IAM groups cannot be tagged, and iamtypes.GroupDetail has no Tags field.
 	cloud.Group: {
 		properties.Name:           {name: "GroupName", transform: extractValueFn},
 		properties.Arn:            {name: "Arn", transform: extractValueFn},
@@ -401,6 +404,8 @@ var awsResourcesDef = map[string]map[string]*propertyTransform{
 		properties.Path:           {name: "Path", transform: extractValueFn},
 		properties.InlinePolicies: {name: "GroupPolicyList", transform: extractStringSliceValues("PolicyName")},
 	},
+	// No Tags: policies are built from iamtypes.ManagedPolicyDetail, which carries
+	// none; policy tags need their own API call.
 	cloud.Policy: {
 		properties.Name:        {name: "PolicyName", transform: extractValueFn},
 		properties.Arn:         {name: "Arn", transform: extractValueFn},
@@ -443,22 +448,30 @@ var awsResourcesDef = map[string]map[string]*propertyTransform{
 	},
 	// DNS
 	cloud.Zone: {
-		properties.Name:            {name: "Name", transform: extractValueFn},
+		// HostedZone.Name comes back in DNS presentation format, same as a
+		// record's: a zone with an underscore in it displays as \137 undecoded.
+		properties.Name:            {name: "Name", transform: extractDNSNameFn},
 		properties.Comment:         {name: "Config", transform: extractFieldFn("Comment")},
 		properties.Private:         {name: "Config", transform: extractFieldFn("PrivateZone")},
 		properties.CallerReference: {name: "CallerReference", transform: extractValueFn},
 		properties.RecordCount:     {name: "ResourceRecordSetCount", transform: extractValueFn},
 	},
 	cloud.Record: {
-		properties.Name:                  {name: "Name", transform: extractValueFn},
-		properties.Zone:                  {name: "Zone"},
-		properties.Failover:              {name: "Failover", transform: extractValueFn},
-		properties.Continent:             {name: "GeoLocation", transform: extractFieldFn("ContinentCode")},
-		properties.Country:               {name: "GeoLocation", transform: extractFieldFn("CountryCode")},
-		properties.HealthCheck:           {name: "HealthCheckId", transform: extractValueFn},
-		properties.Region:                {name: "Region", transform: extractValueFn},
+		// Built from a RecordSetInZone. Zone is the zone NAME, the display and
+		// filter value; the zone Id it also carries is only the id hash input.
+		properties.Name:        {name: "Name", transform: extractDNSNameFn},
+		properties.Zone:        {name: "ZoneName", transform: extractDNSNameFn},
+		properties.Failover:    {name: "Failover", transform: extractValueFn},
+		properties.Continent:   {name: "GeoLocation", transform: extractFieldFn("ContinentCode")},
+		properties.Country:     {name: "GeoLocation", transform: extractFieldFn("CountryCode")},
+		properties.HealthCheck: {name: "HealthCheckId", transform: extractValueFn},
+		properties.Region:      {name: "Region", transform: extractValueFn},
+		// Records stays RAW deliberately: ResourceRecords[].Value is a DNS name
+		// only for CNAME/NS/MX/PTR/SRV — for TXT and SPF it is an opaque payload
+		// whose backslashes are data, and decoding it would corrupt exactly the
+		// records users read most literally.
 		properties.Records:               {name: "ResourceRecords", transform: extractStringSliceValues("Value")},
-		properties.Alias:                 {name: "AliasTarget", transform: extractFieldFn("DNSName")},
+		properties.Alias:                 {name: "AliasTarget", transform: decodeDNSNameFn(extractFieldFn("DNSName"))},
 		properties.Set:                   {name: "SetIdentifier", transform: extractValueFn},
 		properties.TTL:                   {name: "TTL", transform: extractValueFn},
 		properties.TrafficPolicyInstance: {name: "TrafficPolicyInstanceId", transform: extractValueFn},

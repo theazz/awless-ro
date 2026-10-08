@@ -21,6 +21,7 @@ import (
 	"fmt"
 	"reflect"
 	"regexp"
+	"sort"
 	"strings"
 	"unicode"
 
@@ -286,7 +287,26 @@ func (res *Resource) unmarshalFullRdf(gph triplestore.RDFGraph) error {
 	if !gph.Contains(triplestore.SubjPred(res.Id(), rdf.RdfType).Resource(cloudType)) {
 		return fmt.Errorf("triple <%s><%s><%s> not found in graph", res.Id(), rdf.RdfType, cloudType)
 	}
-	for _, t := range gph.WithSubject(res.Id()) {
+	// The index this comes out of is built by iterating a Go map
+	// (triplestore/source.go), so the order varies from one populated source to
+	// the next — per sync, per LoadLocalGraphs, per process. For a subject that
+	// carries two types — see resolveResourceTypes — the union below would then
+	// resolve a scalar property both types declare differently on each run, and
+	// `show --values-for` reads these values straight out.
+	//
+	// Copy first: WithSubject returns the snapshot's own index slice, with no
+	// copy, and unmarshalFullRdf runs from several goroutines against one shared
+	// snapshot while the generated services build parent relations, so sorting in
+	// place would be two concurrent writers to one array.
+	//
+	// Triples.Sort orders by the canonical triple key, which for a fixed subject
+	// is (predicate, "value"^^<datatype>), so a scalar declared twice keeps the
+	// greatest canonical object key and a list arrives in that same fixed order.
+	// Sorting the copies concurrently is safe only because source.Add populates
+	// every triple's cached key under its write lock before any reader sees it.
+	triples := triplestore.Triples(append([]triplestore.Triple(nil), gph.WithSubject(res.Id())...))
+	triples.Sort()
+	for _, t := range triples {
 		pred := t.Predicate()
 		if !rdf.Properties.IsRDFProperty(pred) || rdf.Properties.IsRDFSubProperty(pred) {
 			continue
@@ -402,16 +422,46 @@ func Subtract(one, other map[string]interface{}) map[string]interface{} {
 
 var errTypeNotFound = errors.New("resource type not found")
 
-func resolveResourceType(g triplestore.RDFGraph, id string) (string, error) {
+// resolveResourceTypes returns every cloud type a subject carries, in
+// lexicographic order.
+//
+// A subject carrying several types is an ordinary consequence of how ids are
+// built, not a corrupt graph: the resources AWS names rather than numbers use the
+// bare name as their id, and a name is only unique per type — a keypair and a
+// classic load balancer can both be called 'prod' — while LoadLocalGraphs merges
+// one file per service into a single graph, so ids that only ever collided across
+// services collide after the merge.
+//
+// The order is sorted because the index this reads comes out of a Go map
+// (triplestore/source.go), so WithSubjPred returns the type triples in an order
+// that varies from one populated source to the next.
+func resolveResourceTypes(g triplestore.RDFGraph, id string) ([]string, error) {
 	typeTs := g.WithSubjPred(id, rdf.RdfType)
-	switch len(typeTs) {
-	case 0:
-		return "", errTypeNotFound
-	case 1:
-		return unmarshalResourceType(typeTs[0].Object())
-	default:
-		return "", fmt.Errorf("cannot resolve unique type for resource '%s', got: %v", id, typeTs)
+	if len(typeTs) == 0 {
+		return nil, errTypeNotFound
 	}
+	// No dedup: the triple store is a set keyed on the whole triple, so the same
+	// rdf:type cannot be here twice.
+	types := make([]string, 0, len(typeTs))
+	for _, t := range typeTs {
+		typ, err := unmarshalResourceType(t.Object())
+		if err != nil {
+			return nil, err
+		}
+		types = append(types, typ)
+	}
+	sort.Strings(types)
+	return types, nil
+}
+
+// resolveResourceType returns the first of the subject's types. Its signature is
+// fixed: graph/visit.go passes it as a value to triplestore.Tree.TraverseSiblings.
+func resolveResourceType(g triplestore.RDFGraph, id string) (string, error) {
+	types, err := resolveResourceTypes(g, id)
+	if err != nil {
+		return "", err
+	}
+	return types[0], nil
 }
 
 func lowerFirstLetter(s string) string {

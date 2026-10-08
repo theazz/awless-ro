@@ -889,18 +889,18 @@ func TestBuildDnsRdfGraph(t *testing.T) {
 	}
 
 	expected := map[string]cloud.Resource{
-		"/hostedzone/12345":                              resourcetest.Zone("/hostedzone/12345").Prop(p.Name, "my.first.domain").Build(),
-		"/hostedzone/23456":                              resourcetest.Zone("/hostedzone/23456").Prop(p.Name, "my.second.domain").Build(),
-		"/hostedzone/34567":                              resourcetest.Zone("/hostedzone/34567").Prop(p.Name, "my.third.domain").Build(),
-		recordID("subdomain1.my.first.domain", "A"):      resourcetest.Record(recordID("subdomain1.my.first.domain", "A")).Prop(p.Name, "subdomain1.my.first.domain").Prop(p.Zone, "my.first.domain").Prop(p.Type, "A").Prop(p.TTL, 10).Prop(p.Records, []string{"1.2.3.4", "2.3.4.5"}).Build(),
-		recordID("subdomain2.my.first.domain", "A"):      resourcetest.Record(recordID("subdomain2.my.first.domain", "A")).Prop(p.Name, "subdomain2.my.first.domain").Prop(p.Zone, "my.first.domain").Prop(p.Type, "A").Prop(p.TTL, 10).Prop(p.Records, []string{"3.4.5.6"}).Build(),
-		recordID("subdomain3.my.first.domain", "CNAME"):  resourcetest.Record(recordID("subdomain3.my.first.domain", "CNAME")).Prop(p.Name, "subdomain3.my.first.domain").Prop(p.Zone, "my.first.domain").Prop(p.Type, "CNAME").Prop(p.TTL, 60).Prop(p.Records, []string{"4.5.6.7"}).Build(),
-		recordID("subdomain1.my.second.domain", "A"):     resourcetest.Record(recordID("subdomain1.my.second.domain", "A")).Prop(p.Name, "subdomain1.my.second.domain").Prop(p.Zone, "my.second.domain").Prop(p.Type, "A").Prop(p.TTL, 30).Prop(p.Records, []string{"5.6.7.8"}).Build(),
-		recordID("subdomain3.my.second.domain", "CNAME"): resourcetest.Record(recordID("subdomain3.my.second.domain", "CNAME")).Prop(p.Name, "subdomain3.my.second.domain").Prop(p.Zone, "my.second.domain").Prop(p.Type, "CNAME").Prop(p.TTL, 10).Prop(p.Records, []string{"6.7.8.9"}).Build(),
+		"/hostedzone/12345": resourcetest.Zone("/hostedzone/12345").Prop(p.Name, "my.first.domain").Build(),
+		"/hostedzone/23456": resourcetest.Zone("/hostedzone/23456").Prop(p.Name, "my.second.domain").Build(),
+		"/hostedzone/34567": resourcetest.Zone("/hostedzone/34567").Prop(p.Name, "my.third.domain").Build(),
+		recordID("/hostedzone/12345", "subdomain1.my.first.domain", "A", ""):      resourcetest.Record(recordID("/hostedzone/12345", "subdomain1.my.first.domain", "A", "")).Prop(p.Name, "subdomain1.my.first.domain").Prop(p.Zone, "my.first.domain").Prop(p.Type, "A").Prop(p.TTL, 10).Prop(p.Records, []string{"1.2.3.4", "2.3.4.5"}).Build(),
+		recordID("/hostedzone/12345", "subdomain2.my.first.domain", "A", ""):      resourcetest.Record(recordID("/hostedzone/12345", "subdomain2.my.first.domain", "A", "")).Prop(p.Name, "subdomain2.my.first.domain").Prop(p.Zone, "my.first.domain").Prop(p.Type, "A").Prop(p.TTL, 10).Prop(p.Records, []string{"3.4.5.6"}).Build(),
+		recordID("/hostedzone/12345", "subdomain3.my.first.domain", "CNAME", ""):  resourcetest.Record(recordID("/hostedzone/12345", "subdomain3.my.first.domain", "CNAME", "")).Prop(p.Name, "subdomain3.my.first.domain").Prop(p.Zone, "my.first.domain").Prop(p.Type, "CNAME").Prop(p.TTL, 60).Prop(p.Records, []string{"4.5.6.7"}).Build(),
+		recordID("/hostedzone/23456", "subdomain1.my.second.domain", "A", ""):     resourcetest.Record(recordID("/hostedzone/23456", "subdomain1.my.second.domain", "A", "")).Prop(p.Name, "subdomain1.my.second.domain").Prop(p.Zone, "my.second.domain").Prop(p.Type, "A").Prop(p.TTL, 30).Prop(p.Records, []string{"5.6.7.8"}).Build(),
+		recordID("/hostedzone/23456", "subdomain3.my.second.domain", "CNAME", ""): resourcetest.Record(recordID("/hostedzone/23456", "subdomain3.my.second.domain", "CNAME", "")).Prop(p.Name, "subdomain3.my.second.domain").Prop(p.Zone, "my.second.domain").Prop(p.Type, "CNAME").Prop(p.TTL, 10).Prop(p.Records, []string{"6.7.8.9"}).Build(),
 	}
 	expectedChildren := map[string][]string{
-		"/hostedzone/12345": {recordID("subdomain1.my.first.domain", "A"), recordID("subdomain2.my.first.domain", "A"), recordID("subdomain3.my.first.domain", "CNAME")},
-		"/hostedzone/23456": {recordID("subdomain1.my.second.domain", "A"), recordID("subdomain3.my.second.domain", "CNAME")},
+		"/hostedzone/12345": {recordID("/hostedzone/12345", "subdomain1.my.first.domain", "A", ""), recordID("/hostedzone/12345", "subdomain2.my.first.domain", "A", ""), recordID("/hostedzone/12345", "subdomain3.my.first.domain", "CNAME", "")},
+		"/hostedzone/23456": {recordID("/hostedzone/23456", "subdomain1.my.second.domain", "A", ""), recordID("/hostedzone/23456", "subdomain3.my.second.domain", "CNAME", "")},
 	}
 	expectedAppliedOn := map[string][]string{}
 

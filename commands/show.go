@@ -245,6 +245,20 @@ func findResourceInLocalGraphs(ref string) (cloud.Resource, cloud.GraphAPI) {
 	case 1:
 		return resources[0], g
 	default:
+		// Resources sharing an id cannot be told apart by any reference the user
+		// could type, so suggesting `show <id>` for each of them is useless; show
+		// one and name the others instead.
+		if target, ok := chooseShowTarget(resources); ok {
+			types := make([]string, 0, len(resources))
+			for _, res := range resources {
+				types = append(types, res.Type())
+			}
+			sort.Strings(types)
+			logger.Warningf("%d resources share the id '%s' (%s); showing the %s. Properties both types declare may come from either; list them with `awless-ro list %s`",
+				len(resources), target.Id(), strings.Join(types, ", "), target.Type(), cloud.PluralizeResource(target.Type()))
+			return target, g
+		}
+
 		logger.Infof("%d resources found with name '%s' in region '%s' for profile '%s'. Show a specific resource with:", len(resources), deprefix(ref), config.GetAWSRegion(), config.GetAWSProfile())
 		for _, res := range resources {
 			var buf bytes.Buffer
@@ -259,6 +273,40 @@ func findResourceInLocalGraphs(ref string) (cloud.Resource, cloud.GraphAPI) {
 	}
 
 	return nil, nil
+}
+
+// chooseShowTarget decides what `show` does when a reference resolves to more than
+// one resource. The rules are ordered:
+//
+//	len(resources) < 2 -> (nil, false). findResourceInLocalGraphs handles the
+//	                     0- and 1-resource cases before it gets here; this is a
+//	                     guard, not a path.
+//	every Id equal     -> (sorted-by-(Id,Type)[0], true). Resources sharing an id
+//	                     cannot be told apart by any reference the user could
+//	                     type, so one is shown and the others named.
+//	otherwise          -> (nil, false). Distinct ids are listed so the user can
+//	                     pick, which is the pre-existing behaviour.
+//
+// The sort runs on a copy, so the answer does not depend on the order the graph
+// happened to return.
+func chooseShowTarget(resources []cloud.Resource) (cloud.Resource, bool) {
+	if len(resources) < 2 {
+		return nil, false
+	}
+	for _, res := range resources {
+		if res.Id() != resources[0].Id() {
+			return nil, false
+		}
+	}
+
+	sorted := append([]cloud.Resource(nil), resources...)
+	sort.Slice(sorted, func(i, j int) bool {
+		if sorted[i].Id() != sorted[j].Id() {
+			return sorted[i].Id() < sorted[j].Id()
+		}
+		return sorted[i].Type() < sorted[j].Type()
+	})
+	return sorted[0], true
 }
 
 func resolveResourceFromRefInCurrentRegion(ref string) (cloud.GraphAPI, []cloud.Resource, string) {
@@ -309,6 +357,14 @@ func deprefix(s string) string {
 func decorateWithSuggestion(err error, ref string) error {
 	buf := bytes.NewBufferString(fmt.Sprintf("%s in region '%s' for profile '%s'", err.Error(), config.GetAWSRegion(), config.GetAWSProfile()))
 	g, resources, _ := resolveResourceFromRefInAllLocalRegion(ref)
+	// One line per (id, region). A subject carrying two types resolves to one
+	// resource per type, and the two lines differ only in the type they name while
+	// the payload — the region and the command to run next — is identical; the
+	// dropped type is named one step later by show's ambiguity warning. Keyed on
+	// the pair rather than the id alone because the same id genuinely can be
+	// synced in two regions and both of those lines are useful. The NUL separator
+	// is the project's convention, for the same reason HashFields uses one.
+	seen := make(map[string]bool)
 	for _, res := range resources {
 		parents, err := g.ResourceRelations(res, rdf.ParentOf, true)
 		if err != nil {
@@ -316,6 +372,10 @@ func decorateWithSuggestion(err error, ref string) error {
 		}
 		for _, parent := range parents {
 			if parent.Type() == cloud.Region {
+				if seen[res.Id()+"\x00"+parent.Id()] {
+					continue
+				}
+				seen[res.Id()+"\x00"+parent.Id()] = true
 				buf.WriteString(fmt.Sprintf("\n\tfound previously synced under region '%s' as %s. Show it with `awless-ro show %s -r %s --local`", parent.Id(), res, res.Id(), parent.Id()))
 			}
 		}
