@@ -66,7 +66,7 @@ var ColumnsInListing = map[string][]string{
 	cloud.Topic:               {properties.ID},
 	cloud.Queue:               {properties.ID, properties.ApproximateMessageCount, properties.Created, properties.Modified, properties.Delay},
 	cloud.Zone:                {properties.ID, properties.Name, properties.Comment, properties.Private, properties.RecordCount, properties.CallerReference},
-	cloud.Record:              {properties.ID, properties.Type, properties.Name, properties.Records, properties.Zone, properties.Alias, properties.TTL},
+	cloud.Record:              {properties.ID, properties.Type, properties.Name, properties.Set, properties.Records, properties.Zone, properties.Alias, properties.TTL},
 	cloud.Function:            {properties.Name, properties.Size, properties.Memory, properties.Runtime, properties.Version, properties.Modified, properties.Description},
 	cloud.Metric:              {properties.ID, properties.Name, properties.Namespace, properties.Dimensions},
 	cloud.Alarm:               {properties.Name, properties.Namespace, properties.MetricName, properties.Description, properties.State, properties.Updated, properties.Dimensions},
@@ -441,6 +441,9 @@ var DefaultsColumnDefinitions = map[string][]ColumnDefinition{
 		StringColumnDefinition{Prop: properties.ID, Friendly: "AwlessId"},
 		StringColumnDefinition{Prop: properties.Type},
 		StringColumnDefinition{Prop: properties.Name},
+		// Set tells routing-policy siblings of one name+type apart; without it
+		// they print as identical-looking rows.
+		StringColumnDefinition{Prop: properties.Set},
 		SliceColumnDefinition{StringColumnDefinition: StringColumnDefinition{Prop: properties.Records}},
 		StringColumnDefinition{Prop: properties.Zone},
 		StringColumnDefinition{Prop: properties.Alias},

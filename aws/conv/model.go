@@ -452,8 +452,10 @@ var awsResourcesDef = map[string]map[string]*propertyTransform{
 		properties.RecordCount:     {name: "ResourceRecordSetCount", transform: extractValueFn},
 	},
 	cloud.Record: {
+		// Built from a RecordSetInZone. Zone is the zone NAME, the display and
+		// filter value; the zone Id it also carries is only the id hash input.
 		properties.Name:        {name: "Name", transform: extractDNSNameFn},
-		properties.Zone:        {name: "Zone"},
+		properties.Zone:        {name: "ZoneName", transform: extractDNSNameFn},
 		properties.Failover:    {name: "Failover", transform: extractValueFn},
 		properties.Continent:   {name: "GeoLocation", transform: extractFieldFn("ContinentCode")},
 		properties.Country:     {name: "GeoLocation", transform: extractFieldFn("CountryCode")},

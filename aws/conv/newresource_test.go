@@ -173,8 +173,16 @@ var sdkPrototypes = map[string][]func() interface{}{
 
 	// DNS
 	cloud.Zone: {func() interface{} { return route53types.HostedZone{Id: awssdk.String("/hostedzone/Z1")} }},
+	// A record is built from a record set plus the zone it was read from. ZoneName
+	// is pre-set so the Zone mapping is extracted rather than reported absent.
 	cloud.Record: {func() interface{} {
-		return route53types.ResourceRecordSet{Name: awssdk.String("example.com."), Type: route53types.RRTypeA}
+		return RecordSetInZone{
+			ResourceRecordSet: route53types.ResourceRecordSet{
+				Name: awssdk.String("example.com."), Type: route53types.RRTypeA,
+			},
+			ZoneId:   "/hostedzone/Z1",
+			ZoneName: "example.com.",
+		}
 	}},
 
 	// Lambda
@@ -496,9 +504,9 @@ func TestNewResourceExtractsEveryMappedProperty(t *testing.T) {
 // the fetcher instead. The list is asserted so that a new inert entry, which
 // would otherwise look like a working mapping, shows up as a failure.
 func TestMappedPropertiesWithoutTransform(t *testing.T) {
-	expected := map[string]bool{
-		cloud.Record + ".Zone": true,
-	}
+	// Empty: the last inert entry, cloud.Record's Zone, now reads
+	// RecordSetInZone.ZoneName. The test stays as the guard against a new one.
+	expected := map[string]bool{}
 
 	found := make(map[string]bool)
 	for rtype, def := range awsResourcesDef {

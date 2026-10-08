@@ -72,6 +72,16 @@ import (
 	"github.com/theazz/awless-ro/graph"
 )
 
+// RecordSetInZone is a Route 53 record set together with the hosted zone it was
+// read from. A record set alone does not identify a record: AWS's key is
+// zone + name + type + set identifier, and the zone is not a field of the shape
+// the API returns, so it has to be carried alongside.
+type RecordSetInZone struct {
+	route53types.ResourceRecordSet
+	ZoneId   string // /hostedzone/Z…, the hash input
+	ZoneName string // the display value for properties.Zone
+}
+
 // InitResource creates an empty resource of the right type, with the identifier
 // AWS uses for that shape.
 func InitResource(source interface{}) (*graph.Resource, error) {
@@ -199,8 +209,20 @@ func InitResource(source interface{}) (*graph.Resource, error) {
 	// DNS
 	case route53types.HostedZone:
 		res = graph.InitResource(cloud.Zone, awssdk.ToString(ss.Id))
-	case route53types.ResourceRecordSet:
-		id := HashFields(awssdk.ToString(ss.Name), string(ss.Type))
+	case RecordSetInZone:
+		// AWS's own key for a record set: zone + name + type + set identifier.
+		// SetIdentifier separates weighted/latency/failover/geolocation/multivalue
+		// siblings of one name+type; the zone Id separates split-horizon records.
+		// Region, Weight and TTL are attributes, not identity: editing a weight
+		// must not mint a new node id.
+		//
+		// The hash is over the RAW API values, before extractDNSNameFn decodes the
+		// name's octal escapes, so a change to the decoder cannot shift ids.
+		//
+		// There is deliberately no case for a bare route53types.ResourceRecordSet:
+		// one id scheme only, and a caller that forgets the zone gets an error
+		// instead of a quietly different id.
+		id := HashFields(ss.ZoneId, awssdk.ToString(ss.Name), string(ss.Type), awssdk.ToString(ss.SetIdentifier))
 		res = graph.InitResource(cloud.Record, id)
 	// Lambda
 	case lambdatypes.FunctionConfiguration:

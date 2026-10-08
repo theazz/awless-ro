@@ -818,11 +818,17 @@ func addManualDnsFetchFuncs(conf *Config, funcs map[string]fetch.Func) {
 					return err
 				}
 				for _, output := range out.ResourceRecordSets {
-					res, err := awsconv.NewResource(output)
+					// The zone has to be in hand when the id is computed: a
+					// record's identity is zone + name + type + set identifier.
+					// objects keeps the raw shape, which is the cache's element type.
+					res, err := awsconv.NewResource(awsconv.RecordSetInZone{
+						ResourceRecordSet: output,
+						ZoneId:            awssdk.ToString(z.Id),
+						ZoneName:          awssdk.ToString(z.Name),
+					})
 					if err != nil {
 						return err
 					}
-					res.Properties()[properties.Zone] = awssdk.ToString(z.Name)
 					res.AddRelation(rdf.ChildrenOfRel, parent)
 					mu.Lock()
 					objects = append(objects, output)
