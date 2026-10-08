@@ -292,9 +292,27 @@ awless-ro list volumes --tag-key Dept --format tsv
 awless-ro list users --format json
 ```
 
-`--filter` matches any column, case-insensitively, by substring; `--tag`,
-`--tag-key` and `--tag-value` match tags. `--columns` reaches any property a resource
-carries, not only the default columns. `--format` covers `table`, `csv`, `tsv`,
+`--filter` matches any column, case-insensitively, in one of two forms:
+
+| Form | Matches | Example |
+|---|---|---|
+| `key=value` | any column containing the value | `--filter type=t3` finds `t3.micro` and `t3.large` |
+| `key==value` | the whole column value | `--filter state==Active` finds `Active` and not `Inactive` |
+
+The substring form cannot exclude a longer value that contains the one you asked
+for, which is what the exact form is for:
+
+```sh
+awless-ro list accesskeys --filter state==Active   # only the active keys
+awless-ro list accesskeys --filter state=active    # also the Inactive ones: "inactive" contains "active"
+```
+
+Both forms compare the value as it is stored rather than the cell as it is
+printed, so a date column is matched on its full timestamp and not on the `2
+days` the table shows.
+
+`--tag`, `--tag-key` and `--tag-value` match tags. `--columns` reaches any property a
+resource carries, not only the default columns. `--format` covers `table`, `csv`, `tsv`,
 `json` and `porcelain`; `--ids` prints one id per line and nothing else, for scripts.
 `-r` and `-p` override the region and profile for one command.
 
@@ -304,6 +322,19 @@ When the output goes to a pipe or a file there is no width to fit, so tables are
 wrapped at all: one row per line, values whole, as `ps` or `kubectl get` do.
 `--max-width N` sets the width explicitly, on a terminal or not, and `--max-width 0`
 turns the limit off; `show` takes it too. It has no effect on the other formats.
+
+`--tag`, `--tag-key` and `--tag-value` take several values separated by commas
+(`--tag Env=Production,Team=Payments`), so a value that itself contains a comma is
+quoted twice: double quotes for awless-ro, single quotes around them for the shell
+(bash, zsh and fish alike).
+
+```sh
+awless-ro list instances --tag '"Environment=Not, tagged"'
+awless-ro list instances --tag-value '"Not, tagged"'
+```
+
+Without them, `--tag 'Environment=Not, tagged'` is read as two tags and refused, and
+a backslash does not escape the comma.
 
 **`show`** — one resource by id, by name, or by `@name`, with its relations. Names
 are not unique in AWS, so an ambiguous one lists the candidates.

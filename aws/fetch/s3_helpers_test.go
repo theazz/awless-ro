@@ -177,3 +177,22 @@ func TestBucketNameFilterStillApplies(t *testing.T) {
 		t.Errorf("got %v, want only logs-eu", buckets)
 	}
 }
+
+// The exact form has to reach the narrowing as the bare value: read with a split
+// on the first "=" only, `bucket==LOGS-EU` would narrow on "=LOGS-EU" and return
+// nothing at all.
+func TestExactBucketNameFilterStillApplies(t *testing.T) {
+	api := &recordingS3{stubS3: stubS3{buckets: map[string][]s3types.Bucket{
+		"eu-west-1": {{Name: awssdk.String("logs-eu")}, {Name: awssdk.String("app-eu")}},
+	}}}
+	ctx := context.WithValue(context.Background(), "region", "eu-west-1")
+	ctx = context.WithValue(ctx, "filters", []string{"bucket==LOGS-EU"})
+
+	buckets, err := getBucketsPerRegion(ctx, api)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if len(buckets) != 1 || awssdk.ToString(buckets[0].Name) != "logs-eu" {
+		t.Errorf("got %v, want only logs-eu", buckets)
+	}
+}

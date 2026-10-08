@@ -632,6 +632,82 @@ func TestFilter(t *testing.T) {
 		}
 		compareJSON(t, w.String(), expected)
 	})
+	// key==value matches the whole value. Without it no anchored filter was
+	// reachable from the CLI (wallix/awless#252, #296).
+	t.Run("Exact filter on column name", func(t *testing.T) {
+		var w bytes.Buffer
+		displayer, _ := BuildOptions(
+			WithRdfType("subnet"),
+			WithFormat("json"),
+			WithFilters([]string{"Vpc==vpc_1"}),
+		).SetSource(g).Build()
+		expected := `[{"ID":"sub_1","Public":true,"Name":"my_subnet","Vpc":"vpc_1"},
+		{"ID":"sub_3","Public":false,"Name":"my_subnet","Vpc":"vpc_1"}]`
+		if err := displayer.Print(&w); err != nil {
+			t.Fatal(err)
+		}
+		compareJSON(t, w.String(), expected)
+	})
+	t.Run("Substring filter still matches a prefix", func(t *testing.T) {
+		var w bytes.Buffer
+		displayer, _ := BuildOptions(
+			WithRdfType("subnet"),
+			WithFormat("json"),
+			WithFilters([]string{"Vpc=vpc_"}),
+		).SetSource(g).Build()
+		expected := `[{"ID":"sub_1","Public":true,"Name":"my_subnet","Vpc":"vpc_1"},
+		{"ID":"sub_2","Public":false,"Vpc":"vpc_2"},
+		{"ID":"sub_3","Public":false,"Name":"my_subnet","Vpc":"vpc_1"}]`
+		if err := displayer.Print(&w); err != nil {
+			t.Fatal(err)
+		}
+		compareJSON(t, w.String(), expected)
+	})
+	t.Run("Exact filter does not match a prefix", func(t *testing.T) {
+		var w bytes.Buffer
+		displayer, _ := BuildOptions(
+			WithRdfType("subnet"),
+			WithFormat("json"),
+			WithFilters([]string{"Vpc==vpc_"}),
+		).SetSource(g).Build()
+		if err := displayer.Print(&w); err != nil {
+			t.Fatal(err)
+		}
+		// An empty result set renders as a JSON null here.
+		compareJSON(t, w.String(), `null`)
+	})
+	// A bool column is compared as a string, so the exact form works on it too.
+	t.Run("Exact filter on friendly name", func(t *testing.T) {
+		var w bytes.Buffer
+		displayer, _ := BuildOptions(
+			WithRdfType("subnet"),
+			WithFormat("json"),
+			WithFilters([]string{"public==false"}),
+		).SetSource(g).Build()
+		expected := `[{"ID":"sub_2","Public":false,"Vpc":"vpc_2"},
+		{"ID":"sub_3","Public":false,"Name":"my_subnet","Vpc":"vpc_1"}]`
+		if err := displayer.Print(&w); err != nil {
+			t.Fatal(err)
+		}
+		compareJSON(t, w.String(), expected)
+	})
+	// Both forms resolve the key the same way, so an unknown key keeps saying
+	// which keys are acceptable.
+	t.Run("Invalid filter key", func(t *testing.T) {
+		for _, f := range []string{"nosuchkey=x", "nosuchkey==x"} {
+			_, err := BuildOptions(
+				WithRdfType("subnet"),
+				WithFormat("json"),
+				WithFilters([]string{f}),
+			).SetSource(g).Build()
+			if err == nil {
+				t.Fatalf("%s: expected an error naming the acceptable keys", f)
+			}
+			if got := err.Error(); !strings.Contains(got, "Invalid filter key 'Nosuchkey'") || !strings.Contains(got, "case insensitive") {
+				t.Fatalf("%s: got %q", f, got)
+			}
+		}
+	})
 }
 
 func TestCompareInterface(t *testing.T) {

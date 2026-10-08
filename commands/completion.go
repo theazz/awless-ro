@@ -156,7 +156,14 @@ func localCompletionGraph(services ...string) (cloud.GraphAPI, bool) {
 
 	g := graph.NewGraph()
 	for _, s := range services {
-		if err := g.Merge(sync.LoadLocalGraphForService(s, profile, region)); err != nil {
+		// Completion stays silent by design: it runs on every Tab press and has no
+		// stderr contract, so a file that will not load offers nothing rather than
+		// corrupting the prompt. The next real command reports the error.
+		loaded, err := sync.LoadLocalGraphForService(s, profile, region)
+		if err != nil {
+			return nil, false
+		}
+		if err := g.Merge(loaded); err != nil {
 			return nil, false
 		}
 	}
