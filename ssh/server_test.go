@@ -2,6 +2,7 @@ package ssh
 
 import (
 	"bytes"
+	"crypto/dsa"
 	"crypto/ecdsa"
 	"crypto/ed25519"
 	"crypto/elliptic"
@@ -14,6 +15,7 @@ import (
 	"net"
 	"os"
 	"path/filepath"
+	"slices"
 	"strconv"
 	"strings"
 	"sync"
@@ -460,7 +462,7 @@ func TestDialUnrecordedHostKeyTypeRefusedNotChanged(t *testing.T) {
 
 func TestKnownHostKeyAlgorithms(t *testing.T) {
 	env := newSSHEnv(t)
-	const known, rsaHost, unknown = "198.51.100.1:22", "198.51.100.2:22", "198.51.100.3:22"
+	const known, rsaHost, unknown, dsaHost = "198.51.100.1:22", "198.51.100.2:22", "198.51.100.3:22", "198.51.100.4:22"
 	writeKnownHost(t, env.awlessKnownHosts(), known, newSigner(t).PublicKey())
 	rsaKey, err := rsa.GenerateKey(rand.Reader, 2048)
 	if err != nil {
@@ -472,26 +474,292 @@ func TestKnownHostKeyAlgorithms(t *testing.T) {
 	}
 	writeKnownHost(t, env.awlessKnownHosts(), rsaHost, rsaPub)
 
-	if got := knownHostKeyAlgorithms(unknown); got != nil {
-		t.Errorf("unknown host: %q, want nil (the library default)", got)
-	}
+	writeKnownHost(t, env.awlessKnownHosts(), dsaHost, dsaSigner(t).PublicKey())
 
-	all := append(gossh.SupportedAlgorithms().HostKeys, gossh.InsecureAlgorithms().HostKeys...)
-	got := knownHostKeyAlgorithms(known)
-	if len(got) != len(all) || got[0] != gossh.KeyAlgoED25519 {
-		t.Errorf("Ed25519 host: %q, want ssh-ed25519 first, then the other %d", got, len(all)-1)
-	}
-
-	got = knownHostKeyAlgorithms(rsaHost)
-	if len(got) < 3 {
-		t.Fatalf("RSA host: %q", got)
-	}
-	for _, algo := range got[:3] {
-		if keyTypeOfAlgorithm(algo) != gossh.KeyAlgoRSA {
-			t.Errorf("RSA host: %q, want the three RSA algorithms first", got)
-			break
+	secure := gossh.SupportedAlgorithms().HostKeys
+	noInsecure := func(name string, got []string) {
+		t.Helper()
+		for _, algo := range gossh.InsecureAlgorithms().HostKeys {
+			if slices.Contains(got, algo) {
+				t.Errorf("%s: %q offers the insecure %s", name, got, algo)
+			}
 		}
 	}
+
+	// Never empty: the library default would bring ssh-rsa and DSA back.
+	got := knownHostKeyAlgorithms(unknown)
+	if !slices.Equal(got, secure) {
+		t.Errorf("unknown host: %q, want the secure algorithms %q", got, secure)
+	}
+	noInsecure("unknown host", got)
+
+	got = knownHostKeyAlgorithms(known)
+	if len(got) != len(secure) || got[0] != gossh.KeyAlgoED25519 {
+		t.Errorf("Ed25519 host: %q, want ssh-ed25519 first, then the other %d", got, len(secure)-1)
+	}
+	noInsecure("Ed25519 host", got)
+
+	// A recorded RSA key goes through RSA-SHA2 only.
+	got = knownHostKeyAlgorithms(rsaHost)
+	if want := []string{gossh.KeyAlgoRSASHA256, gossh.KeyAlgoRSASHA512}; len(got) != len(secure) || !slices.Equal(got[:2], want) {
+		t.Errorf("RSA host: %q, want %q first, then the other %d", got, want, len(secure)-2)
+	}
+	noInsecure("RSA host", got)
+
+	// A recorded DSA key does not make DSA acceptable again.
+	got = knownHostKeyAlgorithms(dsaHost)
+	if !slices.Equal(got, secure) {
+		t.Errorf("DSA host: %q, want the secure algorithms %q", got, secure)
+	}
+	noInsecure("DSA host", got)
+}
+
+// rsaSigner returns a fresh RSA host key. Without restriction a server offers it as
+// rsa-sha2-256, rsa-sha2-512 and ssh-rsa.
+func rsaSigner(t *testing.T) gossh.AlgorithmSigner {
+	t.Helper()
+	priv, err := rsa.GenerateKey(rand.Reader, 2048)
+	if err != nil {
+		t.Fatal(err)
+	}
+	signer, err := gossh.NewSignerFromKey(priv)
+	if err != nil {
+		t.Fatal(err)
+	}
+	return signer.(gossh.AlgorithmSigner)
+}
+
+// sha1RSASigner is an RSA host key that the server offers only as ssh-rsa, like a
+// host older than OpenSSH 7.2.
+func sha1RSASigner(t *testing.T, key gossh.AlgorithmSigner) gossh.Signer {
+	t.Helper()
+	signer, err := gossh.NewSignerWithAlgorithms(key, []string{gossh.KeyAlgoRSA})
+	if err != nil {
+		t.Fatal(err)
+	}
+	return signer
+}
+
+var dsaOnce struct {
+	sync.Once
+	key *dsa.PrivateKey
+	err error
+}
+
+// dsaSigner returns a DSA host key. Generating the parameters is slow, so the key
+// is shared by the tests.
+func dsaSigner(t *testing.T) gossh.Signer {
+	t.Helper()
+	dsaOnce.Do(func() {
+		key := new(dsa.PrivateKey)
+		if dsaOnce.err = dsa.GenerateParameters(&key.Parameters, rand.Reader, dsa.L1024N160); dsaOnce.err != nil {
+			return
+		}
+		if dsaOnce.err = dsa.GenerateKey(key, rand.Reader); dsaOnce.err == nil {
+			dsaOnce.key = key
+		}
+	})
+	if dsaOnce.err != nil {
+		t.Fatal(dsaOnce.err)
+	}
+	signer, err := gossh.NewSignerFromKey(dsaOnce.key)
+	if err != nil {
+		t.Fatal(err)
+	}
+	return signer
+}
+
+// algorithmRecorder is a host key that remembers the algorithm it signed with,
+// which is the host-key algorithm the handshake settled on.
+type algorithmRecorder struct {
+	gossh.AlgorithmSigner
+	mu   sync.Mutex
+	used []string
+}
+
+func (r *algorithmRecorder) SignWithAlgorithm(rand io.Reader, data []byte, algorithm string) (*gossh.Signature, error) {
+	r.mu.Lock()
+	r.used = append(r.used, algorithm)
+	r.mu.Unlock()
+	return r.AlgorithmSigner.SignWithAlgorithm(rand, data, algorithm)
+}
+
+func (r *algorithmRecorder) algorithms() []string {
+	r.mu.Lock()
+	defer r.mu.Unlock()
+	return slices.Clone(r.used)
+}
+
+// A host offering only ssh-rsa (RSA with SHA-1) or only DSA is refused, whether its
+// key is recorded or not and whether host keys are checked or not: the client never
+// offers those algorithms. The refusal is about the host, so no other user is tried,
+// nothing is asked and nothing is persisted.
+func TestDialRefusesInsecureHostKeyAlgorithms(t *testing.T) {
+	cases := []struct {
+		name, offered string
+		hostKey       func(t *testing.T) (offered gossh.Signer, recorded gossh.PublicKey)
+	}{
+		{"ssh-rsa", gossh.KeyAlgoRSA, func(t *testing.T) (gossh.Signer, gossh.PublicKey) {
+			key := rsaSigner(t)
+			return sha1RSASigner(t, key), key.PublicKey()
+		}},
+		{"dsa", gossh.InsecureKeyAlgoDSA, func(t *testing.T) (gossh.Signer, gossh.PublicKey) {
+			key := dsaSigner(t)
+			return key, key.PublicKey()
+		}},
+	}
+	for _, tc := range cases {
+		for _, mode := range []string{"unknown", "recorded", "not strict"} {
+			t.Run(tc.name+"/"+mode, func(t *testing.T) {
+				env := newSSHEnv(t)
+				offered, recorded := tc.hostKey(t)
+				srv := startServer(t, offered, "ec2-user", env.clientKey.PublicKey())
+				if mode == "recorded" {
+					writeKnownHost(t, env.awlessKnownHosts(), srv.addr, recorded)
+				}
+				before, _ := os.ReadFile(env.awlessKnownHosts())
+				fake := &fakeTerminal{interactive: true, answers: []string{"yes"}}
+				useTerminal(t, fake)
+
+				c := env.client(t, srv)
+				c.SetStrictHostKeyChecking(mode != "not strict")
+				var err error
+				within(t, 10*time.Second, func() { err = c.DialWithUsers("ec2-user", "ubuntu") })
+				if err == nil {
+					t.Fatalf("a host offering only %s was accepted", tc.offered)
+				}
+				var negotiation *gossh.AlgorithmNegotiationError
+				if !errors.As(err, &negotiation) || negotiation.What != "host key" {
+					t.Errorf("got %v, want a host-key algorithm negotiation failure", err)
+				}
+				for _, want := range []string{"insecure", tc.offered} {
+					if !strings.Contains(err.Error(), want) {
+						t.Errorf("error %q does not mention %q", err, want)
+					}
+				}
+				if strings.Contains(err.Error(), "HAS CHANGED") || strings.Contains(err.Error(), "authenticate") {
+					t.Errorf("misreported: %v", err)
+				}
+				if !IsHostKeyError(err) {
+					t.Error("not reported as a host-key error")
+				}
+				if n := srv.conns.Load(); n != 1 {
+					t.Errorf("%d connections, want 1: another user cannot fix the host's algorithms", n)
+				}
+				if n := fake.readCount(); n != 0 {
+					t.Errorf("asked %d times, want 0", n)
+				}
+				after, _ := os.ReadFile(env.awlessKnownHosts())
+				if !bytes.Equal(before, after) {
+					t.Errorf("known_hosts changed:\nbefore %q\nafter  %q", before, after)
+				}
+				mustNotExist(t, env.opensshKnownHosts())
+			})
+		}
+	}
+}
+
+// The same on the second hop.
+func TestProxyHopRefusesSHA1RSAHostKey(t *testing.T) {
+	env := newSSHEnv(t)
+	jumpKey, destKey := newSigner(t), rsaSigner(t)
+	jump := startServer(t, jumpKey, "ec2-user", env.clientKey.PublicKey())
+	dest := startServer(t, sha1RSASigner(t, destKey), "ec2-user", env.clientKey.PublicKey())
+	writeKnownHost(t, env.awlessKnownHosts(), jump.addr, jumpKey.PublicKey())
+	writeKnownHost(t, env.awlessKnownHosts(), dest.addr, destKey.PublicKey())
+	useTerminal(t, &fakeTerminal{interactive: false})
+
+	c := env.client(t, jump)
+	if err := c.DialWithUsers("ec2-user"); err != nil {
+		t.Fatal(err)
+	}
+	var err error
+	within(t, 10*time.Second, func() {
+		_, err = c.NewClientWithProxy(dest.host, dest.port, "", "ec2-user", "ubuntu")
+	})
+	var negotiation *gossh.AlgorithmNegotiationError
+	if !errors.As(err, &negotiation) || !IsHostKeyError(err) {
+		t.Fatalf("got %v, want a host-key algorithm negotiation failure", err)
+	}
+	if n := dest.conns.Load(); n != 1 {
+		t.Errorf("destination saw %d connections, want 1", n)
+	}
+}
+
+// A recorded RSA key is still usable: a host offering it with SHA-2 and SHA-1
+// signatures, like a stock sshd, is reached through RSA-SHA2.
+func TestDialRecordedRSAKeyUsesSHA2(t *testing.T) {
+	env := newSSHEnv(t)
+	hostKey := &algorithmRecorder{AlgorithmSigner: rsaSigner(t)}
+	srv := startServer(t, hostKey, "ec2-user", env.clientKey.PublicKey(), newECDSASigner(t), newSigner(t))
+	writeKnownHost(t, env.opensshKnownHosts(), srv.addr, hostKey.PublicKey())
+	before, err := os.ReadFile(env.opensshKnownHosts())
+	if err != nil {
+		t.Fatal(err)
+	}
+	useTerminal(t, &fakeTerminal{interactive: true, onRead: func() {
+		t.Error("asked about a host whose key is already known")
+	}})
+
+	c := env.client(t, srv)
+	within(t, 10*time.Second, func() { err = c.DialWithUsers("ec2-user") })
+	if err != nil {
+		t.Fatalf("a host known by its RSA key was refused: %v", err)
+	}
+	used := hostKey.algorithms()
+	if len(used) == 0 {
+		t.Fatal("the RSA host key was not used")
+	}
+	for _, algo := range used {
+		if algo != gossh.KeyAlgoRSASHA256 && algo != gossh.KeyAlgoRSASHA512 {
+			t.Errorf("negotiated %s, want rsa-sha2-256 or rsa-sha2-512", algo)
+		}
+	}
+	after, err := os.ReadFile(env.opensshKnownHosts())
+	if err != nil {
+		t.Fatal(err)
+	}
+	if !bytes.Equal(before, after) {
+		t.Errorf("known_hosts changed:\nbefore %q\nafter  %q", before, after)
+	}
+	mustNotExist(t, env.awlessKnownHosts())
+}
+
+// RSA-SHA2 still checks the key: a different RSA key for the address is the
+// changed-key alarm, with nothing asked and nothing persisted.
+func TestDialChangedRSAHostKeyRefused(t *testing.T) {
+	env := newSSHEnv(t)
+	srv := startServer(t, rsaSigner(t), "ec2-user", env.clientKey.PublicKey())
+	writeKnownHost(t, env.opensshKnownHosts(), srv.addr, rsaSigner(t).PublicKey())
+	before, err := os.ReadFile(env.opensshKnownHosts())
+	if err != nil {
+		t.Fatal(err)
+	}
+	fake := &fakeTerminal{interactive: true, answers: []string{"yes"}}
+	useTerminal(t, fake)
+
+	c := env.client(t, srv)
+	within(t, 10*time.Second, func() { err = c.DialWithUsers("ec2-user", "ubuntu") })
+	if err == nil || !strings.Contains(err.Error(), "HAS CHANGED") {
+		t.Fatalf("got %v, want the changed-host-key refusal", err)
+	}
+	if !IsHostKeyError(err) {
+		t.Error("not reported as a host-key error")
+	}
+	if n := srv.conns.Load(); n != 1 {
+		t.Errorf("%d connections, want 1", n)
+	}
+	if n := fake.readCount(); n != 0 {
+		t.Errorf("asked %d times, want 0", n)
+	}
+	after, err := os.ReadFile(env.opensshKnownHosts())
+	if err != nil {
+		t.Fatal(err)
+	}
+	if !bytes.Equal(before, after) {
+		t.Errorf("known_hosts changed:\nbefore %q\nafter  %q", before, after)
+	}
+	mustNotExist(t, env.awlessKnownHosts())
 }
 
 // The reported defect: with stdin not a terminal, the question was re-asked for

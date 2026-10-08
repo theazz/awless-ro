@@ -90,7 +90,7 @@ func TestParseUserHost(t *testing.T) {
 func TestResolveInstance(t *testing.T) {
 	captureLog(t)
 	g := sshGraph(t,
-		resource(cloud.Instance, "i-web", p.Name, "web", p.PublicIP, "198.51.100.10", p.PrivateIP, "10.0.0.10", p.State, "running"),
+		resource(cloud.Instance, "i-web", p.Name, "web", p.PublicIP, "198.51.100.10", p.PrivateIP, "192.0.2.10", p.State, "running"),
 		resource(cloud.Instance, "i-dup1", p.Name, "dup", p.State, "running"),
 		resource(cloud.Instance, "i-dup2", p.Name, "dup", p.State, "stopped"),
 		resource(cloud.Instance, "i-twin1", p.Name, "twin", p.State, "running"),
@@ -99,7 +99,7 @@ func TestResolveInstance(t *testing.T) {
 		resource(cloud.Instance, "i-ghost2", p.Name, "ghost", p.State, "terminated"),
 	)
 
-	for _, ref := range []string{"web", "198.51.100.10", "10.0.0.10", "i-web"} {
+	for _, ref := range []string{"web", "198.51.100.10", "192.0.2.10", "i-web"} {
 		inst, err := resolveInstance(g, ref)
 		if err != nil {
 			t.Errorf("%s: %v", ref, err)
@@ -285,7 +285,7 @@ func TestLocalInfraGraphReadsTheSyncedFile(t *testing.T) {
 	if err := os.MkdirAll(dir, 0o700); err != nil {
 		t.Fatal(err)
 	}
-	synced := sshGraph(t, resource(cloud.Instance, "i-web", p.Name, "web", p.PrivateIP, "10.0.0.10"))
+	synced := sshGraph(t, resource(cloud.Instance, "i-web", p.Name, "web", p.PrivateIP, "192.0.2.10"))
 	f, err := os.Create(filepath.Join(dir, "infra.nt"))
 	if err != nil {
 		t.Fatal(err)
@@ -400,10 +400,10 @@ func TestPrintNeverDials(t *testing.T) {
 	}
 
 	g := sshGraph(t,
-		resource(cloud.Instance, "i-web", p.Name, "web", p.PublicIP, "127.0.0.1", p.PrivateIP, "10.0.0.10", p.State, "running", p.KeyPair, "testkey", p.Image, "ami-ubuntu"),
+		resource(cloud.Instance, "i-web", p.Name, "web", p.PublicIP, "127.0.0.1", p.PrivateIP, "192.0.2.10", p.State, "running", p.KeyPair, "testkey", p.Image, "ami-ubuntu"),
 		resource(cloud.Image, "ami-ubuntu", p.Name, "ubuntu/images/hvm-ssd-gp3/ubuntu-noble-24.04-amd64-server-20240101"),
 		resource(cloud.Instance, "i-bastion", p.Name, "bastion", p.PublicIP, "127.0.0.1", p.State, "running", p.KeyPair, "testkey"),
-		resource(cloud.Instance, "i-db", p.Name, "db", p.PrivateIP, "10.0.0.20", p.State, "running", p.KeyPair, "testkey"),
+		resource(cloud.Instance, "i-db", p.Name, "db", p.PrivateIP, "192.0.2.20", p.State, "running", p.KeyPair, "testkey"),
 	)
 
 	ln := listenCounting(t)
@@ -421,9 +421,9 @@ func TestPrintNeverDials(t *testing.T) {
 		{"config", "web", sshOptions{printConfig: true, port: ln.port, throughPort: 22},
 			[]string{"Host web", "Hostname 127.0.0.1", "User ubuntu", "Port " + port, "IdentityFile " + key}},
 		{"cli through", "db", sshOptions{printCLI: true, through: "bastion", port: 22, throughPort: ln.port},
-			[]string{"-i " + key, "ec2-user@10.0.0.20", "ProxyCommand=" + proxy}},
+			[]string{"-i " + key, "ec2-user@192.0.2.20", "ProxyCommand=" + proxy}},
 		{"config through", "db", sshOptions{printConfig: true, through: "bastion", port: 22, throughPort: ln.port},
-			[]string{"Host db", "Hostname 10.0.0.20", "User ec2-user", "IdentityFile " + key, "ProxyCommand " + proxy}},
+			[]string{"Host db", "Hostname 192.0.2.20", "User ec2-user", "IdentityFile " + key, "ProxyCommand " + proxy}},
 	}
 	for _, tc := range cases {
 		var out bytes.Buffer

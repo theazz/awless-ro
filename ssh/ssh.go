@@ -132,8 +132,8 @@ func IsHostKeyError(err error) bool {
 }
 
 // configFor is the client config for one login attempt on hostport: c's config with
-// the user set, the host key types already recorded for hostport preferred, and the
-// host-key callback wrapped so its verdict can be read back.
+// the user set, only secure host-key algorithms, the types already recorded for
+// hostport first, and the host-key callback wrapped so its verdict can be read back.
 func (c *Client) configFor(hostport, user string, auths []gossh.AuthMethod, verdict *hostKeyVerdict) *gossh.ClientConfig {
 	cfg := *c.Config
 	cfg.User = user
@@ -143,11 +143,27 @@ func (c *Client) configFor(hostport, user string, auths []gossh.AuthMethod, verd
 	callback := cfg.HostKeyCallback
 	if !c.StrictHostKeyChecking {
 		callback = gossh.InsecureIgnoreHostKey()
-	} else if len(cfg.HostKeyAlgorithms) == 0 {
+	}
+	if len(cfg.HostKeyAlgorithms) == 0 {
 		cfg.HostKeyAlgorithms = knownHostKeyAlgorithms(hostport)
 	}
 	cfg.HostKeyCallback = verdict.wrap(callback)
 	return &cfg
+}
+
+// negotiationError is what a handshake that failed because the client and the host
+// share no algorithm is reported as, or nil for any other failure. Like a refused
+// host key it is about the host, not the user, so it stops the user loop; a host
+// that offers only refused host-key algorithms is a host-key error.
+func negotiationError(hostport string, err error) error {
+	var negotiation *gossh.AlgorithmNegotiationError
+	if !errors.As(err, &negotiation) {
+		return nil
+	}
+	if negotiation.What == "host key" {
+		return &hostKeyError{hostport: hostport, err: fmt.Errorf("Host public key verification failed: the host offers only host-key algorithms that are refused as insecure (ssh-rsa, that is RSA with SHA-1, and DSA) or not supported; nothing was changed: %w", negotiation)}
+	}
+	return fmt.Errorf("cannot connect to %s: %w", hostport, err)
 }
 
 // DialWithUsers connects to c.IP:c.Port, trying each user in turn until one
@@ -175,6 +191,9 @@ func (c *Client) DialWithUsers(usernames ...string) error {
 			conn.Close()
 			if refusal := verdict.refusal(); refusal != nil {
 				return &hostKeyError{hostport: hostport, err: refusal}
+			}
+			if negErr := negotiationError(hostport, handshakeErr); negErr != nil {
+				return negErr
 			}
 			c.logger.ExtraVerbosef("cannot authenticate to %s with user %s (err: %s)", hostport, user, handshakeErr)
 			err = handshakeErr
@@ -225,6 +244,9 @@ func (c *Client) NewClientWithProxy(destinationHost string, destinationPort int,
 			netConn.Close()
 			if refusal := verdict.refusal(); refusal != nil {
 				return nil, &hostKeyError{hostport: hostport, err: refusal}
+			}
+			if negErr := negotiationError(hostport, err); negErr != nil {
+				return nil, negErr
 			}
 			c.logger.ExtraVerbosef("cannot proxy with user %s (err: %s)", user, err)
 			continue
@@ -529,27 +551,33 @@ func (probeKey) Marshal() []byte                       { return []byte("awless-r
 func (probeKey) Verify([]byte, *gossh.Signature) error { return errors.New("probe key") }
 
 // knownHostKeyAlgorithms is the host-key algorithm preference for hostport: the
-// algorithms of the key types already recorded for it first, then every other one
-// the client supports. nil, which means the library default, when the host is not
-// known.
+// secure algorithms the client supports, those of the key types already recorded
+// for hostport first.
 //
-// This is what OpenSSH does. Without it the client takes the first algorithm in
-// its own default order that the server offers (ECDSA before Ed25519), so a host
-// recorded only with its Ed25519 key presents its ECDSA key, which is not recorded,
-// and a genuine host looks like a changed one.
+// Only gossh.SupportedAlgorithms, never gossh.InsecureAlgorithms: ssh-rsa (RSA with
+// SHA-1) and DSA are not offered, so a host that offers nothing else is refused,
+// as OpenSSH 8.8 and later do. A recorded RSA key still works, through
+// rsa-sha2-256 and rsa-sha2-512. The list is never left empty, because the library
+// default it would fall back to still contains ssh-rsa and DSA.
+//
+// Recorded types first is what OpenSSH does. Without it the client takes the first
+// algorithm in its own order that the server offers, so a host recorded only with
+// its Ed25519 key presents its ECDSA key, which is not recorded, and a genuine host
+// looks like a changed one.
 func knownHostKeyAlgorithms(hostport string) []string {
+	algos := gossh.SupportedAlgorithms().HostKeys
 	files, _ := knownHostsFiles()
 	if len(files) == 0 {
-		return nil
+		return algos
 	}
 	check, err := knownhosts.New(files...)
 	if err != nil {
 		// checkHostKey reports an unreadable file.
-		return nil
+		return algos
 	}
 	var keyErr *knownhosts.KeyError
 	if !errors.As(check(hostport, &net.TCPAddr{IP: net.IPv4zero}, probeKey{}), &keyErr) || len(keyErr.Want) == 0 {
-		return nil
+		return algos
 	}
 	known := map[string]bool{}
 	for _, k := range keyErr.Want {
@@ -557,16 +585,12 @@ func knownHostKeyAlgorithms(hostport string) []string {
 	}
 
 	var preferred, rest []string
-	all := append(gossh.SupportedAlgorithms().HostKeys, gossh.InsecureAlgorithms().HostKeys...)
-	for _, algo := range all {
+	for _, algo := range algos {
 		if known[keyTypeOfAlgorithm(algo)] {
 			preferred = append(preferred, algo)
 		} else {
 			rest = append(rest, algo)
 		}
-	}
-	if len(preferred) == 0 {
-		return nil
 	}
 	return append(preferred, rest...)
 }

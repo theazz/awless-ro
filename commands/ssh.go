@@ -67,11 +67,11 @@ var sshCmd = &cobra.Command{
 	Short:             "Launch a SSH session to an instance given an id or alias",
 	Long:              "Launch a SSH session to an instance given an id or alias. All connection details are derived from a given instance name/id.",
 	Example: `  awless-ro ssh i-8d43b21b                       # using the instance id
-  awless-ro ssh redis-prod                       # using name only (other infos are derived)
-  awless-ro ssh ec2-user@redis-prod              # forcing the user
-  awless-ro ssh 34.215.29.221                    # using the IP
-  awless-ro ssh root@34.215.29.221 --port 23     # specifying a port
-  awless-ro ssh redis-prod --local               # resolve from the synced graph, no AWS call
+  awless-ro ssh web-1                            # using name only (other infos are derived)
+  awless-ro ssh ec2-user@web-1                   # forcing the user
+  awless-ro ssh 203.0.113.10                     # using the IP
+  awless-ro ssh root@203.0.113.10 --port 23      # specifying a port
+  awless-ro ssh web-1 --local                    # resolve from the synced graph, no AWS call
 
   awless-ro ssh redis-prod -i keyname            # using AWS keyname (look into ~/.ssh/keyname.pem & ~/.awless-ro/keys/keyname.pem)
   awless-ro ssh redis-prod -i ~/path/toward/key  # specifying a full key path
