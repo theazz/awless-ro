@@ -2,8 +2,11 @@ package ssh
 
 import (
 	"bytes"
+	"crypto/ecdsa"
 	"crypto/ed25519"
+	"crypto/elliptic"
 	"crypto/rand"
+	"crypto/rsa"
 	"encoding/pem"
 	"errors"
 	"fmt"
@@ -66,10 +69,24 @@ type testServer struct {
 	conns atomic.Int32
 }
 
-// startServer serves SSH on 127.0.0.1 with hostKey, letting in only allowUser
-// authenticating with clientKey. It forwards direct-tcpip channels, which is what
-// a jump host does, and counts every TCP connection it accepts.
-func startServer(t *testing.T, hostKey gossh.Signer, allowUser string, clientKey gossh.PublicKey) *testServer {
+func newECDSASigner(t *testing.T) gossh.Signer {
+	t.Helper()
+	priv, err := ecdsa.GenerateKey(elliptic.P256(), rand.Reader)
+	if err != nil {
+		t.Fatal(err)
+	}
+	signer, err := gossh.NewSignerFromKey(priv)
+	if err != nil {
+		t.Fatal(err)
+	}
+	return signer
+}
+
+// startServer serves SSH on 127.0.0.1 with hostKey (and moreHostKeys, as a real
+// sshd offers one key per type), letting in only allowUser authenticating with
+// clientKey. It forwards direct-tcpip channels, which is what a jump host does,
+// and counts every TCP connection it accepts.
+func startServer(t *testing.T, hostKey gossh.Signer, allowUser string, clientKey gossh.PublicKey, moreHostKeys ...gossh.Signer) *testServer {
 	t.Helper()
 
 	cfg := &gossh.ServerConfig{
@@ -81,6 +98,9 @@ func startServer(t *testing.T, hostKey gossh.Signer, allowUser string, clientKey
 		},
 	}
 	cfg.AddHostKey(hostKey)
+	for _, k := range moreHostKeys {
+		cfg.AddHostKey(k)
+	}
 
 	ln, err := net.Listen("tcp", "127.0.0.1:0")
 	if err != nil {
@@ -332,6 +352,146 @@ func TestDialChangedHostKeyRefused(t *testing.T) {
 		t.Errorf("known_hosts changed:\nbefore %q\nafter  %q", before, after)
 	}
 	mustNotExist(t, env.awlessKnownHosts())
+}
+
+// The live-check defect: a host recorded with only its Ed25519 key, offering ECDSA
+// and Ed25519 like a stock sshd. The client's default order picks ECDSA, which is
+// not recorded, and a genuine host was refused as changed. Like OpenSSH, the
+// recorded key type must be negotiated.
+func TestDialPrefersRecordedHostKeyType(t *testing.T) {
+	env := newSSHEnv(t)
+	edKey, ecKey := newSigner(t), newECDSASigner(t)
+	srv := startServer(t, ecKey, "ec2-user", env.clientKey.PublicKey(), edKey)
+	writeKnownHost(t, env.opensshKnownHosts(), srv.addr, edKey.PublicKey())
+	before, err := os.ReadFile(env.opensshKnownHosts())
+	if err != nil {
+		t.Fatal(err)
+	}
+	useTerminal(t, &fakeTerminal{interactive: true, onRead: func() {
+		t.Error("asked about a host whose key is already known")
+	}})
+
+	c := env.client(t, srv)
+	within(t, 10*time.Second, func() { err = c.DialWithUsers("ec2-user") })
+	if err != nil {
+		t.Fatalf("a host known by its Ed25519 key was refused: %v", err)
+	}
+	after, err := os.ReadFile(env.opensshKnownHosts())
+	if err != nil {
+		t.Fatal(err)
+	}
+	if !bytes.Equal(before, after) {
+		t.Errorf("known_hosts changed:\nbefore %q\nafter  %q", before, after)
+	}
+	mustNotExist(t, env.awlessKnownHosts())
+}
+
+// The same on the second hop, where the jump host dials the destination.
+func TestProxyHopPrefersRecordedHostKeyType(t *testing.T) {
+	env := newSSHEnv(t)
+	jumpEd, jumpEC := newSigner(t), newECDSASigner(t)
+	destEd, destEC := newSigner(t), newECDSASigner(t)
+	jump := startServer(t, jumpEC, "ec2-user", env.clientKey.PublicKey(), jumpEd)
+	dest := startServer(t, destEC, "ec2-user", env.clientKey.PublicKey(), destEd)
+	writeKnownHost(t, env.awlessKnownHosts(), jump.addr, jumpEd.PublicKey())
+	writeKnownHost(t, env.awlessKnownHosts(), dest.addr, destEd.PublicKey())
+	useTerminal(t, &fakeTerminal{interactive: false})
+
+	c := env.client(t, jump)
+	if err := c.DialWithUsers("ec2-user"); err != nil {
+		t.Fatal(err)
+	}
+	var proxied *Client
+	var err error
+	within(t, 10*time.Second, func() {
+		proxied, err = c.NewClientWithProxy(dest.host, dest.port, "", "ec2-user")
+	})
+	if err != nil {
+		t.Fatalf("a destination known by its Ed25519 key was refused: %v", err)
+	}
+	t.Cleanup(func() { proxied.Client.Close() })
+}
+
+// A host that offers only a key type nobody recorded for it has not changed its
+// key: it is still refused, but not with the man-in-the-middle alarm that tells the
+// user to edit a correct known_hosts line.
+func TestDialUnrecordedHostKeyTypeRefusedNotChanged(t *testing.T) {
+	env := newSSHEnv(t)
+	srv := startServer(t, newECDSASigner(t), "ec2-user", env.clientKey.PublicKey())
+	writeKnownHost(t, env.opensshKnownHosts(), srv.addr, newSigner(t).PublicKey())
+	before, err := os.ReadFile(env.opensshKnownHosts())
+	if err != nil {
+		t.Fatal(err)
+	}
+	fake := &fakeTerminal{interactive: true, answers: []string{"yes"}}
+	useTerminal(t, fake)
+
+	c := env.client(t, srv)
+	within(t, 10*time.Second, func() { err = c.DialWithUsers("ec2-user", "ubuntu") })
+	if err == nil {
+		t.Fatal("a host key of an unrecorded type was accepted")
+	}
+	if strings.Contains(err.Error(), "HAS CHANGED") {
+		t.Errorf("reported as a changed key: %v", err)
+	}
+	for _, want := range []string{"ecdsa-sha2-nistp256", "ssh-ed25519", env.opensshKnownHosts()} {
+		if !strings.Contains(err.Error(), want) {
+			t.Errorf("error %q does not mention %q", err, want)
+		}
+	}
+	if !IsHostKeyError(err) {
+		t.Error("not reported as a host-key error")
+	}
+	if n := srv.conns.Load(); n != 1 {
+		t.Errorf("%d connections, want 1", n)
+	}
+	if n := fake.readCount(); n != 0 {
+		t.Errorf("asked %d times, want 0", n)
+	}
+	after, err := os.ReadFile(env.opensshKnownHosts())
+	if err != nil {
+		t.Fatal(err)
+	}
+	if !bytes.Equal(before, after) {
+		t.Errorf("known_hosts changed:\nbefore %q\nafter  %q", before, after)
+	}
+	mustNotExist(t, env.awlessKnownHosts())
+}
+
+func TestKnownHostKeyAlgorithms(t *testing.T) {
+	env := newSSHEnv(t)
+	const known, rsaHost, unknown = "198.51.100.1:22", "198.51.100.2:22", "198.51.100.3:22"
+	writeKnownHost(t, env.awlessKnownHosts(), known, newSigner(t).PublicKey())
+	rsaKey, err := rsa.GenerateKey(rand.Reader, 2048)
+	if err != nil {
+		t.Fatal(err)
+	}
+	rsaPub, err := gossh.NewPublicKey(&rsaKey.PublicKey)
+	if err != nil {
+		t.Fatal(err)
+	}
+	writeKnownHost(t, env.awlessKnownHosts(), rsaHost, rsaPub)
+
+	if got := knownHostKeyAlgorithms(unknown); got != nil {
+		t.Errorf("unknown host: %q, want nil (the library default)", got)
+	}
+
+	all := append(gossh.SupportedAlgorithms().HostKeys, gossh.InsecureAlgorithms().HostKeys...)
+	got := knownHostKeyAlgorithms(known)
+	if len(got) != len(all) || got[0] != gossh.KeyAlgoED25519 {
+		t.Errorf("Ed25519 host: %q, want ssh-ed25519 first, then the other %d", got, len(all)-1)
+	}
+
+	got = knownHostKeyAlgorithms(rsaHost)
+	if len(got) < 3 {
+		t.Fatalf("RSA host: %q", got)
+	}
+	for _, algo := range got[:3] {
+		if keyTypeOfAlgorithm(algo) != gossh.KeyAlgoRSA {
+			t.Errorf("RSA host: %q, want the three RSA algorithms first", got)
+			break
+		}
+	}
 }
 
 // The reported defect: with stdin not a terminal, the question was re-asked for

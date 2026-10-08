@@ -497,9 +497,11 @@ func printSSH(w io.Writer, opts sshOptions, g cloud.GraphAPI, arg string) error 
 		return err
 	}
 	if opts.printConfig {
+		// The Host line is the bare instance name, without any USER@: ssh matches
+		// Host patterns against the host name alone.
 		host := first.name
-		if opts.through != "" {
-			host = arg
+		if dest != nil {
+			host = dest.name
 		}
 		_, err = fmt.Fprintln(w, client.SSHConfigString(host))
 		return err

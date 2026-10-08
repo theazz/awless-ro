@@ -438,6 +438,38 @@ func TestPrintNeverDials(t *testing.T) {
 		}
 	}
 
+	// The Host line is the bare instance name, with or without --through and an
+	// explicit USER@: ssh matches Host patterns against the host name alone.
+	hostLines := []struct {
+		arg  string
+		opts sshOptions
+		want string
+	}{
+		{"web", sshOptions{printConfig: true, port: ln.port, throughPort: 22}, "Host web"},
+		{"admin@web", sshOptions{printConfig: true, port: ln.port, throughPort: 22}, "Host web"},
+		{"db", sshOptions{printConfig: true, through: "bastion", port: 22, throughPort: ln.port}, "Host db"},
+		{"admin@db", sshOptions{printConfig: true, through: "bastion", port: 22, throughPort: ln.port}, "Host db"},
+	}
+	for _, tc := range hostLines {
+		var out bytes.Buffer
+		if err := printSSH(&out, tc.opts, g, tc.arg); err != nil {
+			t.Errorf("%s (through %q): %v", tc.arg, tc.opts.through, err)
+			continue
+		}
+		var got []string
+		for _, line := range strings.Split(out.String(), "\n") {
+			if strings.HasPrefix(line, "Host ") {
+				got = append(got, line)
+			}
+		}
+		if len(got) != 1 || got[0] != tc.want {
+			t.Errorf("%s (through %q): Host lines %q, want [%q]", tc.arg, tc.opts.through, got, tc.want)
+		}
+		if strings.HasPrefix(tc.arg, "admin@") && !strings.Contains(out.String(), "User admin") {
+			t.Errorf("%s (through %q): the explicit user is lost: %q", tc.arg, tc.opts.through, out.String())
+		}
+	}
+
 	// Anything that dialled would have reached the listener by now.
 	time.Sleep(200 * time.Millisecond)
 	ln.close()

@@ -131,9 +131,10 @@ func IsHostKeyError(err error) bool {
 	return errors.As(err, &h)
 }
 
-// configFor is the client config for one login attempt: c's config with the user
-// set and the host-key callback wrapped so its verdict can be read back.
-func (c *Client) configFor(user string, auths []gossh.AuthMethod, verdict *hostKeyVerdict) *gossh.ClientConfig {
+// configFor is the client config for one login attempt on hostport: c's config with
+// the user set, the host key types already recorded for hostport preferred, and the
+// host-key callback wrapped so its verdict can be read back.
+func (c *Client) configFor(hostport, user string, auths []gossh.AuthMethod, verdict *hostKeyVerdict) *gossh.ClientConfig {
 	cfg := *c.Config
 	cfg.User = user
 	if auths != nil {
@@ -142,6 +143,8 @@ func (c *Client) configFor(user string, auths []gossh.AuthMethod, verdict *hostK
 	callback := cfg.HostKeyCallback
 	if !c.StrictHostKeyChecking {
 		callback = gossh.InsecureIgnoreHostKey()
+	} else if len(cfg.HostKeyAlgorithms) == 0 {
+		cfg.HostKeyAlgorithms = knownHostKeyAlgorithms(hostport)
 	}
 	cfg.HostKeyCallback = verdict.wrap(callback)
 	return &cfg
@@ -161,7 +164,7 @@ func (c *Client) DialWithUsers(usernames ...string) error {
 
 	for _, user := range usernames {
 		verdict := &hostKeyVerdict{}
-		cfg := c.configFor(user, nil, verdict)
+		cfg := c.configFor(hostport, user, nil, verdict)
 
 		conn, dialErr := net.DialTimeout("tcp", hostport, cfg.Timeout)
 		if dialErr != nil {
@@ -217,7 +220,7 @@ func (c *Client) NewClientWithProxy(destinationHost string, destinationPort int,
 		}
 		c.logger.ExtraVerbosef("successful tcp connection from %s:%d to %s:%d", c.IP, c.Port, destinationHost, destinationPort)
 		verdict := &hostKeyVerdict{}
-		conn, chans, reqs, err := gossh.NewClientConn(netConn, hostport, c.configFor(user, auths, verdict))
+		conn, chans, reqs, err := gossh.NewClientConn(netConn, hostport, c.configFor(hostport, user, auths, verdict))
 		if err != nil {
 			netConn.Close()
 			if refusal := verdict.refusal(); refusal != nil {
@@ -498,23 +501,88 @@ func warnOnLooseKeyPermissions(path string) {
 	}
 }
 
-func checkHostKey(hostname string, remote net.Addr, key gossh.PublicKey) error {
-	var knownHostsFiles []string
-	var fileToAddKnownKey string
-
+// knownHostsFiles lists the existing known_hosts files host keys are checked
+// against, and the file an accepted key is added to.
+func knownHostsFiles() (files []string, fileToAddKnownKey string) {
 	opensshFile := filepath.Join(os.Getenv("HOME"), ".ssh", "known_hosts")
 	if _, err := os.Stat(opensshFile); err == nil {
-		knownHostsFiles = append(knownHostsFiles, opensshFile)
+		files = append(files, opensshFile)
 		fileToAddKnownKey = opensshFile
 	}
 
 	awlessFile := filepath.Join(os.Getenv("__AWLESS_HOME"), "known_hosts")
 	if _, err := os.Stat(awlessFile); err == nil {
-		knownHostsFiles = append(knownHostsFiles, awlessFile)
+		files = append(files, awlessFile)
 	}
 	if fileToAddKnownKey == "" {
 		fileToAddKnownKey = awlessFile
 	}
+	return files, fileToAddKnownKey
+}
+
+// probeKey matches no known_hosts entry. Checking it against a host lists every
+// key recorded for that host.
+type probeKey struct{}
+
+func (probeKey) Type() string                          { return "awless-ro-probe" }
+func (probeKey) Marshal() []byte                       { return []byte("awless-ro-probe") }
+func (probeKey) Verify([]byte, *gossh.Signature) error { return errors.New("probe key") }
+
+// knownHostKeyAlgorithms is the host-key algorithm preference for hostport: the
+// algorithms of the key types already recorded for it first, then every other one
+// the client supports. nil, which means the library default, when the host is not
+// known.
+//
+// This is what OpenSSH does. Without it the client takes the first algorithm in
+// its own default order that the server offers (ECDSA before Ed25519), so a host
+// recorded only with its Ed25519 key presents its ECDSA key, which is not recorded,
+// and a genuine host looks like a changed one.
+func knownHostKeyAlgorithms(hostport string) []string {
+	files, _ := knownHostsFiles()
+	if len(files) == 0 {
+		return nil
+	}
+	check, err := knownhosts.New(files...)
+	if err != nil {
+		// checkHostKey reports an unreadable file.
+		return nil
+	}
+	var keyErr *knownhosts.KeyError
+	if !errors.As(check(hostport, &net.TCPAddr{IP: net.IPv4zero}, probeKey{}), &keyErr) || len(keyErr.Want) == 0 {
+		return nil
+	}
+	known := map[string]bool{}
+	for _, k := range keyErr.Want {
+		known[k.Key.Type()] = true
+	}
+
+	var preferred, rest []string
+	all := append(gossh.SupportedAlgorithms().HostKeys, gossh.InsecureAlgorithms().HostKeys...)
+	for _, algo := range all {
+		if known[keyTypeOfAlgorithm(algo)] {
+			preferred = append(preferred, algo)
+		} else {
+			rest = append(rest, algo)
+		}
+	}
+	if len(preferred) == 0 {
+		return nil
+	}
+	return append(preferred, rest...)
+}
+
+// keyTypeOfAlgorithm is the key type, as recorded in known_hosts, that a host-key
+// algorithm signs with.
+func keyTypeOfAlgorithm(algo string) string {
+	switch algo {
+	case gossh.KeyAlgoRSASHA256, gossh.KeyAlgoRSASHA512:
+		return gossh.KeyAlgoRSA
+	}
+	return algo
+}
+
+func checkHostKey(hostname string, remote net.Addr, key gossh.PublicKey) error {
+	knownHostsFiles, fileToAddKnownKey := knownHostsFiles()
 
 	checkKnownHostFunc, err := knownhosts.New(knownHostsFiles...)
 	if err != nil {
@@ -543,9 +611,28 @@ func checkHostKey(hostname string, remote net.Addr, key gossh.PublicKey) error {
 		}
 	}
 
+	// Only a recorded key of the same type contradicts the one offered. Keys of
+	// other types say nothing about it: the host has several host keys.
+	var sameType, otherTypes []knownhosts.KnownKey
+	for _, knownKey := range keyError.Want {
+		if knownKey.Key.Type() == key.Type() {
+			sameType = append(sameType, knownKey)
+		} else {
+			otherTypes = append(otherTypes, knownKey)
+		}
+	}
+	if len(sameType) == 0 {
+		var recorded []string
+		for _, knownKey := range otherTypes {
+			recorded = append(recorded, fmt.Sprintf("%s in %s:%d", knownKey.Key.Type(), knownKey.Filename, knownKey.Line))
+		}
+		return fmt.Errorf("Host public key verification failed: '%s' offered a host key of type %s (fingerprint %s), and only keys of other types are recorded for it (%s). That key could not be checked, so the connection was refused; nothing was changed",
+			hostname, key.Type(), gossh.FingerprintSHA256(key), strings.Join(recorded, ", "))
+	}
+
 	var knownKeyInfos string
 	var knownKeyFiles []string
-	for _, knownKey := range keyError.Want {
+	for _, knownKey := range sameType {
 		knownKeyInfos += fmt.Sprintf("\n-> %s (%s key in %s:%d)", gossh.FingerprintSHA256(knownKey.Key), knownKey.Key.Type(), knownKey.Filename, knownKey.Line)
 		knownKeyFiles = append(knownKeyFiles, fmt.Sprintf("'%s:%d'", knownKey.Filename, knownKey.Line))
 	}
