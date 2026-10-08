@@ -14,3 +14,5 @@ awless-ro
 *.zip
 *.tar.gz
 SHA256SUMS
+# Working notes written by coding agents. Never part of the project.
+.agents/
