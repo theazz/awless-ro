@@ -4,10 +4,12 @@
 
 ### Added
 
-- `ssh` works again: directly, through a jump host with `--through`, offline with
-  `--local`; `--print-cli` and `--print-config` print without connecting. (#47)
-- `ssh` finds the private key by the key pair's fingerprint, so the local file no
-  longer has to be named like the key pair. (#49)
+- `ssh` works again: directly, through a jump host with `--through`, over the private
+  IP with `--private`, offline with `--local`; `--print-cli` and `--print-config` print
+  without connecting. (#47)
+- `ssh -i` takes the key to use, as a file path or a key name. (#47)
+- Without `-i`, `ssh` finds the private key by the key pair's name and then by its
+  fingerprint, so the local file no longer has to be named like the key pair. (#49)
 - `ssh` announces each guessed login user on stderr (`trying user ubuntu...`) and
   ends with a hint when none is accepted. (#49)
 
