@@ -60,11 +60,17 @@ func TestSwitchWarnsWhenEnvironmentOverridesSavedProfile(t *testing.T) {
 	switchCmd.Run(switchCmd, []string{"staging"})
 	switchCmd.PersistentPostRun(switchCmd, nil)
 
-	if !strings.Contains(output.String(), "switch saved profile 'staging'") || !strings.Contains(output.String(), "AWS_PROFILE=current") {
+	if !strings.Contains(output.String(), "switch saved profile 'staging'") || !strings.Contains(output.String(), "AWS_PROFILE variable overrides it with 'current'") || !strings.Contains(output.String(), "unset AWS_PROFILE") {
 		t.Errorf("switch did not explain that AWS_PROFILE overrides the saved profile; output: %s", output.String())
 	}
 	if got := config.GetAWSProfile(); got != "current" {
 		t.Errorf("effective profile = %q, want current", got)
+	}
+
+	switchCmd.Run(switchCmd, []string{"eu-west-2"})
+	switchCmd.PersistentPostRun(switchCmd, nil)
+	if !strings.Contains(output.String(), "switch saved region 'eu-west-2'") || !strings.Contains(output.String(), "AWS_DEFAULT_REGION variable overrides it with 'us-east-1'") {
+		t.Errorf("switch did not explain that AWS_DEFAULT_REGION overrides the saved region; output: %s", output.String())
 	}
 	if err := database.Execute(func(db *database.DB) error {
 		values, err := db.GetConfigs("userconfig")

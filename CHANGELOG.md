@@ -1,5 +1,11 @@
 # Changelog
 
+## Unreleased
+
+### Fixed
+
+- `switch` warns when an environment variable or profile overrides the profile or region it saved. (#56)
+
 ## v0.4.0
 
 ### Added

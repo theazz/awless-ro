@@ -29,6 +29,8 @@ func init() {
 	RootCmd.AddCommand(switchCmd)
 }
 
+var switchRequestedProfile, switchRequestedRegion string
+
 var switchCmd = &cobra.Command{
 	Use:               "switch [REGION] [PROFILE]",
 	ValidArgsFunction: completeSwitch,
@@ -45,6 +47,7 @@ var switchCmd = &cobra.Command{
 	),
 
 	Run: func(cmd *cobra.Command, args []string) {
+		switchRequestedProfile, switchRequestedRegion = "", ""
 		if len(args) < 1 || len(args) > 2 {
 			fmt.Fprintf(os.Stdout, "currently in region '%s' with profile '%s' (switch -h for help and examples)\n", config.GetAWSRegion(), config.GetAWSProfile())
 			return
@@ -52,10 +55,12 @@ var switchCmd = &cobra.Command{
 		for _, arg := range args {
 			if awsconfig.IsValidRegion(arg) {
 				exitOn(config.Set(config.RegionConfigKey, arg))
+				switchRequestedRegion = arg
 				continue
 			}
 			if awsconfig.IsValidProfile(arg) {
 				exitOn(config.Set(config.ProfileConfigKey, arg))
+				switchRequestedProfile = arg
 				continue
 			}
 			exitOn(fmt.Errorf("could not find profile: '%s' in $HOME/.aws/{credentials,config}", arg))

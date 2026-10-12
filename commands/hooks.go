@@ -149,7 +149,7 @@ func applyRegionAndProfilePrecedence() error {
 	return nil
 }
 
-func notifyOnRegionOrProfilePrecedenceHook(*cobra.Command, []string) error {
+func notifyOnRegionOrProfilePrecedenceHook(cmd *cobra.Command, _ []string) error {
 	applyRegionAndProfilePrecedence()
 
 	if m := profileOverridenThrough; len(m) > 0 {
@@ -159,7 +159,32 @@ func notifyOnRegionOrProfilePrecedenceHook(*cobra.Command, []string) error {
 		logger.Infof("region precedence: '%s' loaded through %s", config.GetAWSRegion(), m)
 	}
 
+	if cmd.Name() == "switch" {
+		if requested, effective := switchRequestedProfile, config.GetAWSProfile(); requested != "" && requested != effective {
+			logger.Warningf("switch saved profile '%s', but %s overrides it with '%s'; %s", requested, profileOverridenThrough, effective, switchOverrideAdvice("profile", profileOverridenThrough, requested))
+		}
+		if requested, effective := switchRequestedRegion, config.GetAWSRegion(); requested != "" && requested != effective {
+			logger.Warningf("switch saved region '%s', but %s overrides it with '%s'; %s", requested, regionOverridenThrough, effective, switchOverrideAdvice("region", regionOverridenThrough, requested))
+		}
+	}
+
 	return nil
+}
+
+func switchOverrideAdvice(setting, source, requested string) string {
+	flag := "--aws-" + setting
+	switch source {
+	case "AWS_PROFILE variable":
+		return fmt.Sprintf("unset AWS_PROFILE or set AWS_PROFILE=%s to use the saved profile", requested)
+	case "AWS_DEFAULT_PROFILE variable":
+		return fmt.Sprintf("unset AWS_DEFAULT_PROFILE or set AWS_DEFAULT_PROFILE=%s to use the saved profile", requested)
+	case "AWS_DEFAULT_REGION variable":
+		return fmt.Sprintf("unset AWS_DEFAULT_REGION or set AWS_DEFAULT_REGION=%s to use the saved region", requested)
+	case "command flag":
+		return fmt.Sprintf("omit %s or set %s=%s to use the saved value", flag, flag, requested)
+	default:
+		return fmt.Sprintf("change the region in that profile or pass %s=%s to use the saved region", flag, requested)
+	}
 }
 
 func initCloudServicesHook(cmd *cobra.Command, args []string) error {
