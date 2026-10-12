@@ -79,6 +79,9 @@ var sshCmd = &cobra.Command{
 
   awless-ro ssh db-private --through my-bastion  # connect to a private inst through a public one
   awless-ro ssh db-private --private             # connect using the private IP (when you have a VPN, tunnel, etc ...)
+  awless-ro ssh db-private --through my-bastion --private  # reach the bastion over its private IP too
+  awless-ro ssh db-private --through my-bastion --local    # same, from the synced graph, no AWS call
+  awless-ro -v ssh web-1                         # show which key was found and why
 
   awless-ro ssh web-1 --print-cli                # print out the full terminal command to connect to instance
   awless-ro ssh web-1 --print-config             # print out the full SSH config (i.e: ~/.ssh/config) to connect to instance

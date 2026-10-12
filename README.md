@@ -106,6 +106,16 @@ awless-ro search images debian:::arm64
 awless-ro search images amazonlinux
 ```
 
+**"Get me onto that box."** SSH to an instance by its name, through a jump host if it
+is private. The address, the key and the login user come from AWS, so nothing has to
+be kept in `~/.ssh/config`.
+
+```sh
+awless-ro ssh web-1
+awless-ro ssh db-1 --through bastion-1
+awless-ro ssh db-1 --through bastion-1 --print-cli    # see the ssh command first
+```
+
 **"Who am I in this account?"** Before doing anything, check which identity, account
 and policies the current profile resolves to.
 
@@ -378,13 +388,43 @@ awless-ro switch my-profile eu-west-1
 **`ssh`** — connect to an instance by name, id or IP.
 
 ```sh
-awless-ro ssh web-1                                   # user from the image, key from the instance's key pair
-awless-ro ssh ubuntu@web-1 -i ~/.ssh/other-key.pem    # force the user and the key
-awless-ro ssh db-1 --through bastion-1                # private instance through a jump host
-awless-ro ssh web-1 --local                           # resolve from the synced graph, no AWS call
-awless-ro ssh web-1 --print-cli                       # print the ssh command line, do not connect
+# what would run, without connecting
+awless-ro ssh bastion-1 --print-cli
+awless-ro ssh db-1 --through bastion-1 --print-cli
+
+# directly to an instance
+awless-ro ssh bastion-1                               # over its public IP
+awless-ro ssh bastion-1 --private                     # over its private IP (VPN, Direct Connect...)
+
+# to a private instance through a jump host
+awless-ro ssh db-1 --through bastion-1
+awless-ro ssh db-1 --through bastion-1 --private      # reach the jump host over its private IP
+
+# the same from the synced graph, without calling AWS
+awless-ro ssh db-1 --through bastion-1 --local
+
+# another AWS profile
+awless-ro -p my-profile ssh db-1 --through bastion-1
+
+# details: which key was found and why
+awless-ro -v ssh bastion-1
+
+# force the user and the key
+awless-ro ssh ubuntu@web-1 -i ~/.ssh/other-key.pem    # -i takes a path or a key name
+
+# keep a stanza in ~/.ssh/config
 awless-ro ssh db-1 --through bastion-1 --print-config >> ~/.ssh/config
 ```
+
+Names are the instances' `Name` tags in AWS, not the `Host` aliases of your
+`~/.ssh/config`. With `--through`, the target is always reached on its private IP via
+the jump host; `--private` decides how the jump host itself is reached.
+
+awless-ro resolves the address, key and user, checks the connection with its own
+client, and then hands over to your `ssh`: `ssh -i <key> <user>@<ip>`, plus a
+`ProxyCommand` for the jump host. That `ssh` reads `~/.ssh/config` as usual, but since
+it is given an IP, only `Host *`, IP patterns and `Match` blocks apply; the options
+awless-ro passes on the command line take precedence.
 
 Keys are looked up first by the instance's key pair name in `~/.awless-ro/keys` and
 then `~/.ssh`, with and without `.pem`. When no file is named like the key pair, the
@@ -397,8 +437,10 @@ once on a terminal, and refused with an explanation when there is no terminal. T
 login user comes from the instance's image when the image is in the synced graph;
 otherwise `ec2-user`, `ubuntu` and the other usual users are tried in turn, each
 announced on stderr (`trying user ubuntu...`), and a hint to give the user with
-`USER@` is printed if none is accepted. `--print-cli` / `--print-config` say which
-user they guessed and never open a connection.
+`USER@` is printed if none is accepted. Each wrong user is a failed login in the host's
+auth log, so once you know the user, pass it as `USER@`, especially on hosts behind
+fail2ban. `--print-cli` / `--print-config` say which user they guessed and never open
+a connection.
 
 **Aliases.** Reference a resource by its `Name` tag anywhere an id is accepted.
 
