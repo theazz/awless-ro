@@ -3,7 +3,11 @@ package commands
 import (
 	"bytes"
 	"context"
+	"crypto/ed25519"
+	"crypto/rand"
+	"encoding/pem"
 	"errors"
+	"io"
 	"net"
 	"os"
 	"path/filepath"
@@ -20,6 +24,10 @@ import (
 	"github.com/theazz/awless-ro/config"
 	"github.com/theazz/awless-ro/graph"
 	"github.com/theazz/awless-ro/logger"
+	"github.com/theazz/awless-ro/ssh"
+	"github.com/theazz/awless-ro/ssh/sshtest"
+
+	gossh "golang.org/x/crypto/ssh"
 )
 
 // captureLog sends the default logger to a buffer for the duration of a test.
@@ -505,5 +513,376 @@ func TestPlannedClientUnknownUserGuessesFirstDefault(t *testing.T) {
 	}
 	if !strings.Contains(logged.String(), "guessing 'ec2-user'") || !strings.Contains(logged.String(), "USER@web") {
 		t.Errorf("no guess warning: %q", logged.String())
+	}
+}
+
+// setSynced replaces the synced-graph loader for a test and returns a restore func.
+func setSynced(fn func() (cloud.GraphAPI, error)) func() {
+	prev := syncedInfraGraph
+	syncedInfraGraph = fn
+	return func() { syncedInfraGraph = prev }
+}
+
+// writeDiscoverableKey writes a fresh ed25519 private key at path and returns its
+// public key and the fingerprint EC2 would record for it (base64 SHA-256).
+func writeDiscoverableKey(t *testing.T, path string) (gossh.PublicKey, string) {
+	t.Helper()
+	_, priv, err := ed25519.GenerateKey(rand.Reader)
+	if err != nil {
+		t.Fatal(err)
+	}
+	block, err := gossh.MarshalPrivateKey(priv, "")
+	if err != nil {
+		t.Fatal(err)
+	}
+	if err := os.WriteFile(path, pem.EncodeToMemory(block), 0o600); err != nil {
+		t.Fatal(err)
+	}
+	pub, err := gossh.NewPublicKey(priv.Public())
+	if err != nil {
+		t.Fatal(err)
+	}
+	return pub, strings.TrimPrefix(gossh.FingerprintSHA256(pub), "SHA256:")
+}
+
+// isolateKeyEnv points HOME and the awless keys dir at fresh temp dirs, disables the
+// agent, and returns a writable ~/.ssh.
+func isolateKeyEnv(t *testing.T) (home, sshDir string) {
+	t.Helper()
+	home = t.TempDir()
+	t.Setenv("HOME", home)
+	t.Setenv("SSH_AUTH_SOCK", "")
+	previous := config.KeysDir
+	config.KeysDir = filepath.Join(home, ".awless-ro", "keys")
+	t.Cleanup(func() { config.KeysDir = previous })
+	sshDir = filepath.Join(home, ".ssh")
+	if err := os.MkdirAll(sshDir, 0o700); err != nil {
+		t.Fatal(err)
+	}
+	return home, sshDir
+}
+
+func TestKeyPairFingerprint(t *testing.T) {
+	withIt := sshGraph(t, resource(cloud.Keypair, "aws-pair", p.Fingerprint, "fp-in-graph"))
+	without := sshGraph(t)
+
+	restore := setSynced(func() (cloud.GraphAPI, error) {
+		t.Error("the synced graph was read though the live graph had the fingerprint")
+		return nil, nil
+	})
+	if got := keyPairFingerprint(withIt, "aws-pair"); got != "fp-in-graph" {
+		t.Errorf("from graph: got %q, want fp-in-graph", got)
+	}
+	restore()
+
+	synced := sshGraph(t, resource(cloud.Keypair, "aws-pair", p.Fingerprint, "fp-synced"))
+	restore = setSynced(func() (cloud.GraphAPI, error) { return synced, nil })
+	if got := keyPairFingerprint(without, "aws-pair"); got != "fp-synced" {
+		t.Errorf("from synced fallback: got %q, want fp-synced", got)
+	}
+	restore()
+
+	restore = setSynced(func() (cloud.GraphAPI, error) { return without, nil })
+	if got := keyPairFingerprint(without, "aws-pair"); got != "" {
+		t.Errorf("neither has it: got %q, want empty", got)
+	}
+	restore()
+}
+
+// --local must find the key by fingerprint while making no AWS call at all: the
+// fingerprint comes from the synced graph the instance was read from.
+func TestLocalKeyDiscoveryByFingerprintMakesNoAWSCall(t *testing.T) {
+	captureLog(t)
+	_, sshDir := isolateKeyEnv(t)
+	keyPath := filepath.Join(sshDir, "laptop-key")
+	_, recorded := writeDiscoverableKey(t, keyPath)
+
+	local := sshGraph(t,
+		resource(cloud.Instance, "i-web", p.Name, "web", p.PublicIP, "127.0.0.1", p.State, "running", p.KeyPair, "aws-pair"),
+		resource(cloud.Keypair, "aws-pair", p.Fingerprint, recorded),
+	)
+	infra := &cannedInfra{t: t, forbid: true}
+	g, err := connectionGraph(true, infra, func() (cloud.GraphAPI, error) { return local, nil })
+	if err != nil {
+		t.Fatal(err)
+	}
+	defer setSynced(func() (cloud.GraphAPI, error) {
+		t.Error("the synced graph was read though the local graph had the key pair")
+		return nil, nil
+	})()
+
+	var out bytes.Buffer
+	if err := printSSH(&out, sshOptions{printCLI: true, local: true, port: 22, throughPort: 22}, g, "web"); err != nil {
+		t.Fatal(err)
+	}
+	if !strings.Contains(out.String(), "-i "+keyPath) {
+		t.Errorf("the differently-named key was not found by fingerprint: %q", out.String())
+	}
+	if n := infra.calls.Load(); n != 0 {
+		t.Errorf("%d AWS calls under --local, want 0", n)
+	}
+}
+
+// A live run does not fetch key pairs; the fingerprint comes from the last sync, and
+// the only AWS requests are the three the connection graph already makes.
+func TestLiveKeyDiscoveryUsesSyncedFingerprint(t *testing.T) {
+	captureLog(t)
+	_, sshDir := isolateKeyEnv(t)
+	keyPath := filepath.Join(sshDir, "laptop-key")
+	_, recorded := writeDiscoverableKey(t, keyPath)
+
+	infra := &cannedInfra{t: t, graphs: map[string]cloud.GraphAPI{
+		cloud.Instance:      sshGraph(t, resource(cloud.Instance, "i-web", p.Name, "web", p.PublicIP, "127.0.0.1", p.State, "running", p.KeyPair, "aws-pair")),
+		cloud.SecurityGroup: sshGraph(t, resource(cloud.SecurityGroup, "sg-1")),
+		cloud.Image:         sshGraph(t, resource(cloud.Image, "ami-1")),
+	}}
+	synced := sshGraph(t, resource(cloud.Keypair, "aws-pair", p.Fingerprint, recorded))
+	defer setSynced(func() (cloud.GraphAPI, error) { return synced, nil })()
+
+	g, err := connectionGraph(false, infra, func() (cloud.GraphAPI, error) {
+		t.Error("the local graph was read without --local")
+		return nil, nil
+	})
+	if err != nil {
+		t.Fatal(err)
+	}
+	var out bytes.Buffer
+	if err := printSSH(&out, sshOptions{printCLI: true, port: 22, throughPort: 22}, g, "web"); err != nil {
+		t.Fatal(err)
+	}
+	if !strings.Contains(out.String(), "-i "+keyPath) {
+		t.Errorf("the key was not found via the synced fingerprint: %q", out.String())
+	}
+	if n := infra.calls.Load(); n != 3 {
+		t.Errorf("%d AWS fetches, want exactly instance+securitygroup+image", n)
+	}
+}
+
+// With -i the fingerprint is never looked up: the synced graph is not read, and the
+// named key is used as given.
+func TestExplicitIdentitySkipsFingerprint(t *testing.T) {
+	captureLog(t)
+	_, sshDir := isolateKeyEnv(t)
+	keyPath := filepath.Join(sshDir, "othername")
+	if err := os.WriteFile(keyPath, []byte("never parsed"), 0o600); err != nil {
+		t.Fatal(err)
+	}
+	g := sshGraph(t, resource(cloud.Instance, "i-web", p.Name, "web", p.PublicIP, "127.0.0.1", p.State, "running", p.KeyPair, "aws-pair"))
+	defer setSynced(func() (cloud.GraphAPI, error) {
+		t.Error("the synced graph was read though -i was given")
+		return nil, nil
+	})()
+
+	var out bytes.Buffer
+	if err := printSSH(&out, sshOptions{printCLI: true, identity: "othername", port: 22, throughPort: 22}, g, "web"); err != nil {
+		t.Fatal(err)
+	}
+	if !strings.Contains(out.String(), "-i "+keyPath) {
+		t.Errorf("the -i key was not used: %q", out.String())
+	}
+}
+
+// captureStdout redirects os.Stdout for the duration of fn: the attempt lines and
+// the error hint must never land there.
+func captureStdout(t *testing.T, fn func()) string {
+	t.Helper()
+	old := os.Stdout
+	r, w, err := os.Pipe()
+	if err != nil {
+		t.Fatal(err)
+	}
+	os.Stdout = w
+	done := make(chan string, 1)
+	go func() {
+		var buf bytes.Buffer
+		io.Copy(&buf, r)
+		done <- buf.String()
+	}()
+	fn()
+	w.Close()
+	os.Stdout = old
+	return <-done
+}
+
+func seedKnownHosts(t *testing.T, srv *sshtest.Server) {
+	t.Helper()
+	path := filepath.Join(os.Getenv("HOME"), ".ssh", "known_hosts")
+	f, err := os.OpenFile(path, os.O_WRONLY|os.O_APPEND|os.O_CREATE, 0o600)
+	if err != nil {
+		t.Fatal(err)
+	}
+	defer f.Close()
+	if _, err := f.WriteString(srv.KnownHostsLine() + "\n"); err != nil {
+		t.Fatal(err)
+	}
+}
+
+// failingIP fails the test if the reachability diagnosis asks for this machine's IP:
+// a reached host (authenticated or refused) must not trigger it.
+func failingIP(t *testing.T) func() net.IP {
+	return func() net.IP {
+		t.Error("myIP was called for a host that was reached")
+		return nil
+	}
+}
+
+// Without USER@ and with an unknown image, dialSSH guesses the users in order,
+// announcing each on stderr, and connects as the one the server accepts. stdout
+// stays clean.
+func TestDialSSHGuessesAndConnects(t *testing.T) {
+	logbuf := captureLog(t)
+	_, sshDir := isolateKeyEnv(t)
+	pub, recorded := writeDiscoverableKey(t, filepath.Join(sshDir, "laptop-key"))
+	srv := sshtest.Start(t, "admin", pub)
+	seedKnownHosts(t, srv)
+	g := sshGraph(t,
+		resource(cloud.Instance, "i-web", p.Name, "web", p.PublicIP, "127.0.0.1", p.State, "running", p.KeyPair, "aws-pair"),
+		resource(cloud.Keypair, "aws-pair", p.Fingerprint, recorded),
+	)
+	defer setSynced(func() (cloud.GraphAPI, error) { return sshGraph(t), nil })()
+
+	var client *ssh.Client
+	var err error
+	stdout := captureStdout(t, func() {
+		client, err = dialSSH(sshOptions{local: true, port: srv.Port, throughPort: 22}, g, "web", failingIP(t))
+	})
+	if err != nil {
+		t.Fatalf("dial failed: %v", err)
+	}
+	t.Cleanup(func() { client.CloseAll() })
+	if client.User != "admin" {
+		t.Errorf("user %q, want admin", client.User)
+	}
+	if stdout != "" {
+		t.Errorf("attempt lines reached stdout: %q", stdout)
+	}
+	assertLogOrder(t, logbuf.String(), "trying user ec2-user...", "trying user ubuntu...", "trying user admin...")
+	if strings.Contains(logbuf.String(), "trying user root...") {
+		t.Errorf("a user after the successful one was tried: %q", logbuf.String())
+	}
+	if n := srv.Conns(); n != 6 {
+		t.Errorf("%d connections, want 6 (ec2-user..admin)", n)
+	}
+}
+
+// An explicit USER@ is tried alone and not announced.
+func TestDialSSHExplicitUserNotAnnounced(t *testing.T) {
+	logbuf := captureLog(t)
+	_, sshDir := isolateKeyEnv(t)
+	pub, recorded := writeDiscoverableKey(t, filepath.Join(sshDir, "laptop-key"))
+	srv := sshtest.Start(t, "admin", pub)
+	seedKnownHosts(t, srv)
+	g := sshGraph(t,
+		resource(cloud.Instance, "i-web", p.Name, "web", p.PublicIP, "127.0.0.1", p.State, "running", p.KeyPair, "aws-pair"),
+		resource(cloud.Keypair, "aws-pair", p.Fingerprint, recorded),
+	)
+	defer setSynced(func() (cloud.GraphAPI, error) { return sshGraph(t), nil })()
+
+	client, err := dialSSH(sshOptions{local: true, port: srv.Port, throughPort: 22}, g, "admin@web", failingIP(t))
+	if err != nil {
+		t.Fatal(err)
+	}
+	t.Cleanup(func() { client.CloseAll() })
+	if strings.Contains(logbuf.String(), "trying user") {
+		t.Errorf("an explicit user was announced: %q", logbuf.String())
+	}
+}
+
+// A user derived from the image with certainty is not announced either.
+func TestDialSSHImageDerivedUserNotAnnounced(t *testing.T) {
+	logbuf := captureLog(t)
+	_, sshDir := isolateKeyEnv(t)
+	pub, recorded := writeDiscoverableKey(t, filepath.Join(sshDir, "laptop-key"))
+	srv := sshtest.Start(t, "ubuntu", pub)
+	seedKnownHosts(t, srv)
+	g := sshGraph(t,
+		resource(cloud.Instance, "i-web", p.Name, "web", p.PublicIP, "127.0.0.1", p.State, "running", p.KeyPair, "aws-pair", p.Image, "ami-ubuntu"),
+		resource(cloud.Image, "ami-ubuntu", p.Name, "ubuntu/images/hvm-ssd-gp3/ubuntu-noble-24.04-amd64-server-20240101"),
+		resource(cloud.Keypair, "aws-pair", p.Fingerprint, recorded),
+	)
+	defer setSynced(func() (cloud.GraphAPI, error) { return sshGraph(t), nil })()
+
+	client, err := dialSSH(sshOptions{local: true, port: srv.Port, throughPort: 22}, g, "web", failingIP(t))
+	if err != nil {
+		t.Fatal(err)
+	}
+	t.Cleanup(func() { client.CloseAll() })
+	if client.User != "ubuntu" {
+		t.Errorf("user %q, want ubuntu", client.User)
+	}
+	if strings.Contains(logbuf.String(), "trying user") {
+		t.Errorf("the image-derived user was announced: %q", logbuf.String())
+	}
+}
+
+// When no guessed user is accepted the error names them and tells the user to give
+// one explicitly; the host was reached, so myIP is never asked.
+func TestDialSSHAllRefusedHints(t *testing.T) {
+	captureLog(t)
+	_, sshDir := isolateKeyEnv(t)
+	pub, recorded := writeDiscoverableKey(t, filepath.Join(sshDir, "laptop-key"))
+	srv := sshtest.Start(t, "nobody", pub)
+	seedKnownHosts(t, srv)
+	g := sshGraph(t,
+		resource(cloud.Instance, "i-web", p.Name, "web", p.PublicIP, "127.0.0.1", p.State, "running", p.KeyPair, "aws-pair"),
+		resource(cloud.Keypair, "aws-pair", p.Fingerprint, recorded),
+	)
+	defer setSynced(func() (cloud.GraphAPI, error) { return sshGraph(t), nil })()
+
+	var err error
+	stdout := captureStdout(t, func() {
+		_, err = dialSSH(sshOptions{local: true, port: srv.Port, throughPort: 22}, g, "web", failingIP(t))
+	})
+	want := "none of ec2-user, ubuntu, centos, core, bitnami, admin, root accepted the key; give the user explicitly: awless-ro ssh USER@web"
+	if err == nil || err.Error() != want {
+		t.Fatalf("got %v, want exactly %q", err, want)
+	}
+	var authErr *ssh.AuthError
+	if !errors.As(err, &authErr) {
+		t.Error("the hint error does not unwrap to *ssh.AuthError")
+	}
+	if n := srv.Conns(); n != 7 {
+		t.Errorf("%d connections, want 7 (every default user)", n)
+	}
+	if stdout != "" {
+		t.Errorf("the hint reached stdout: %q", stdout)
+	}
+}
+
+// Printing still never dials, even against a reachable server.
+func TestPrintCLIStillNeverDialsWithDiscovery(t *testing.T) {
+	captureLog(t)
+	_, sshDir := isolateKeyEnv(t)
+	pub, recorded := writeDiscoverableKey(t, filepath.Join(sshDir, "laptop-key"))
+	srv := sshtest.Start(t, "admin", pub)
+	seedKnownHosts(t, srv)
+	g := sshGraph(t,
+		resource(cloud.Instance, "i-web", p.Name, "web", p.PublicIP, "127.0.0.1", p.State, "running", p.KeyPair, "aws-pair"),
+		resource(cloud.Keypair, "aws-pair", p.Fingerprint, recorded),
+	)
+	defer setSynced(func() (cloud.GraphAPI, error) { return sshGraph(t), nil })()
+
+	before := srv.Conns()
+	var out bytes.Buffer
+	if err := printSSH(&out, sshOptions{printCLI: true, local: true, port: srv.Port, throughPort: 22}, g, "web"); err != nil {
+		t.Fatal(err)
+	}
+	time.Sleep(100 * time.Millisecond)
+	if n := srv.Conns(); n != before {
+		t.Errorf("printing opened %d connections, want 0", n-before)
+	}
+}
+
+// assertLogOrder fails unless each needle appears after the one before it.
+func assertLogOrder(t *testing.T, haystack string, needles ...string) {
+	t.Helper()
+	last := 0
+	for _, n := range needles {
+		i := strings.Index(haystack[last:], n)
+		if i < 0 {
+			t.Errorf("missing %q in order; log:\n%s", n, haystack)
+			return
+		}
+		last += i + len(n)
 	}
 }
