@@ -73,15 +73,15 @@ var sshCmd = &cobra.Command{
   awless-ro ssh root@203.0.113.10 --port 23      # specifying a port
   awless-ro ssh web-1 --local                    # resolve from the synced graph, no AWS call
 
-  awless-ro ssh redis-prod                       # key found by name, or by matching the key pair fingerprint in ~/.ssh & ~/.awless-ro/keys
-  awless-ro ssh redis-prod -i keyname            # using AWS keyname (look into ~/.ssh/keyname.pem & ~/.awless-ro/keys/keyname.pem)
-  awless-ro ssh redis-prod -i ~/path/toward/key  # specifying a full key path
+  awless-ro ssh web-1                            # key found by name, or by matching the key pair fingerprint in ~/.ssh & ~/.awless-ro/keys
+  awless-ro ssh web-1 -i keyname                 # using AWS keyname (look into ~/.ssh/keyname.pem & ~/.awless-ro/keys/keyname.pem)
+  awless-ro ssh web-1 -i ~/path/toward/key       # specifying a full key path
 
   awless-ro ssh db-private --through my-bastion  # connect to a private inst through a public one
   awless-ro ssh db-private --private             # connect using the private IP (when you have a VPN, tunnel, etc ...)
 
-  awless-ro ssh redis-prod --print-cli           # print out the full terminal command to connect to instance
-  awless-ro ssh redis-prod --print-config        # print out the full SSH config (i.e: ~/.ssh/config) to connect to instance
+  awless-ro ssh web-1 --print-cli                # print out the full terminal command to connect to instance
+  awless-ro ssh web-1 --print-config             # print out the full SSH config (i.e: ~/.ssh/config) to connect to instance
   
   awless-ro ssh private-redis --through my-proxy                                # connect to private through proxy instance
   awless-ro ssh private-redis --through my-proxy --through-port 23              # specifying proxy port
