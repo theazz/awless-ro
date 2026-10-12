@@ -7,7 +7,7 @@ you can pipe. Optionally, a local copy of the account to explore offline.
 It cannot change anything. Not by convention: every AWS operation it is capable of
 calling is a `Describe`, `Get`, `List` or `Head`, and a test enforces that.
 
-![awless-ro listing instances and databases, showing a database and an instance with their relations, completing a name with Tab, and scanning security groups](docs/demo.gif)
+![awless-ro listing instances and databases, showing a database and an instance with their relations, completing a name with Tab, scanning security groups, and connecting with ssh to a private instance through a jump host](docs/demo.gif)
 
 ## Why this exists
 
