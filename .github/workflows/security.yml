@@ -36,6 +36,8 @@ jobs:
       - uses: actions/setup-go@b7ad1dad31e06c5925ef5d2fc7ad053ef454303e # v7.0.0
         with:
           go-version: '1.26'
+          # The runner image caches an older 1.26.x; without this a known stdlib fix is missed.
+          check-latest: true
 
       # Unpinned deliberately, unlike the copy in ci.yml. There the pin keeps a build
       # from turning red without a commit of ours; here the entire point is to hear
