@@ -297,6 +297,9 @@ type sshTarget struct {
 	userKnown                           bool
 	instance                            cloud.Resource
 	publicIP, privateIP, state, keyName string
+	// keyFingerprint is the fingerprint AWS recorded for keyName, used to find a
+	// differently-named local key. Empty with -i or when nothing has been synced.
+	keyFingerprint string
 }
 
 func resolveTarget(g cloud.GraphAPI, userhost, identity string) (*sshTarget, error) {
@@ -314,9 +317,48 @@ func resolveTarget(g cloud.GraphAPI, userhost, identity string) (*sshTarget, err
 		t.keyName = identity
 	} else {
 		t.keyName, _ = inst.Properties()[properties.KeyPair].(string)
+		if t.keyName != "" {
+			t.keyFingerprint = keyPairFingerprint(g, t.keyName)
+		}
 	}
 	t.users, t.userKnown = loginUsers(g, inst, user)
 	return t, nil
+}
+
+// keyRef is what the ssh package needs to find the key: the name, and the
+// fingerprint AWS recorded for it when it is known.
+func (t *sshTarget) keyRef() ssh.KeyRef {
+	return ssh.KeyRef{Name: t.keyName, Fingerprint: t.keyFingerprint}
+}
+
+// syncedInfraGraph loads the infra graph written by the last sync. A live run does
+// not fetch key pairs (that would be a new AWS request this read-only tool must not
+// add), so the fingerprint comes from this file. A variable so tests can replace it.
+var syncedInfraGraph = func() (cloud.GraphAPI, error) {
+	return sync.LoadLocalGraphForService("infra", config.GetAWSProfile(), config.GetAWSRegion())
+}
+
+// keyPairFingerprint is the fingerprint AWS recorded for a key pair: from the graph
+// ssh already resolved against, falling back to the synced infra graph when the
+// live graph has no key pair (it never fetches them). "" when neither has it; a read
+// error is only worth a verbose line, the search just falls back to the name.
+func keyPairFingerprint(g cloud.GraphAPI, name string) string {
+	if res, err := findResource(g, name, cloud.Keypair); err == nil {
+		if fp, _ := res.Properties()[properties.Fingerprint].(string); fp != "" {
+			return fp
+		}
+	}
+	synced, err := syncedInfraGraph()
+	if err != nil {
+		logger.Verbosef("cannot read the synced graph for key pair fingerprints: %s", err)
+		return ""
+	}
+	if res, err := findResource(synced, name, cloud.Keypair); err == nil {
+		if fp, _ := res.Properties()[properties.Fingerprint].(string); fp != "" {
+			return fp
+		}
+	}
+	return ""
 }
 
 // address is the IP to connect to: the private one with --private, otherwise the
@@ -426,9 +468,9 @@ func plannedKeyPath(t *sshTarget) string {
 	if t.keyName == "" {
 		return ""
 	}
-	path, ok := ssh.ResolveKeyPath(t.keyName, sshKeyFolders()...)
+	path, ok := ssh.ResolveKeyPath(t.keyRef(), sshKeyFolders()...)
 	if !ok {
-		logger.Warningf("cannot find SSH key '%s' for %s in %s; printing without -i", t.keyName, t.instance.Id(), strings.Join(sshKeyFolders(), ", "))
+		logger.Warningf("cannot find SSH key '%s' for %s in %s, by name or by fingerprint; printing without -i", t.keyName, t.instance.Id(), strings.Join(sshKeyFolders(), ", "))
 	}
 	return path
 }
@@ -511,19 +553,28 @@ func printSSH(w io.Writer, opts sshOptions, g cloud.GraphAPI, arg string) error 
 }
 
 // connectSSH dials the instance, through the jump host with --through, and hands
-// the session over. myIP is only asked after a failed dial, to explain it.
+// the session over.
 func connectSSH(opts sshOptions, g cloud.GraphAPI, arg string, myIP func() net.IP) error {
-	first, dest, err := resolveTargets(opts, g, arg)
+	client, err := dialSSH(opts, g, arg, myIP)
 	if err != nil {
 		return err
 	}
+	return client.Connect()
+}
 
-	firstHop, err := ssh.InitClient(first.keyName, sshKeyFolders()...)
+// dialSSH resolves the target(s) and opens the connection, through the jump host
+// with --through, without handing the session over: that split lets a test dial a
+// loopback server and inspect the result. myIP is only asked after a failed dial,
+// to explain it.
+func dialSSH(opts sshOptions, g cloud.GraphAPI, arg string, myIP func() net.IP) (*ssh.Client, error) {
+	first, dest, err := resolveTargets(opts, g, arg)
 	if err != nil {
-		if errors.Is(err, ssh.ErrKeyNotFound) && opts.identity == "" {
-			logger.Info("you may want to specify a key filepath with `-i /path/to/key.pem`")
-		}
-		return err
+		return nil, err
+	}
+
+	firstHop, err := ssh.InitClient(first.keyRef(), sshKeyFolders()...)
+	if err != nil {
+		return nil, err
 	}
 	firstHop.SetLogger(logger.DefaultLogger)
 	firstHop.SetStrictHostKeyChecking(!opts.noStrictHostKey)
@@ -533,41 +584,81 @@ func connectSSH(opts sshOptions, g cloud.GraphAPI, arg string, myIP func() net.I
 		firstHop.Port = opts.throughPort
 	}
 	if firstHop.IP, err = first.address(opts.private); err != nil {
-		return err
+		return nil, err
 	}
 
-	err = firstHop.DialWithUsers(first.users...)
-	if isConnectionRefusedErr(err) {
+	err = firstHop.DialWithUsers(ssh.LoginUsers{Names: first.users, Known: first.userKnown})
+	if err != nil {
+		return nil, diagnoseDialError(err, g, opts, first, dest, true, myIP)
+	}
+
+	if dest == nil {
+		return firstHop, nil
+	}
+	if dest.privateIP == "" {
+		return nil, fmt.Errorf("no private IP resolved for instance %s (state '%s')", dest.instance.Id(), dest.state)
+	}
+	// The destination's own key pair first, unless -i chose the key for both.
+	var destKeypath string
+	if opts.identity == "" {
+		destKeypath, _ = ssh.ResolveKeyPath(dest.keyRef(), sshKeyFolders()...)
+	}
+	targetClient, err := firstHop.NewClientWithProxy(dest.privateIP, opts.port, destKeypath, ssh.LoginUsers{Names: dest.users, Known: dest.userKnown})
+	if err != nil {
+		return nil, diagnoseDialError(err, g, opts, first, dest, false, myIP)
+	}
+	return targetClient, nil
+}
+
+// diagnoseDialError turns a failed dial into the error the user sees. When every
+// candidate user was refused it suggests giving one explicitly; a host that was
+// reached (an authentication or host-key failure) is not diagnosed for
+// reachability, which would needlessly ask the network for this machine's IP.
+func diagnoseDialError(err error, g cloud.GraphAPI, opts sshOptions, first, dest *sshTarget, firstHop bool, myIP func() net.IP) error {
+	if firstHop && isConnectionRefusedErr(err) {
 		logger.Warning("cannot connect to this instance, maybe the system is still booting?")
 		return err
 	}
-	if err != nil {
-		// A refused host key means the host was reached: nothing to diagnose.
-		if !ssh.IsHostKeyError(err) {
-			if e := checkInstanceAccessible(first, g, myIP()); e != nil {
-				logger.Error(e.Error())
-			}
+	var authErr *ssh.AuthError
+	if errors.As(err, &authErr) {
+		if len(authErr.Users) > 1 {
+			return &sshAuthHintError{hint: authHint(first, dest, firstHop, authErr.Users), cause: authErr}
 		}
 		return err
 	}
-
-	targetClient := firstHop
-	if dest != nil {
-		if dest.privateIP == "" {
-			return fmt.Errorf("no private IP resolved for instance %s (state '%s')", dest.instance.Id(), dest.state)
-		}
-		// The destination's own key pair first, unless -i chose the key for both.
-		var destKeypath string
-		if opts.identity == "" {
-			destKeypath, _ = ssh.ResolveKeyPath(dest.keyName, sshKeyFolders()...)
-		}
-		targetClient, err = firstHop.NewClientWithProxy(dest.privateIP, opts.port, destKeypath, dest.users...)
-		if err != nil {
-			return err
+	// A refused host key means the host was reached: nothing to diagnose. Only the
+	// first hop can be checked for reachability; the destination sits behind it.
+	if firstHop && !ssh.IsHostKeyError(err) {
+		if e := checkInstanceAccessible(first, g, myIP()); e != nil {
+			logger.Error(e.Error())
 		}
 	}
+	return err
+}
 
-	return targetClient.Connect()
+// sshAuthHintError reads as the hint but still unwraps to the ssh.AuthError, so a
+// caller can both show the suggestion and recognise the cause.
+type sshAuthHintError struct {
+	hint  string
+	cause *ssh.AuthError
+}
+
+func (e *sshAuthHintError) Error() string { return e.hint }
+func (e *sshAuthHintError) Unwrap() error { return e.cause }
+
+// authHint tells the user to name the login user, with the command that does it for
+// the hop that refused every user.
+func authHint(first, dest *sshTarget, firstHop bool, users []string) string {
+	var cmd string
+	switch {
+	case dest == nil:
+		cmd = "awless-ro ssh USER@" + first.name
+	case firstHop:
+		cmd = fmt.Sprintf("awless-ro ssh %s --through USER@%s", dest.name, first.name)
+	default:
+		cmd = fmt.Sprintf("awless-ro ssh USER@%s --through %s", dest.name, first.name)
+	}
+	return fmt.Sprintf("none of %s accepted the key; give the user explicitly: %s", strings.Join(users, ", "), cmd)
 }
 
 func checkInstanceAccessible(t *sshTarget, g cloud.GraphAPI, myip net.IP) (err error) {

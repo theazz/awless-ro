@@ -44,16 +44,27 @@ func privateKeyAuth(priv privateKey) (ssh.AuthMethod, error) {
 // with undetected — and which only ever understood PKCS#1 RSA. That excluded the
 // modern OpenSSH format and every ed25519 key, so those simply failed to load.
 func encryptedPrivKeyAuth(priv privateKey) (ssh.AuthMethod, error) {
-	fmt.Fprintf(os.Stderr, "This SSH key is encrypted. Please enter passphrase for key '%s':", priv.path)
-	passphrase, err := term.ReadPassword(int(syscall.Stdin))
+	passphrase, err := readPassphrase(priv.path)
 	if err != nil {
 		return nil, err
 	}
-	fmt.Fprintln(os.Stderr)
 
 	signer, err := ssh.ParsePrivateKeyWithPassphrase(priv.body, passphrase)
 	if err != nil {
 		return nil, err
 	}
 	return ssh.PublicKeys(signer), nil
+}
+
+// readPassphrase asks for a key's passphrase on the terminal. A variable so a test
+// can replace it to prove a code path never prompts: the fingerprint scan matches
+// encrypted keys through their .pub and must reach this for no key it inspects.
+var readPassphrase = func(keyPath string) ([]byte, error) {
+	fmt.Fprintf(os.Stderr, "This SSH key is encrypted. Please enter passphrase for key '%s':", keyPath)
+	passphrase, err := term.ReadPassword(int(syscall.Stdin))
+	if err != nil {
+		return nil, err
+	}
+	fmt.Fprintln(os.Stderr)
+	return passphrase, nil
 }

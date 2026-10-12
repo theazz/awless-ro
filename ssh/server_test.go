@@ -23,6 +23,8 @@ import (
 	"testing"
 	"time"
 
+	"github.com/theazz/awless-ro/logger"
+
 	gossh "golang.org/x/crypto/ssh"
 	"golang.org/x/crypto/ssh/knownhosts"
 )
@@ -41,6 +43,12 @@ func newSigner(t *testing.T) gossh.Signer {
 		t.Fatal(err)
 	}
 	return signer
+}
+
+// guessed is the login users a test tries, with none of them certain: every attempt
+// is a guess, as it is when no USER@ was given and the image is unknown.
+func guessed(names ...string) LoginUsers {
+	return LoginUsers{Names: names}
 }
 
 // writeClientKey writes a fresh private key to dir/name and returns its signer.
@@ -241,7 +249,7 @@ func newSSHEnv(t *testing.T) sshEnv {
 
 func (e sshEnv) client(t *testing.T, srv *testServer) *Client {
 	t.Helper()
-	c, err := InitClient("client", e.keyDir)
+	c, err := InitClient(KeyRef{Name: "client"}, e.keyDir)
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -278,7 +286,7 @@ func TestDialUnknownHostKeyAcceptedAndPersisted(t *testing.T) {
 
 	c := env.client(t, srv)
 	var err error
-	within(t, 10*time.Second, func() { err = c.DialWithUsers("ec2-user") })
+	within(t, 10*time.Second, func() { err = c.DialWithUsers(guessed("ec2-user")) })
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -311,7 +319,7 @@ func TestDialKnownHostKey(t *testing.T) {
 
 	c := env.client(t, srv)
 	var err error
-	within(t, 10*time.Second, func() { err = c.DialWithUsers("ec2-user") })
+	within(t, 10*time.Second, func() { err = c.DialWithUsers(guessed("ec2-user")) })
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -333,7 +341,7 @@ func TestDialChangedHostKeyRefused(t *testing.T) {
 	useTerminal(t, fake)
 
 	c := env.client(t, srv)
-	within(t, 10*time.Second, func() { err = c.DialWithUsers("ec2-user", "ubuntu", "root") })
+	within(t, 10*time.Second, func() { err = c.DialWithUsers(guessed("ec2-user", "ubuntu", "root")) })
 	if err == nil || !strings.Contains(err.Error(), "HAS CHANGED") {
 		t.Fatalf("got %v, want the changed-host-key refusal", err)
 	}
@@ -374,7 +382,7 @@ func TestDialPrefersRecordedHostKeyType(t *testing.T) {
 	}})
 
 	c := env.client(t, srv)
-	within(t, 10*time.Second, func() { err = c.DialWithUsers("ec2-user") })
+	within(t, 10*time.Second, func() { err = c.DialWithUsers(guessed("ec2-user")) })
 	if err != nil {
 		t.Fatalf("a host known by its Ed25519 key was refused: %v", err)
 	}
@@ -400,13 +408,13 @@ func TestProxyHopPrefersRecordedHostKeyType(t *testing.T) {
 	useTerminal(t, &fakeTerminal{interactive: false})
 
 	c := env.client(t, jump)
-	if err := c.DialWithUsers("ec2-user"); err != nil {
+	if err := c.DialWithUsers(guessed("ec2-user")); err != nil {
 		t.Fatal(err)
 	}
 	var proxied *Client
 	var err error
 	within(t, 10*time.Second, func() {
-		proxied, err = c.NewClientWithProxy(dest.host, dest.port, "", "ec2-user")
+		proxied, err = c.NewClientWithProxy(dest.host, dest.port, "", guessed("ec2-user"))
 	})
 	if err != nil {
 		t.Fatalf("a destination known by its Ed25519 key was refused: %v", err)
@@ -429,7 +437,7 @@ func TestDialUnrecordedHostKeyTypeRefusedNotChanged(t *testing.T) {
 	useTerminal(t, fake)
 
 	c := env.client(t, srv)
-	within(t, 10*time.Second, func() { err = c.DialWithUsers("ec2-user", "ubuntu") })
+	within(t, 10*time.Second, func() { err = c.DialWithUsers(guessed("ec2-user", "ubuntu")) })
 	if err == nil {
 		t.Fatal("a host key of an unrecorded type was accepted")
 	}
@@ -624,7 +632,7 @@ func TestDialRefusesInsecureHostKeyAlgorithms(t *testing.T) {
 				c := env.client(t, srv)
 				c.SetStrictHostKeyChecking(mode != "not strict")
 				var err error
-				within(t, 10*time.Second, func() { err = c.DialWithUsers("ec2-user", "ubuntu") })
+				within(t, 10*time.Second, func() { err = c.DialWithUsers(guessed("ec2-user", "ubuntu")) })
 				if err == nil {
 					t.Fatalf("a host offering only %s was accepted", tc.offered)
 				}
@@ -670,12 +678,12 @@ func TestProxyHopRefusesSHA1RSAHostKey(t *testing.T) {
 	useTerminal(t, &fakeTerminal{interactive: false})
 
 	c := env.client(t, jump)
-	if err := c.DialWithUsers("ec2-user"); err != nil {
+	if err := c.DialWithUsers(guessed("ec2-user")); err != nil {
 		t.Fatal(err)
 	}
 	var err error
 	within(t, 10*time.Second, func() {
-		_, err = c.NewClientWithProxy(dest.host, dest.port, "", "ec2-user", "ubuntu")
+		_, err = c.NewClientWithProxy(dest.host, dest.port, "", guessed("ec2-user", "ubuntu"))
 	})
 	var negotiation *gossh.AlgorithmNegotiationError
 	if !errors.As(err, &negotiation) || !IsHostKeyError(err) {
@@ -702,7 +710,7 @@ func TestDialRecordedRSAKeyUsesSHA2(t *testing.T) {
 	}})
 
 	c := env.client(t, srv)
-	within(t, 10*time.Second, func() { err = c.DialWithUsers("ec2-user") })
+	within(t, 10*time.Second, func() { err = c.DialWithUsers(guessed("ec2-user")) })
 	if err != nil {
 		t.Fatalf("a host known by its RSA key was refused: %v", err)
 	}
@@ -739,7 +747,7 @@ func TestDialChangedRSAHostKeyRefused(t *testing.T) {
 	useTerminal(t, fake)
 
 	c := env.client(t, srv)
-	within(t, 10*time.Second, func() { err = c.DialWithUsers("ec2-user", "ubuntu") })
+	within(t, 10*time.Second, func() { err = c.DialWithUsers(guessed("ec2-user", "ubuntu")) })
 	if err == nil || !strings.Contains(err.Error(), "HAS CHANGED") {
 		t.Fatalf("got %v, want the changed-host-key refusal", err)
 	}
@@ -773,7 +781,7 @@ func TestDialWithoutTerminalFailsFast(t *testing.T) {
 	c := env.client(t, srv)
 	var err error
 	within(t, 10*time.Second, func() {
-		err = c.DialWithUsers("ec2-user", "ubuntu", "centos", "core", "bitnami", "admin", "root")
+		err = c.DialWithUsers(guessed("ec2-user", "ubuntu", "centos", "core", "bitnami", "admin", "root"))
 	})
 	if !errors.Is(err, ErrNoTerminal) {
 		t.Fatalf("got %v, want ErrNoTerminal", err)
@@ -802,7 +810,7 @@ func TestDialDeclinedHostKeyStops(t *testing.T) {
 
 	c := env.client(t, srv)
 	var err error
-	within(t, 10*time.Second, func() { err = c.DialWithUsers("ec2-user", "ubuntu", "root") })
+	within(t, 10*time.Second, func() { err = c.DialWithUsers(guessed("ec2-user", "ubuntu", "root")) })
 	if err == nil || !strings.Contains(err.Error(), "verification failed") {
 		t.Fatalf("got %v, want the host key refusal", err)
 	}
@@ -829,7 +837,7 @@ func TestDialTriesNextUserOnAuthFailure(t *testing.T) {
 
 	c := env.client(t, srv)
 	var err error
-	within(t, 10*time.Second, func() { err = c.DialWithUsers("ec2-user", "ubuntu") })
+	within(t, 10*time.Second, func() { err = c.DialWithUsers(guessed("ec2-user", "ubuntu")) })
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -854,13 +862,13 @@ func TestProxyHopHostKeyWithoutTerminal(t *testing.T) {
 	useTerminal(t, fake)
 
 	c := env.client(t, jump)
-	if err := c.DialWithUsers("ec2-user"); err != nil {
+	if err := c.DialWithUsers(guessed("ec2-user")); err != nil {
 		t.Fatal(err)
 	}
 
 	var err error
 	within(t, 10*time.Second, func() {
-		_, err = c.NewClientWithProxy(dest.host, dest.port, "", "ec2-user", "ubuntu", "root")
+		_, err = c.NewClientWithProxy(dest.host, dest.port, "", guessed("ec2-user", "ubuntu", "root"))
 	})
 	if !errors.Is(err, ErrNoTerminal) {
 		t.Fatalf("got %v, want ErrNoTerminal", err)
@@ -875,7 +883,7 @@ func TestProxyHopHostKeyWithoutTerminal(t *testing.T) {
 	writeKnownHost(t, env.awlessKnownHosts(), dest.addr, destKey.PublicKey())
 	var proxied *Client
 	within(t, 10*time.Second, func() {
-		proxied, err = c.NewClientWithProxy(dest.host, dest.port, "", "ec2-user", "ubuntu", "root")
+		proxied, err = c.NewClientWithProxy(dest.host, dest.port, "", guessed("ec2-user", "ubuntu", "root"))
 	})
 	if err != nil {
 		t.Fatal(err)
@@ -902,14 +910,14 @@ func TestProxyHopUsesDestinationKey(t *testing.T) {
 	useTerminal(t, &fakeTerminal{interactive: false})
 
 	c := env.client(t, jump)
-	if err := c.DialWithUsers("ec2-user"); err != nil {
+	if err := c.DialWithUsers(guessed("ec2-user")); err != nil {
 		t.Fatal(err)
 	}
 	destKeypath := filepath.Join(env.keyDir, "dest.pem")
 	var proxied *Client
 	var err error
 	within(t, 10*time.Second, func() {
-		proxied, err = c.NewClientWithProxy(dest.host, dest.port, destKeypath, "ec2-user", "ubuntu")
+		proxied, err = c.NewClientWithProxy(dest.host, dest.port, destKeypath, guessed("ec2-user", "ubuntu"))
 	})
 	if err != nil {
 		t.Fatal(err)
@@ -917,5 +925,231 @@ func TestProxyHopUsesDestinationKey(t *testing.T) {
 	t.Cleanup(func() { proxied.Client.Close() })
 	if proxied.User != "ubuntu" || proxied.Keypath != destKeypath {
 		t.Errorf("got user %q key %q, want ubuntu and %q", proxied.User, proxied.Keypath, destKeypath)
+	}
+}
+
+// captureStdout redirects os.Stdout to a pipe for the duration of fn and returns
+// what was written. The attempt lines must never land on stdout, which carries the
+// command output people pipe.
+func captureStdout(t *testing.T, fn func()) string {
+	t.Helper()
+	old := os.Stdout
+	r, w, err := os.Pipe()
+	if err != nil {
+		t.Fatal(err)
+	}
+	os.Stdout = w
+	done := make(chan string, 1)
+	go func() {
+		var buf bytes.Buffer
+		io.Copy(&buf, r)
+		done <- buf.String()
+	}()
+	fn()
+	w.Close()
+	os.Stdout = old
+	return <-done
+}
+
+// assertOrder fails unless each needle appears in haystack, each after the one
+// before it.
+func assertOrder(t *testing.T, haystack string, needles ...string) {
+	t.Helper()
+	last := 0
+	for _, n := range needles {
+		i := strings.Index(haystack[last:], n)
+		if i < 0 {
+			t.Errorf("missing %q in order; log:\n%s", n, haystack)
+			return
+		}
+		last += i + len(n)
+	}
+}
+
+// bufferClient is env.client with its logger sent to buf, so the attempt lines can
+// be read back.
+func (e sshEnv) bufferClient(t *testing.T, srv *testServer, buf *bytes.Buffer) *Client {
+	t.Helper()
+	c := e.client(t, srv)
+	c.SetLogger(logger.New("", 0, buf))
+	return c
+}
+
+// Without USER@ and with the first user a guess, each attempt is announced before it
+// runs and its failure explained, so the user understands the auth-log entries and
+// which user finally worked. The lines go to the logger (stderr), never stdout.
+func TestDialAnnouncesEachGuessedUser(t *testing.T) {
+	env := newSSHEnv(t)
+	hostKey := newSigner(t)
+	srv := startServer(t, hostKey, "admin", env.clientKey.PublicKey())
+	writeKnownHost(t, env.awlessKnownHosts(), srv.addr, hostKey.PublicKey())
+	useTerminal(t, &fakeTerminal{interactive: false})
+
+	var buf bytes.Buffer
+	c := env.bufferClient(t, srv, &buf)
+
+	var err error
+	stdout := captureStdout(t, func() {
+		within(t, 10*time.Second, func() { err = c.DialWithUsers(guessed("ubuntu", "admin")) })
+	})
+	if err != nil {
+		t.Fatal(err)
+	}
+	if c.User != "admin" {
+		t.Errorf("user %q, want admin", c.User)
+	}
+	if n := srv.conns.Load(); n != 2 {
+		t.Errorf("%d connections, want 2 (one per user tried)", n)
+	}
+	if stdout != "" {
+		t.Errorf("attempt lines reached stdout: %q", stdout)
+	}
+	assertOrder(t, buf.String(), "trying user ubuntu...", "user ubuntu: permission denied", "trying user admin...")
+	if strings.Contains(buf.String(), "user admin:") {
+		t.Errorf("the user that worked got a failure line: %q", buf.String())
+	}
+}
+
+// A single user, or a user known for certain, is not announced: there is nothing to
+// choose between, and the ordinary login line already names it.
+func TestDialKnownUserIsNotAnnounced(t *testing.T) {
+	env := newSSHEnv(t)
+	hostKey := newSigner(t)
+	srv := startServer(t, hostKey, "admin", env.clientKey.PublicKey())
+	writeKnownHost(t, env.awlessKnownHosts(), srv.addr, hostKey.PublicKey())
+	useTerminal(t, &fakeTerminal{interactive: false})
+
+	var buf bytes.Buffer
+	c := env.bufferClient(t, srv, &buf)
+	var err error
+	within(t, 10*time.Second, func() { err = c.DialWithUsers(LoginUsers{Names: []string{"admin"}, Known: true}) })
+	if err != nil {
+		t.Fatal(err)
+	}
+	if strings.Contains(buf.String(), "trying user") {
+		t.Errorf("a certain user was announced: %q", buf.String())
+	}
+}
+
+// A known first user that is refused is not announced before it is tried, but its
+// failure and the guessed fallbacks after it are.
+func TestDialKnownFirstUserThenGuessedFallbacks(t *testing.T) {
+	env := newSSHEnv(t)
+	hostKey := newSigner(t)
+	srv := startServer(t, hostKey, "admin", env.clientKey.PublicKey())
+	writeKnownHost(t, env.awlessKnownHosts(), srv.addr, hostKey.PublicKey())
+	useTerminal(t, &fakeTerminal{interactive: false})
+
+	var buf bytes.Buffer
+	c := env.bufferClient(t, srv, &buf)
+	var err error
+	within(t, 10*time.Second, func() {
+		err = c.DialWithUsers(LoginUsers{Names: []string{"ubuntu", "ec2-user", "admin"}, Known: true})
+	})
+	if err != nil {
+		t.Fatal(err)
+	}
+	if strings.Contains(buf.String(), "trying user ubuntu...") {
+		t.Errorf("the known first user was announced before its attempt: %q", buf.String())
+	}
+	assertOrder(t, buf.String(), "user ubuntu: permission denied", "trying user ec2-user...", "user ec2-user: permission denied", "trying user admin...")
+}
+
+// When every user is refused, the host was reached, so an AuthError is returned,
+// carrying the users tried and not read as a host-key error.
+func TestDialAllUsersRefusedReturnsAuthError(t *testing.T) {
+	env := newSSHEnv(t)
+	hostKey := newSigner(t)
+	srv := startServer(t, hostKey, "nobody", env.clientKey.PublicKey())
+	writeKnownHost(t, env.awlessKnownHosts(), srv.addr, hostKey.PublicKey())
+	useTerminal(t, &fakeTerminal{interactive: false})
+
+	var buf bytes.Buffer
+	c := env.bufferClient(t, srv, &buf)
+	var err error
+	within(t, 10*time.Second, func() { err = c.DialWithUsers(guessed("ubuntu", "ec2-user", "admin")) })
+
+	var authErr *AuthError
+	if !errors.As(err, &authErr) {
+		t.Fatalf("got %v, want *AuthError", err)
+	}
+	if !slices.Equal(authErr.Users, []string{"ubuntu", "ec2-user", "admin"}) {
+		t.Errorf("AuthError.Users = %q, want the three tried", authErr.Users)
+	}
+	if IsHostKeyError(err) {
+		t.Error("an authentication failure is reported as a host-key error")
+	}
+	if n := strings.Count(buf.String(), "trying user"); n != 3 {
+		t.Errorf("%d trying lines, want 3", n)
+	}
+}
+
+// The same announcement on the second hop, through the jump host.
+func TestProxyHopAnnouncesGuessedUsers(t *testing.T) {
+	env := newSSHEnv(t)
+	jumpKey, destKey := newSigner(t), newSigner(t)
+	jump := startServer(t, jumpKey, "ec2-user", env.clientKey.PublicKey())
+	dest := startServer(t, destKey, "admin", env.clientKey.PublicKey())
+	writeKnownHost(t, env.awlessKnownHosts(), jump.addr, jumpKey.PublicKey())
+	writeKnownHost(t, env.awlessKnownHosts(), dest.addr, destKey.PublicKey())
+	useTerminal(t, &fakeTerminal{interactive: false})
+
+	var buf bytes.Buffer
+	c := env.bufferClient(t, jump, &buf)
+	if err := c.DialWithUsers(guessed("ec2-user")); err != nil {
+		t.Fatal(err)
+	}
+	buf.Reset() // the single jump user is not announced; start clean for the hop
+
+	var proxied *Client
+	var err error
+	stdout := captureStdout(t, func() {
+		within(t, 10*time.Second, func() {
+			proxied, err = c.NewClientWithProxy(dest.host, dest.port, "", guessed("ubuntu", "admin"))
+		})
+	})
+	if err != nil {
+		t.Fatal(err)
+	}
+	t.Cleanup(func() { proxied.Client.Close() })
+	if proxied.User != "admin" {
+		t.Errorf("user %q, want admin", proxied.User)
+	}
+	if n := dest.conns.Load(); n != 2 {
+		t.Errorf("destination saw %d connections, want 2", n)
+	}
+	if stdout != "" {
+		t.Errorf("attempt lines reached stdout: %q", stdout)
+	}
+	assertOrder(t, buf.String(), "trying user ubuntu...", "user ubuntu: permission denied", "trying user admin...")
+}
+
+// A host-key refusal stops the loop at once: the first attempt is announced, but
+// nothing after it, and no failure line (a host key is about the host, not the
+// user).
+func TestDialHostKeyRefusalStopsBeforeNextUser(t *testing.T) {
+	env := newSSHEnv(t)
+	srv := startServer(t, newSigner(t), "ec2-user", env.clientKey.PublicKey())
+	// A different key recorded for the address: the changed-key alarm.
+	writeKnownHost(t, env.awlessKnownHosts(), srv.addr, newSigner(t).PublicKey())
+	useTerminal(t, &fakeTerminal{interactive: false})
+
+	var buf bytes.Buffer
+	c := env.bufferClient(t, srv, &buf)
+	var err error
+	within(t, 10*time.Second, func() { err = c.DialWithUsers(guessed("ec2-user", "ubuntu", "root")) })
+	if !IsHostKeyError(err) {
+		t.Fatalf("got %v, want a host-key error", err)
+	}
+	if n := srv.conns.Load(); n != 1 {
+		t.Errorf("%d connections, want 1", n)
+	}
+	if !strings.Contains(buf.String(), "trying user ec2-user...") {
+		t.Errorf("the first attempt was not announced: %q", buf.String())
+	}
+	for _, unwanted := range []string{"trying user ubuntu...", "trying user root...", "user ec2-user:"} {
+		if strings.Contains(buf.String(), unwanted) {
+			t.Errorf("a host-key refusal did not stop the loop: %q is present\n%s", unwanted, buf.String())
+		}
 	}
 }

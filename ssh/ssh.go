@@ -37,18 +37,27 @@ type Client struct {
 // ErrKeyNotFound says the key that was asked for is in none of the key folders.
 var ErrKeyNotFound = errors.New("cannot find SSH key")
 
-// ResolveKeyPath finds the file a key name refers to, with the same lookup as
+// KeyRef is what a key lookup is told to find: a name (the -i value, or the key
+// pair name taken from the instance) and, when it is known, the fingerprint EC2
+// recorded for that key pair. Fingerprint is empty when it is unknown (nothing has
+// been synced) or when -i was given, in which case the search is by name only.
+type KeyRef struct {
+	Name        string
+	Fingerprint string
+}
+
+// ResolveKeyPath finds the file a key ref refers to, with the same lookup as
 // InitClient, but without parsing it: no passphrase is asked for and no agent is
 // needed. It is what printing a command line or a config stanza uses.
-func ResolveKeyPath(keyname string, keyFolders ...string) (string, bool) {
-	priv, ok := findPrivateKeyFromName(keyname, keyFolders...)
+func ResolveKeyPath(ref KeyRef, keyFolders ...string) (string, bool) {
+	priv, ok := findPrivateKey(ref, keyFolders...)
 	return priv.path, ok
 }
 
-func InitClient(keyname string, keyFolders ...string) (*Client, error) {
+func InitClient(ref KeyRef, keyFolders ...string) (*Client, error) {
 	var auths []gossh.AuthMethod
 
-	privkey, ok := findPrivateKeyFromName(keyname, keyFolders...)
+	privkey, ok := findPrivateKey(ref, keyFolders...)
 	if ok {
 		if a, err := privateKeyAuth(privkey); err == nil {
 			auths = append(auths, a)
@@ -60,8 +69,8 @@ func InitClient(keyname string, keyFolders ...string) (*Client, error) {
 	}
 
 	if len(auths) == 0 {
-		if keyname != "" && !ok {
-			return nil, fmt.Errorf("%w %q in %s, and no SSH agent is available (SSH_AUTH_SOCK)", ErrKeyNotFound, keyname, strings.Join(keyFolders, ", "))
+		if ref.Name != "" && !ok {
+			return nil, keyNotFoundError(ref, keyFolders)
 		}
 		return nil, fmt.Errorf("No key provided and no SSH_AUTH_SOCK env variable set, unable to resolve auth")
 	}
@@ -166,6 +175,41 @@ func negotiationError(hostport string, err error) error {
 	return fmt.Errorf("cannot connect to %s: %w", hostport, err)
 }
 
+// LoginUsers are the users to log in as, in the order they are tried.
+type LoginUsers struct {
+	Names []string
+	// Known says Names[0] is not a guess: it was given as USER@ or derived from the
+	// instance's image. A guessed user leaves a failed-login entry in the host's
+	// auth log, so each guessed attempt is announced; a known one is not.
+	Known bool
+}
+
+// AuthError is returned when the host was reached but no candidate user
+// authenticated. It carries the users tried so the command can suggest giving one
+// explicitly, and it means the host is up, so no reachability diagnosis is needed.
+type AuthError struct {
+	HostPort string
+	Users    []string
+	Last     error
+}
+
+func (e *AuthError) Error() string {
+	return fmt.Sprintf("unable to authenticate to %s for users %q. Last error: %v", e.HostPort, e.Users, e.Last)
+}
+
+func (e *AuthError) Unwrap() error { return e.Last }
+
+// authFailureReason is a short reason for a failed login attempt. x/crypto has no
+// typed client authentication error, so the only way to tell "no method accepted"
+// apart from other handshake failures is the message it builds; when it is that,
+// say "permission denied", otherwise pass the error text through.
+func authFailureReason(err error) string {
+	if err == nil || strings.Contains(err.Error(), "unable to authenticate") {
+		return "permission denied"
+	}
+	return err.Error()
+}
+
 // DialWithUsers connects to c.IP:c.Port, trying each user in turn until one
 // authenticates.
 //
@@ -173,12 +217,18 @@ func negotiationError(hostport string, err error) error {
 // about the host, not the user, so it is returned at once: upstream treated it as a
 // wrong user, which re-ran the host-key check, and re-prompted, for every candidate.
 // A TCP-level failure is returned at once too, since another user cannot fix it.
-func (c *Client) DialWithUsers(usernames ...string) error {
+//
+// When more than one user is tried and the first is not a known one, each guessed
+// attempt is announced on the logger (stderr for the command, discarded for library
+// use) before it runs, with a reason after it fails: the user sees why the host's
+// auth log is filling up and which users were tried.
+func (c *Client) DialWithUsers(users LoginUsers) error {
 	var err error
 
 	hostport := net.JoinHostPort(c.IP, strconv.Itoa(c.Port))
 
-	for _, user := range usernames {
+	for i, user := range users.Names {
+		c.announceAttempt(users, i, user)
 		verdict := &hostKeyVerdict{}
 		cfg := c.configFor(hostport, user, nil, verdict)
 
@@ -197,6 +247,7 @@ func (c *Client) DialWithUsers(usernames ...string) error {
 			}
 			c.logger.ExtraVerbosef("cannot authenticate to %s with user %s (err: %s)", hostport, user, handshakeErr)
 			err = handshakeErr
+			c.announceFailure(users, user, handshakeErr)
 			continue
 		}
 
@@ -206,7 +257,24 @@ func (c *Client) DialWithUsers(usernames ...string) error {
 		return nil
 	}
 
-	return fmt.Errorf("unable to authenticate to %s for users %q. Last error: %v", hostport, usernames, err)
+	return &AuthError{HostPort: hostport, Users: users.Names, Last: err}
+}
+
+// announceAttempt prints "trying user X..." before a guessed attempt. Nothing is
+// printed for a single user or for a known first user: there is only one thing to
+// try, or the user is certain and the ordinary "Login as ..." line already names it.
+func (c *Client) announceAttempt(users LoginUsers, i int, user string) {
+	if len(users.Names) > 1 && !(i == 0 && users.Known) {
+		c.logger.Infof("trying user %s...", user)
+	}
+}
+
+// announceFailure says why an attempt failed, but only when more than one user is in
+// play: with a single user the returned error carries the same information.
+func (c *Client) announceFailure(users LoginUsers, user string, err error) {
+	if len(users.Names) > 1 {
+		c.logger.Infof("user %s: %s", user, authFailureReason(err))
+	}
 }
 
 // NewClientWithProxy opens a session to destinationHost through c, which must be
@@ -215,7 +283,7 @@ func (c *Client) DialWithUsers(usernames ...string) error {
 // destKeypath is the destination's own key: it is tried before c's auth methods,
 // because a private instance usually has a key pair of its own. It may be empty.
 // As in DialWithUsers, a refused host key stops the user loop.
-func (c *Client) NewClientWithProxy(destinationHost string, destinationPort int, destKeypath string, usernames ...string) (*Client, error) {
+func (c *Client) NewClientWithProxy(destinationHost string, destinationPort int, destKeypath string, users LoginUsers) (*Client, error) {
 	hostport := net.JoinHostPort(destinationHost, strconv.Itoa(destinationPort))
 
 	var auths []gossh.AuthMethod
@@ -232,7 +300,9 @@ func (c *Client) NewClientWithProxy(destinationHost string, destinationPort int,
 		keypath = destKeypath
 	}
 
-	for _, user := range usernames {
+	var lastErr error
+	for i, user := range users.Names {
+		c.announceAttempt(users, i, user)
 		netConn, err := c.Dial("tcp", hostport)
 		if err != nil {
 			return nil, fmt.Errorf("cannot dial from %s:%d to %s:%d - %s", c.IP, c.Port, destinationHost, destinationPort, err)
@@ -249,6 +319,8 @@ func (c *Client) NewClientWithProxy(destinationHost string, destinationPort int,
 				return nil, negErr
 			}
 			c.logger.ExtraVerbosef("cannot proxy with user %s (err: %s)", user, err)
+			lastErr = err
+			c.announceFailure(users, user, err)
 			continue
 		}
 		c.logger.ExtraVerbosef("proxied successfully with user %s", user)
@@ -266,7 +338,7 @@ func (c *Client) NewClientWithProxy(destinationHost string, destinationPort int,
 		}, nil
 	}
 
-	return nil, fmt.Errorf("cannot proxy from %s:%d to %s:%d with users %q", c.IP, c.Port, destinationHost, destinationPort, usernames)
+	return nil, &AuthError{HostPort: hostport, Users: users.Names, Last: lastErr}
 }
 
 func (c *Client) CloseAll() error {

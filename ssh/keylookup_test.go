@@ -99,16 +99,16 @@ func TestResolveKeyPath(t *testing.T) {
 		{inSSH, inSSH, folders},
 	}
 	for _, tc := range cases {
-		got, ok := ResolveKeyPath(tc.name, tc.folders...)
+		got, ok := ResolveKeyPath(KeyRef{Name: tc.name}, tc.folders...)
 		if !ok || got != tc.want {
 			t.Errorf("ResolveKeyPath(%q) = (%q, %t), want (%q, true)", tc.name, got, ok, tc.want)
 		}
 	}
 
-	if got, ok := ResolveKeyPath("nosuchkey", folders...); ok || got != "" {
+	if got, ok := ResolveKeyPath(KeyRef{Name: "nosuchkey"}, folders...); ok || got != "" {
 		t.Errorf("ResolveKeyPath(nosuchkey) = (%q, %t), want (\"\", false)", got, ok)
 	}
-	if got, ok := ResolveKeyPath("", folders...); ok || got != "" {
+	if got, ok := ResolveKeyPath(KeyRef{}, folders...); ok || got != "" {
 		t.Errorf("ResolveKeyPath(\"\") = (%q, %t), want (\"\", false)", got, ok)
 	}
 }
@@ -120,7 +120,7 @@ func TestInitClientReportsMissingKey(t *testing.T) {
 	root := t.TempDir()
 	first, second := filepath.Join(root, "keys"), filepath.Join(root, ".ssh")
 
-	_, err := InitClient("nosuchkey", first, second)
+	_, err := InitClient(KeyRef{Name: "nosuchkey"}, first, second)
 	if !errors.Is(err, ErrKeyNotFound) {
 		t.Fatalf("got %v, want ErrKeyNotFound", err)
 	}
@@ -131,7 +131,7 @@ func TestInitClientReportsMissingKey(t *testing.T) {
 	}
 
 	// No key name at all keeps the old message: nothing was asked for.
-	if _, err := InitClient("", first, second); err == nil || errors.Is(err, ErrKeyNotFound) {
+	if _, err := InitClient(KeyRef{}, first, second); err == nil || errors.Is(err, ErrKeyNotFound) {
 		t.Errorf("empty key name: got %v, want the generic no-auth error", err)
 	}
 }
