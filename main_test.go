@@ -2,14 +2,25 @@ package main
 
 import (
 	"context"
+	"crypto/ed25519"
+	"crypto/rand"
+	"encoding/pem"
 	"errors"
 	"os"
 	"os/exec"
 	"path/filepath"
+	"strconv"
 	"strings"
 	"testing"
 	"time"
 	"unicode/utf8"
+
+	"github.com/theazz/awless-ro/cloud"
+	"github.com/theazz/awless-ro/cloud/properties"
+	"github.com/theazz/awless-ro/graph"
+	"github.com/theazz/awless-ro/ssh/sshtest"
+
+	gossh "golang.org/x/crypto/ssh"
 )
 
 // The exit status is the one thing about this binary that only a test running it can
@@ -535,5 +546,116 @@ func TestLocalShowRendersLargeLiteral(t *testing.T) {
 	}
 	if !strings.Contains(stdout, "pol-big") {
 		t.Errorf("show should render the policy with a large value, got %.200q", stdout)
+	}
+}
+
+// End to end, through the real binary: `ssh` with no USER@ finds its key by
+// fingerprint, announces each guessed user on stderr, exits non-zero with the hint
+// when none is accepted, and keeps stdout clean. --print-cli prints the discovered
+// key and never dials. The in-process server is on loopback, so no real network and
+// no AWS are involved; --local reads the synthesized graph.
+func TestSSHDiscoversKeyAndReportsUserAttempts(t *testing.T) {
+	bin := build(t)
+
+	// A throwaway key the scan must find under a name unlike the key pair's.
+	_, priv, err := ed25519.GenerateKey(rand.Reader)
+	if err != nil {
+		t.Fatal(err)
+	}
+	block, err := gossh.MarshalPrivateKey(priv, "")
+	if err != nil {
+		t.Fatal(err)
+	}
+	sshPub, err := gossh.NewPublicKey(priv.Public())
+	if err != nil {
+		t.Fatal(err)
+	}
+	recorded := strings.TrimPrefix(gossh.FingerprintSHA256(sshPub), "SHA256:")
+
+	// The server lets no default user in, so every one is tried and refused.
+	srv := sshtest.Start(t, "nobody", sshPub)
+
+	// Build the synced infra graph: the instance and its key pair with the
+	// fingerprint, marshalled to the .nt file `ssh --local` reads.
+	g := graph.NewGraph()
+	inst := graph.InitResource(cloud.Instance, "i-web")
+	inst.Properties()[properties.Name] = "web"
+	inst.Properties()[properties.PublicIP] = "127.0.0.1"
+	inst.Properties()[properties.State] = "running"
+	inst.Properties()[properties.KeyPair] = "aws-pair"
+	kp := graph.InitResource(cloud.Keypair, "aws-pair")
+	kp.Properties()[properties.Fingerprint] = recorded
+	if err := g.AddResource(inst, kp); err != nil {
+		t.Fatal(err)
+	}
+	var infraNT strings.Builder
+	if err := g.MarshalTo(&infraNT); err != nil {
+		t.Fatal(err)
+	}
+	home := graphHome(t, map[string]string{"eu-west-1/infra": infraNT.String()})
+
+	// The key and a known_hosts line, so the dial neither hunts for the key nor
+	// prompts about the host.
+	sshDir := filepath.Join(home, ".ssh")
+	if err := os.MkdirAll(sshDir, 0o700); err != nil {
+		t.Fatal(err)
+	}
+	keyPath := filepath.Join(sshDir, "laptop-key")
+	if err := os.WriteFile(keyPath, pem.EncodeToMemory(block), 0o600); err != nil {
+		t.Fatal(err)
+	}
+	if err := os.WriteFile(filepath.Join(sshDir, "known_hosts"), []byte(srv.KnownHostsLine()+"\n"), 0o600); err != nil {
+		t.Fatal(err)
+	}
+
+	port := strconv.Itoa(srv.Port)
+	stdout, stderr, exit := runLocal(t, bin, home, "ssh", "web", "--local", "--port", port)
+	if exit != 1 {
+		t.Errorf("exit = %d, want 1 when no user is accepted. stderr:\n%s", exit, stderr)
+	}
+	if stdout != "" {
+		t.Errorf("stdout should be empty, got:\n%s", stdout)
+	}
+	assertStderrOrder(t, stderr,
+		"trying user ec2-user...", "trying user ubuntu...", "trying user centos...",
+		"trying user core...", "trying user bitnami...", "trying user admin...", "trying user root...")
+	if !strings.Contains(stderr, "none of ec2-user, ubuntu, centos, core, bitnami, admin, root accepted the key; give the user explicitly: awless-ro ssh USER@web") {
+		t.Errorf("the hint is missing from stderr:\n%s", stderr)
+	}
+	if n := srv.Conns(); n != 7 {
+		t.Errorf("server saw %d connections, want 7", n)
+	}
+
+	// --print-cli prints the discovered key and the first guessed user, dials
+	// nothing (the connection count does not move), and keeps stderr free of
+	// attempts.
+	before := srv.Conns()
+	stdout, stderr, exit = runLocal(t, bin, home, "ssh", "web", "--local", "--print-cli", "--port", port)
+	if exit != 0 {
+		t.Errorf("--print-cli exit = %d, want 0. stderr:\n%s", exit, stderr)
+	}
+	if !strings.Contains(stdout, "-i "+keyPath) || !strings.Contains(stdout, "ec2-user@127.0.0.1") {
+		t.Errorf("--print-cli stdout missing the key or user:\n%s", stdout)
+	}
+	if strings.Contains(stderr, "trying user") {
+		t.Errorf("--print-cli announced users:\n%s", stderr)
+	}
+	time.Sleep(100 * time.Millisecond)
+	if n := srv.Conns(); n != before {
+		t.Errorf("--print-cli opened %d connections, want 0", n-before)
+	}
+}
+
+// assertStderrOrder fails unless each line appears in stderr after the one before.
+func assertStderrOrder(t *testing.T, stderr string, lines ...string) {
+	t.Helper()
+	last := 0
+	for _, l := range lines {
+		i := strings.Index(stderr[last:], l)
+		if i < 0 {
+			t.Errorf("stderr missing %q in order:\n%s", l, stderr)
+			return
+		}
+		last += i + len(l)
 	}
 }

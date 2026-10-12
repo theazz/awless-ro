@@ -386,13 +386,19 @@ awless-ro ssh web-1 --print-cli                       # print the ssh command li
 awless-ro ssh db-1 --through bastion-1 --print-config >> ~/.ssh/config
 ```
 
-Keys are looked up by the instance's key pair name in `~/.awless-ro/keys` and then
-`~/.ssh`, with and without `.pem`. Host keys are checked against `~/.ssh/known_hosts`
-(or `~/.awless-ro/known_hosts`); an unknown host is asked about once on a terminal,
-and refused with an explanation when there is no terminal. The login user comes from
-the instance's image when the image is in the synced graph; otherwise `ec2-user`,
-`ubuntu` and the other usual users are tried in turn, and `--print-cli` /
-`--print-config` say which one they guessed. Printing never opens a connection.
+Keys are looked up first by the instance's key pair name in `~/.awless-ro/keys` and
+then `~/.ssh`, with and without `.pem`. When no file is named like the key pair, the
+key is found by matching the fingerprint AWS recorded for the key pair against the
+keys in those two folders, so a key under any name is used (this needs a synced
+graph; an encrypted key is matched through its `.pub`; a key readable by others is
+refused by this search, as openssh would). Host keys are checked against
+`~/.ssh/known_hosts` (or `~/.awless-ro/known_hosts`); an unknown host is asked about
+once on a terminal, and refused with an explanation when there is no terminal. The
+login user comes from the instance's image when the image is in the synced graph;
+otherwise `ec2-user`, `ubuntu` and the other usual users are tried in turn, each
+announced on stderr (`trying user ubuntu...`), and a hint to give the user with
+`USER@` is printed if none is accepted. `--print-cli` / `--print-config` say which
+user they guessed and never open a connection.
 
 **Aliases.** Reference a resource by its `Name` tag anywhere an id is accepted.
 

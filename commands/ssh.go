@@ -49,7 +49,7 @@ var disableStrictHostKeyCheckingFlag bool
 
 func init() {
 	RootCmd.AddCommand(sshCmd)
-	sshCmd.Flags().StringVarP(&keyPathFlag, "identity", "i", "", "Set path or name toward the identity (key file) to use to connect through SSH")
+	sshCmd.Flags().StringVarP(&keyPathFlag, "identity", "i", "", "Path or name of the identity (key file). Without it, the key is found by name and then by matching the key pair's fingerprint in ~/.ssh and ~/.awless-ro/keys")
 	sshCmd.Flags().IntVar(&sshPortFlag, "port", 22, "Set SSH target port")
 	sshCmd.Flags().IntVar(&sshTroughPortFlag, "through-port", 22, "Set SSH proxy port")
 	sshCmd.Flags().StringVar(&proxyInstanceThroughFlag, "through", "", "Name of instance to proxy through to connect to a destination host")
@@ -73,6 +73,7 @@ var sshCmd = &cobra.Command{
   awless-ro ssh root@203.0.113.10 --port 23      # specifying a port
   awless-ro ssh web-1 --local                    # resolve from the synced graph, no AWS call
 
+  awless-ro ssh redis-prod                       # key found by name, or by matching the key pair fingerprint in ~/.ssh & ~/.awless-ro/keys
   awless-ro ssh redis-prod -i keyname            # using AWS keyname (look into ~/.ssh/keyname.pem & ~/.awless-ro/keys/keyname.pem)
   awless-ro ssh redis-prod -i ~/path/toward/key  # specifying a full key path
 
