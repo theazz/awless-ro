@@ -1,6 +1,7 @@
 package awsfetch
 
 import (
+	"fmt"
 	"reflect"
 	"strings"
 	"testing"
@@ -91,4 +92,76 @@ func TestAWSAPICoversEveryServiceField(t *testing.T) {
 				field.Name, field.Type)
 		}
 	}
+}
+
+// Read-only is not the same as harmless. Some reads return a secret or a credential
+// itself rather than metadata about it, and TestEveryAWSOperationIsARead lets them
+// through because their names start with Get. awless-ro lists what exists; it never
+// needs the value of a secret, a decrypted parameter or a fresh token, so none of
+// these may appear on the API surface.
+func TestNoOperationReturnsSecretsOrCredentials(t *testing.T) {
+	for _, found := range secretReads(reflect.TypeOf(AWSAPI{})) {
+		t.Errorf("%s\nawless-ro shows metadata, never secret values or credentials.", found)
+	}
+}
+
+// The check itself must catch a denied operation, or the test above passes by vacuum.
+// It runs on a stand-in struct: adding the method to a real API interface would break
+// the build (clients and mocks must implement it) before the test ever ran.
+func TestSecretReadsCatchesDeniedOperations(t *testing.T) {
+	type secretsAPI interface {
+		ListSecrets()
+		GetSecretValue()
+	}
+	type ssmAPI interface {
+		DescribeParameters()
+		GetParametersByPath()
+	}
+	type fakeAPIs struct {
+		Secretsmanager secretsAPI
+		Ssm            ssmAPI
+	}
+	found := secretReads(reflect.TypeOf(fakeAPIs{}))
+	if len(found) != 2 {
+		t.Fatalf("want GetSecretValue and GetParametersByPath reported, got %d: %q", len(found), found)
+	}
+	for i, want := range []string{"AWSAPI.Secretsmanager can call GetSecretValue", "AWSAPI.Ssm can call GetParametersByPath"} {
+		if !strings.HasPrefix(found[i], want) {
+			t.Errorf("report %d = %q, want it to start with %q", i, found[i], want)
+		}
+	}
+}
+
+// secretReads lists, for every interface field of apis, the operations that return a
+// secret or a credential.
+func secretReads(apis reflect.Type) []string {
+	denied := map[string]string{
+		"GetSecretValue":            "Secrets Manager: returns the secret value; use ListSecrets / DescribeSecret",
+		"BatchGetSecretValue":       "Secrets Manager: returns secret values",
+		"GetParameter":              "SSM: returns the parameter value, decrypted on request; use DescribeParameters",
+		"GetParameters":             "SSM: returns parameter values",
+		"GetParametersByPath":       "SSM: returns parameter values",
+		"GetParameterHistory":       "SSM: returns past parameter values",
+		"GetPasswordData":           "EC2: returns the encrypted Windows administrator password",
+		"GetAuthorizationToken":     "ECR: returns a registry login token",
+		"GetSessionToken":           "STS: issues temporary credentials",
+		"GetFederationToken":        "STS: issues temporary credentials",
+		"GetRoleCredentials":        "SSO: issues role credentials",
+		"GetCredentialsForIdentity": "Cognito: issues credentials",
+	}
+
+	var found []string
+	for i := range apis.NumField() {
+		field := apis.Field(i)
+		if field.Type.Kind() != reflect.Interface {
+			continue // reported by TestEveryAWSOperationIsARead
+		}
+		for m := range field.Type.NumMethod() {
+			name := field.Type.Method(m).Name
+			if why, ok := denied[name]; ok {
+				found = append(found, fmt.Sprintf("AWSAPI.%s can call %s (%s).", field.Name, name, why))
+			}
+		}
+	}
+	return found
 }
