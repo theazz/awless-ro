@@ -85,3 +85,31 @@ func TestSwitchWarnsWhenEnvironmentOverridesSavedProfile(t *testing.T) {
 		t.Fatalf("read persisted config: %v", err)
 	}
 }
+
+func TestSwitchOverrideAdvice(t *testing.T) {
+	cases := []struct{ setting, source, requested, want string }{
+		{"profile", "AWS_PROFILE variable", "staging",
+			"unset AWS_PROFILE to use it, export AWS_PROFILE=staging, or pass --aws-profile staging on each command"},
+		{"profile", "AWS_DEFAULT_PROFILE variable", "staging",
+			"unset AWS_DEFAULT_PROFILE to use it, export AWS_DEFAULT_PROFILE=staging, or pass --aws-profile staging on each command"},
+		{"region", "AWS_DEFAULT_REGION variable", "eu-west-3",
+			"unset AWS_DEFAULT_REGION to use it, export AWS_DEFAULT_REGION=eu-west-3, or pass --aws-region eu-west-3 on each command"},
+		{"profile", "command flag", "staging",
+			"--aws-profile applies to this command only; commands without it will use staging"},
+		{"region", "command flag", "eu-west-3",
+			"--aws-region applies to this command only; commands without it will use eu-west-3"},
+		{"region", "profile 'withregion' (see AWS config files $HOME/.aws/{credentials,config})", "eu-west-3",
+			"a region saved by switch is not used while that profile sets one: remove `region` from the profile, " +
+				"export AWS_DEFAULT_REGION=eu-west-3, or pass --aws-region eu-west-3 on each command"},
+		// A value the shell would split or interpret is quoted, so the advice can be copied as is.
+		{"profile", "AWS_PROFILE variable", "x;rm",
+			"unset AWS_PROFILE to use it, export AWS_PROFILE='x;rm', or pass --aws-profile 'x;rm' on each command"},
+		{"profile", "AWS_PROFILE variable", "it's",
+			`unset AWS_PROFILE to use it, export AWS_PROFILE='it'\''s', or pass --aws-profile 'it'\''s' on each command`},
+	}
+	for _, tc := range cases {
+		if got := switchOverrideAdvice(tc.setting, tc.source, tc.requested); got != tc.want {
+			t.Errorf("switchOverrideAdvice(%q, %q, %q)\n got %q\nwant %q", tc.setting, tc.source, tc.requested, got, tc.want)
+		}
+	}
+}
