@@ -67,6 +67,19 @@ func TestSwitchWarnsWhenEnvironmentOverridesSavedProfile(t *testing.T) {
 		t.Errorf("effective profile = %q, want current", got)
 	}
 
+	// awless-ro -p current switch staging: the flag lasts for this command only, the
+	// saved profile applies from the next one, so there is nothing to warn about.
+	t.Setenv("AWS_PROFILE", "")
+	awsProfileGlobalFlag = "current"
+	output.Reset()
+	switchCmd.Run(switchCmd, []string{"staging"})
+	switchCmd.PersistentPostRun(switchCmd, nil)
+	if strings.Contains(output.String(), "switch saved") {
+		t.Errorf("switch warned about its own -p flag; output: %s", output.String())
+	}
+	awsProfileGlobalFlag = ""
+	t.Setenv("AWS_PROFILE", "current")
+
 	switchCmd.Run(switchCmd, []string{"eu-west-2"})
 	switchCmd.PersistentPostRun(switchCmd, nil)
 	if !strings.Contains(output.String(), "switch saved region 'eu-west-2'") || !strings.Contains(output.String(), "AWS_DEFAULT_REGION variable overrides it with 'us-east-1'") {
@@ -94,10 +107,6 @@ func TestSwitchOverrideAdvice(t *testing.T) {
 			"unset AWS_DEFAULT_PROFILE to use it, export AWS_DEFAULT_PROFILE=staging, or pass --aws-profile staging on each command"},
 		{"region", "AWS_DEFAULT_REGION variable", "eu-west-3",
 			"unset AWS_DEFAULT_REGION to use it, export AWS_DEFAULT_REGION=eu-west-3, or pass --aws-region eu-west-3 on each command"},
-		{"profile", "command flag", "staging",
-			"--aws-profile applies to this command only; commands without it will use staging"},
-		{"region", "command flag", "eu-west-3",
-			"--aws-region applies to this command only; commands without it will use eu-west-3"},
 		{"region", "profile 'withregion' (see AWS config files $HOME/.aws/{credentials,config})", "eu-west-3",
 			"a region saved by switch is not used while that profile sets one: remove `region` from the profile, " +
 				"export AWS_DEFAULT_REGION=eu-west-3, or pass --aws-region eu-west-3 on each command"},

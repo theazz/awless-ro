@@ -161,10 +161,12 @@ func notifyOnRegionOrProfilePrecedenceHook(cmd *cobra.Command, _ []string) error
 	}
 
 	if cmd.Name() == "switch" {
-		if requested, effective := switchRequestedProfile, config.GetAWSProfile(); requested != "" && requested != effective {
+		// A -p/-r given to switch itself only lasts for this one command; the saved
+		// value applies from the next one, so there is nothing to warn about.
+		if requested, effective := switchRequestedProfile, config.GetAWSProfile(); requested != "" && requested != effective && profileOverridenThrough != "command flag" {
 			logger.Warningf("switch saved profile '%s', but %s overrides it with '%s'; %s", requested, profileOverridenThrough, effective, switchOverrideAdvice("profile", profileOverridenThrough, requested))
 		}
-		if requested, effective := switchRequestedRegion, config.GetAWSRegion(); requested != "" && requested != effective {
+		if requested, effective := switchRequestedRegion, config.GetAWSRegion(); requested != "" && requested != effective && regionOverridenThrough != "command flag" {
 			logger.Warningf("switch saved region '%s', but %s overrides it with '%s'; %s", requested, regionOverridenThrough, effective, switchOverrideAdvice("region", regionOverridenThrough, requested))
 		}
 	}
@@ -183,10 +185,6 @@ func switchOverrideAdvice(setting, source, requested string) string {
 	case "AWS_PROFILE variable", "AWS_DEFAULT_PROFILE variable", "AWS_DEFAULT_REGION variable":
 		variable := strings.TrimSuffix(source, " variable")
 		return fmt.Sprintf("unset %s to use it, export %s=%s, or pass %s %s on each command", variable, variable, value, flag, value)
-	case "command flag":
-		// The flag only lasts for the command it is given to: the next command without
-		// it already uses the saved value, so there is nothing to do.
-		return fmt.Sprintf("%s applies to this command only; commands without it will use %s", flag, value)
 	default:
 		// The region set in the active profile is applied on every run
 		// (applyRegionAndProfilePrecedence, SetVolatile), so a region saved by switch
