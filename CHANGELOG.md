@@ -1,19 +1,20 @@
 # Changelog
 
-## Unreleased
+## v0.5.0
+
+**Breaking:** `switch` with `-p` or `-r` now exits 1 without saving anything. Pass the
+profile and region as arguments instead: `awless-ro switch staging eu-west-1`. (#60)
 
 ### Added
 
-- `list loggroups`: CloudWatch Logs log groups with class, retention, size and creation time. (#59)
-
-### Changed
-
-- `switch` refuses `-p` and `-r` (exit 1): pass the profile and region as arguments,
-  `awless-ro switch staging eu-west-1`. (#56)
+- `list loggroups`: CloudWatch Logs log groups with class, retention, size and creation
+  time. Synced with the rest of monitoring (`aws.monitoring.sync`). (#59, thanks @babyhuey)
 
 ### Fixed
 
-- `switch` warns when an environment variable or profile overrides the profile or region it saved. (#56)
+- `switch` warns when `AWS_PROFILE`, `AWS_DEFAULT_PROFILE`, `AWS_DEFAULT_REGION` or the
+  profile's own region overrides what it saved, and says how to make it apply.
+  (#57, thanks @jay23606; #60)
 
 ## v0.4.0
 
