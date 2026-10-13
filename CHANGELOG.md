@@ -2,6 +2,11 @@
 
 ## Unreleased
 
+### Changed
+
+- `switch` refuses `-p` and `-r` (exit 1): pass the profile and region as arguments,
+  `awless-ro switch staging eu-west-1`. (#56)
+
 ### Fixed
 
 - `switch` warns when an environment variable or profile overrides the profile or region it saved. (#56)

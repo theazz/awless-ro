@@ -67,19 +67,6 @@ func TestSwitchWarnsWhenEnvironmentOverridesSavedProfile(t *testing.T) {
 		t.Errorf("effective profile = %q, want current", got)
 	}
 
-	// awless-ro -p current switch staging: the flag lasts for this command only, the
-	// saved profile applies from the next one, so there is nothing to warn about.
-	t.Setenv("AWS_PROFILE", "")
-	awsProfileGlobalFlag = "current"
-	output.Reset()
-	switchCmd.Run(switchCmd, []string{"staging"})
-	switchCmd.PersistentPostRun(switchCmd, nil)
-	if strings.Contains(output.String(), "switch saved") {
-		t.Errorf("switch warned about its own -p flag; output: %s", output.String())
-	}
-	awsProfileGlobalFlag = ""
-	t.Setenv("AWS_PROFILE", "current")
-
 	switchCmd.Run(switchCmd, []string{"eu-west-2"})
 	switchCmd.PersistentPostRun(switchCmd, nil)
 	if !strings.Contains(output.String(), "switch saved region 'eu-west-2'") || !strings.Contains(output.String(), "AWS_DEFAULT_REGION variable overrides it with 'us-east-1'") {
@@ -119,6 +106,29 @@ func TestSwitchOverrideAdvice(t *testing.T) {
 	for _, tc := range cases {
 		if got := switchOverrideAdvice(tc.setting, tc.source, tc.requested); got != tc.want {
 			t.Errorf("switchOverrideAdvice(%q, %q, %q)\n got %q\nwant %q", tc.setting, tc.source, tc.requested, got, tc.want)
+		}
+	}
+}
+
+// -p and -r last for one command and switch saves for every later one, so switch
+// refuses them rather than guess which one the user meant.
+func TestSwitchRefusesProfileAndRegionFlags(t *testing.T) {
+	cases := []struct {
+		profile, region string
+		refused         bool
+	}{
+		{"", "", false},
+		{"prod", "", true},
+		{"", "eu-west-1", true},
+		{"prod", "eu-west-1", true},
+	}
+	for _, tc := range cases {
+		err := switchFlagsError(tc.profile, tc.region)
+		if refused := err != nil; refused != tc.refused {
+			t.Errorf("switchFlagsError(%q, %q) = %v, want refused=%v", tc.profile, tc.region, err, tc.refused)
+		}
+		if err != nil && !strings.Contains(err.Error(), "awless-ro switch PROFILE REGION") {
+			t.Errorf("error does not say how to pass them: %v", err)
 		}
 	}
 }

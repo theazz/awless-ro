@@ -161,12 +161,12 @@ func notifyOnRegionOrProfilePrecedenceHook(cmd *cobra.Command, _ []string) error
 	}
 
 	if cmd.Name() == "switch" {
-		// A -p/-r given to switch itself only lasts for this one command; the saved
-		// value applies from the next one, so there is nothing to warn about.
-		if requested, effective := switchRequestedProfile, config.GetAWSProfile(); requested != "" && requested != effective && profileOverridenThrough != "command flag" {
+		// switch refuses -p and -r (switchFlagsError), so an override here always
+		// comes from the environment or from the active profile's own region.
+		if requested, effective := switchRequestedProfile, config.GetAWSProfile(); requested != "" && requested != effective {
 			logger.Warningf("switch saved profile '%s', but %s overrides it with '%s'; %s", requested, profileOverridenThrough, effective, switchOverrideAdvice("profile", profileOverridenThrough, requested))
 		}
-		if requested, effective := switchRequestedRegion, config.GetAWSRegion(); requested != "" && requested != effective && regionOverridenThrough != "command flag" {
+		if requested, effective := switchRequestedRegion, config.GetAWSRegion(); requested != "" && requested != effective {
 			logger.Warningf("switch saved region '%s', but %s overrides it with '%s'; %s", requested, regionOverridenThrough, effective, switchOverrideAdvice("region", regionOverridenThrough, requested))
 		}
 	}

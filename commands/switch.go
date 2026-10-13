@@ -17,6 +17,7 @@ limitations under the License.
 package commands
 
 import (
+	"errors"
 	"fmt"
 	"os"
 
@@ -30,6 +31,18 @@ func init() {
 }
 
 var switchRequestedProfile, switchRequestedRegion string
+
+// switchFlagsError refuses -p/--aws-profile and -r/--aws-region on a switch that saves
+// something. Those flags last for one command, while switch saves for every later one,
+// so combining them only raised the question of which one wins. switch takes both the
+// profile and the region as arguments instead.
+func switchFlagsError(profileFlag, regionFlag string) error {
+	if profileFlag == "" && regionFlag == "" {
+		return nil
+	}
+	return errors.New("switch takes the profile and region as arguments, not -p/--aws-profile or -r/--aws-region: " +
+		"awless-ro switch PROFILE REGION (e.g. awless-ro switch staging eu-west-1)")
+}
 
 var switchCmd = &cobra.Command{
 	Use:               "switch [REGION] [PROFILE]",
@@ -52,6 +65,7 @@ var switchCmd = &cobra.Command{
 			fmt.Fprintf(os.Stdout, "currently in region '%s' with profile '%s' (switch -h for help and examples)\n", config.GetAWSRegion(), config.GetAWSProfile())
 			return
 		}
+		exitOn(switchFlagsError(awsProfileGlobalFlag, awsRegionGlobalFlag))
 		for _, arg := range args {
 			if awsconfig.IsValidRegion(arg) {
 				exitOn(config.Set(config.RegionConfigKey, arg))
