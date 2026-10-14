@@ -49,4 +49,9 @@ type Inspector interface {
 	Name() string
 	Inspect(cloud.GraphAPI) error
 	Print(io.Writer)
+	// Rows is the result as data, for --format json: a slice of objects, empty
+	// rather than nil when there is nothing to report. Anything said about the
+	// result rather than part of it (why it is empty, what was left out) goes to
+	// notes, which the command writes to stderr.
+	Rows(notes io.Writer) interface{}
 }

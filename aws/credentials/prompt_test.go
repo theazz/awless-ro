@@ -2,6 +2,7 @@ package awscredentials
 
 import (
 	"bufio"
+	"bytes"
 	"errors"
 	"fmt"
 	"io"
@@ -452,5 +453,34 @@ func TestCreatedCredentialsFilePermissions(t *testing.T) {
 	}
 	if got := dirInfo.Mode().Perm(); got != 0o700 {
 		t.Errorf(".aws directory mode %#o, want 0700", got)
+	}
+}
+
+// The MFA prompt used to be stscreds.StdinTokenProvider's, which writes to stdout and
+// so led the output of `--format json`. It goes where every other prompt goes.
+func TestMFATokenPromptIsNotOnStdout(t *testing.T) {
+	if out := newStdTerminal().out; out != os.Stderr {
+		t.Fatalf("prompts go to %v, want stderr", out)
+	}
+
+	var prompts bytes.Buffer
+	term := &stdTerminal{out: &prompts, r: bufio.NewReader(strings.NewReader("123456\n"))}
+	code, err := askMFATokenCode(term)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if code != "123456" {
+		t.Errorf("got code %q, want 123456", code)
+	}
+	if !strings.Contains(prompts.String(), "MFA token code") {
+		t.Errorf("the prompt was not written to the terminal's output: %q", prompts.String())
+	}
+}
+
+// An empty code is refused here rather than sent to STS.
+func TestMFATokenCodeMustNotBeEmpty(t *testing.T) {
+	term := &stdTerminal{out: &bytes.Buffer{}, r: bufio.NewReader(strings.NewReader("\n"))}
+	if _, err := askMFATokenCode(term); err == nil {
+		t.Fatal("an empty MFA code was accepted")
 	}
 }

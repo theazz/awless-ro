@@ -62,6 +62,10 @@ var switchCmd = &cobra.Command{
 	Run: func(cmd *cobra.Command, args []string) {
 		switchRequestedProfile, switchRequestedRegion = "", ""
 		if len(args) < 1 || len(args) > 2 {
+			if jsonOutput() {
+				printJSON(currentProfileAndRegion())
+				return
+			}
 			fmt.Fprintf(os.Stdout, "currently in region '%s' with profile '%s' (switch -h for help and examples)\n", config.GetAWSRegion(), config.GetAWSProfile())
 			return
 		}
@@ -79,5 +83,21 @@ var switchCmd = &cobra.Command{
 			}
 			exitOn(fmt.Errorf("could not find profile: '%s' in $HOME/.aws/{credentials,config}", arg))
 		}
+		// What was saved. An environment variable or the profile's own region may
+		// still override it for the commands that follow; the warning about that goes
+		// to stderr, from notifyOnRegionOrProfilePrecedenceHook.
+		if jsonOutput() {
+			printJSON(currentProfileAndRegion())
+		}
 	},
+}
+
+// profileAndRegion is the JSON form of switch.
+type profileAndRegion struct {
+	Profile string `json:"profile"`
+	Region  string `json:"region"`
+}
+
+func currentProfileAndRegion() profileAndRegion {
+	return profileAndRegion{Profile: config.GetAWSProfile(), Region: config.GetAWSRegion()}
 }

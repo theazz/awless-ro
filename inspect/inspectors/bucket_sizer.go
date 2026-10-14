@@ -81,15 +81,59 @@ func (i *BucketSizer) Inspect(g cloud.GraphAPI) error {
 	return nil
 }
 
-func (i *BucketSizer) Print(w io.Writer) {
-	// No objects at all is the state a fresh install is in, because object sync is
-	// off by default: one API call per bucket is too much to spend unasked. Printing
-	// a table whose only row read "0.000000 Gb" answered a question about the account
-	// that had not been looked into.
+// BucketSize is one row of `inspect -i bucket_sizer --format json`.
+type BucketSize struct {
+	Bucket  string `json:"bucket"`
+	Objects int    `json:"objects"`
+	Bytes   int    `json:"bytes"`
+}
+
+// Rows are the buckets in name order, sizes in bytes. The total is their sum and is
+// not repeated as a row of its own.
+func (i *BucketSizer) Rows(notes io.Writer) interface{} {
+	rows := []BucketSize{}
 	if i.objectsInGraph == 0 {
-		fmt.Fprintln(w, "No S3 objects in the local graph, so there is nothing to size.")
-		fmt.Fprintln(w, "Object sync is off by default because it costs one API call per bucket. Turn it on with:")
-		fmt.Fprintln(w, "\tawless-ro config set aws.storage.s3object.sync true")
+		i.printNothingFetched(notes)
+		return rows
+	}
+	for _, name := range i.sortedNames() {
+		rows = append(rows, BucketSize{Bucket: name, Objects: i.buckets[name].objects, Bytes: i.buckets[name].size})
+	}
+	i.printUnattributed(notes)
+	return rows
+}
+
+// printNothingFetched says why there is nothing to size. No objects at all is the
+// state a fresh install is in, because object sync is off by default: one API call
+// per bucket is too much to spend unasked. Printing a table whose only row read
+// "0.000000 Gb" answered a question about the account that had not been looked into.
+func (i *BucketSizer) printNothingFetched(w io.Writer) {
+	fmt.Fprintln(w, "No S3 objects in the local graph, so there is nothing to size.")
+	fmt.Fprintln(w, "Object sync is off by default because it costs one API call per bucket. Turn it on with:")
+	fmt.Fprintln(w, "\tawless-ro config set aws.storage.s3object.sync true")
+}
+
+func (i *BucketSizer) printUnattributed(w io.Writer) {
+	if i.unattributed > 0 {
+		fmt.Fprintf(w, "\n%d object(s) named no bucket and are not counted above.\n", i.unattributed)
+	}
+}
+
+// sortedNames is the buckets in name order, because map order made the same data
+// print in a different order every run, which is unreadable for a report meant to be
+// compared against an earlier one.
+func (i *BucketSizer) sortedNames() []string {
+	names := make([]string, 0, len(i.buckets))
+	for name := range i.buckets {
+		names = append(names, name)
+	}
+	sort.Strings(names)
+	return names
+}
+
+func (i *BucketSizer) Print(w io.Writer) {
+	if i.objectsInGraph == 0 {
+		i.printNothingFetched(w)
 		return
 	}
 
@@ -98,15 +142,7 @@ func (i *BucketSizer) Print(w io.Writer) {
 	fmt.Fprintln(tabw, "Bucket\tObject count\tS3 total storage\t")
 	fmt.Fprintln(tabw, "--------\t----------\t-----------------\t")
 
-	// Sorted, because map order made the same data print in a different order every
-	// run, which is unreadable for a report meant to be compared against an earlier one.
-	names := make([]string, 0, len(i.buckets))
-	for name := range i.buckets {
-		names = append(names, name)
-	}
-	sort.Strings(names)
-
-	for _, name := range names {
+	for _, name := range i.sortedNames() {
 		bucket := i.buckets[name]
 		fmt.Fprintf(tabw, "%s\t%d\t%0.6f Gb\t\n", name, bucket.objects, float64(bucket.size)/1e9)
 	}
@@ -115,7 +151,5 @@ func (i *BucketSizer) Print(w io.Writer) {
 
 	tabw.Flush()
 
-	if i.unattributed > 0 {
-		fmt.Fprintf(w, "\n%d object(s) named no bucket and are not counted above.\n", i.unattributed)
-	}
+	i.printUnattributed(w)
 }

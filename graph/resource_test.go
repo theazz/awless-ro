@@ -439,3 +439,47 @@ func BenchmarkRdfUnmarshaling(b *testing.B) {
 		}
 	})
 }
+
+// Structured lists are stored one blank node per element, under random ids, so they
+// used to come back in a different order on every read. Each read here builds the
+// triples again, with new random ids, and must still give the same order.
+func TestStructuredListsReadBackInAFixedOrder(t *testing.T) {
+	cidr := func(s string) *net.IPNet {
+		_, n, err := net.ParseCIDR(s)
+		if err != nil {
+			t.Fatal(err)
+		}
+		return n
+	}
+	build := func() *Resource {
+		return sGrpResource("sgroup1").prop(properties.ID, "sgroup1").prop(
+			"InboundRules", []*FirewallRule{
+				{PortRange: PortRange{FromPort: 443, ToPort: 443}, Protocol: "tcp", IPRanges: []*net.IPNet{cidr("10.0.0.0/8"), cidr("0.0.0.0/0")}, Sources: []string{"sg-b", "sg-a"}},
+				{PortRange: PortRange{FromPort: 22, ToPort: 22}, Protocol: "tcp", IPRanges: []*net.IPNet{cidr("192.168.0.0/16")}},
+				{PortRange: PortRange{FromPort: 53, ToPort: 53}, Protocol: "udp", Sources: []string{"sg-c"}},
+			}).build()
+	}
+
+	var first string
+	for i := 0; i < 20; i++ {
+		r := build()
+		triples, err := r.marshalFullRDF()
+		if err != nil {
+			t.Fatal(err)
+		}
+		g := NewGraph()
+		g.store.Add(triples...)
+		read := InitResource(r.Type(), r.Id())
+		if err := read.unmarshalFullRdf(g.store.Snapshot()); err != nil {
+			t.Fatal(err)
+		}
+		got := fmt.Sprint(read.Properties()["InboundRules"])
+		if i == 0 {
+			first = got
+			continue
+		}
+		if got != first {
+			t.Fatalf("read %d gave\n%s\nthe first gave\n%s", i, got, first)
+		}
+	}
+}

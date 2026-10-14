@@ -18,6 +18,7 @@ package commands
 
 import (
 	"fmt"
+	"sort"
 	"strings"
 
 	"github.com/spf13/cobra"
@@ -39,10 +40,24 @@ var configCmd = &cobra.Command{
 	ValidArgsFunction:  cobra.NoFileCompletions,
 	Short:              "get, set, unset configuration values",
 	Example:            "  awless-ro config        # list all your config\n  awless-ro config set aws.region eu-west-1\n  awless-ro config set aws.storage.s3object.sync true",
-	PersistentPreRunE:  initAwlessEnvHook,
+	PersistentPreRunE:  chainHooks(initAwlessEnvHook),
 	PersistentPostRunE: notifyOnRegionOrProfilePrecedenceHook,
 
 	Run: func(cmd *cobra.Command, args []string) {
+		if jsonOutput() {
+			values := config.Values()
+			if !keysOnly {
+				printJSON(values)
+				return
+			}
+			keys := make([]string, 0, len(values))
+			for k := range values {
+				keys = append(keys, k)
+			}
+			sort.Strings(keys)
+			printJSON(keys)
+			return
+		}
 		if keysOnly {
 			for k := range config.Config {
 				fmt.Println(k)
@@ -67,6 +82,10 @@ var configGetCmd = &cobra.Command{
 		}
 
 		d, ok := config.Get(args[0])
+		if jsonOutput() {
+			printConfigValue(args[0])
+			return nil
+		}
 		if !ok {
 			fmt.Println("this parameter has not been set")
 		} else {
@@ -96,6 +115,9 @@ var configSetCmd = &cobra.Command{
 			exitOn(config.Set(strings.TrimSpace(args[0]), strings.TrimSpace(args[1])))
 		}
 
+		if jsonOutput() {
+			printConfigValue(strings.TrimSpace(args[0]))
+		}
 		return nil
 	},
 }
@@ -110,12 +132,26 @@ var configUnsetCmd = &cobra.Command{
 			return fmt.Errorf("not enough parameters")
 		}
 		_, ok := config.Get(args[0])
-		if !ok {
+		if !ok && !jsonOutput() {
 			fmt.Println("this parameter has not been set")
-		} else {
-
+		} else if ok {
 			exitOn(config.Unset(args[0]))
+		}
+		if jsonOutput() {
+			printConfigValue(args[0])
 		}
 		return nil
 	},
+}
+
+// configValue is the JSON form of get, set and unset: the key and the value it has
+// now, null when it is not set.
+type configValue struct {
+	Key   string      `json:"key"`
+	Value interface{} `json:"value"`
+}
+
+func printConfigValue(key string) {
+	v, _ := config.Get(key)
+	printJSON(configValue{Key: key, Value: v})
 }

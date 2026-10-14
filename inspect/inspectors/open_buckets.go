@@ -19,6 +19,7 @@ package inspectors
 import (
 	"fmt"
 	"io"
+	"sort"
 	"strings"
 
 	"github.com/theazz/awless-ro/cloud"
@@ -65,7 +66,31 @@ func (a *OpenBuckets) Inspect(g cloud.GraphAPI) error {
 		a.openToAnyAuth = append(a.openToAnyAuth, k)
 	}
 
+	// Sorted, so that the same buckets print the same way from one run to the next.
+	sort.Strings(a.openToAny)
+	sort.Strings(a.openToAnyAuth)
+
 	return nil
+}
+
+// OpenBucket is one row of `inspect -i open_buckets --format json`: a bucket and the
+// group its ACL grants access to, AllUsers (anybody) or AuthenticatedUsers (anyone
+// with an AWS account). A bucket open to both has a row for each.
+type OpenBucket struct {
+	Bucket  string `json:"bucket"`
+	Grantee string `json:"grantee"`
+}
+
+func (a *OpenBuckets) Rows(io.Writer) interface{} {
+	rows := []OpenBucket{}
+	for _, b := range a.openToAny {
+		rows = append(rows, OpenBucket{Bucket: b, Grantee: "AllUsers"})
+	}
+	for _, b := range a.openToAnyAuth {
+		rows = append(rows, OpenBucket{Bucket: b, Grantee: "AuthenticatedUsers"})
+	}
+	sort.SliceStable(rows, func(i, j int) bool { return rows[i].Bucket < rows[j].Bucket })
+	return rows
 }
 
 func (a *OpenBuckets) Print(w io.Writer) {

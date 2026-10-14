@@ -1,0 +1,8 @@
+{
+ "version": "v0.6.0",
+ "commit": "5ff53f6d",
+ "buildDate": "2026-10-14T00:00:00Z",
+ "os": "darwin",
+ "arch": "arm64",
+ "buildFor": "brew"
+}

@@ -1,0 +1,12 @@
+[
+ {
+  "bucket": "alpha",
+  "objects": 2,
+  "bytes": 5
+ },
+ {
+  "bucket": "zebra",
+  "objects": 1,
+  "bytes": 1500000000
+ }
+]

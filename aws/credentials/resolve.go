@@ -173,9 +173,9 @@ func isConfigured(profile string, explicit bool) bool {
 func load(ctx context.Context, p Params) (awssdk.Config, error) {
 	opts := []func(*config.LoadOptions) error{
 		// MFA token codes are read from the terminal, the same way the AWS CLI does
-		// it.
+		// it, with the prompt on stderr.
 		config.WithAssumeRoleCredentialOptions(func(o *stscreds.AssumeRoleOptions) {
-			o.TokenProvider = stscreds.StdinTokenProvider
+			o.TokenProvider = mfaTokenCode
 		}),
 	}
 	// Only when a profile was chosen; see Params.ProfileExplicit for why.

@@ -2,7 +2,8 @@
 
 A command line tool for **looking at** an AWS account: readable tables instead of
 JSON, resources by name instead of by id, how they relate to each other, and output
-you can pipe. Optionally, a local copy of the account to explore offline.
+you can pipe — JSON from every command, when a program is the one reading.
+Optionally, a local copy of the account to explore offline.
 
 It cannot change anything. Not by convention: every AWS operation it is capable of
 calling is a `Describe`, `Get`, `List` or `Head`, and a test enforces that.
@@ -132,13 +133,15 @@ awless-ro tail stack-events my-stack --follow
 awless-ro tail scaling-activities --follow
 ```
 
-**Scripts and spreadsheets.** Every listing can be CSV, TSV, JSON or bare ids, and
-`show` can print a single value.
+**Scripts and spreadsheets.** Every listing can be CSV, TSV, JSON or bare ids,
+`show` can print a single value, and every command answers in JSON with
+`--format json` (see [JSON output](#json-output)).
 
 ```sh
 awless-ro list users --format csv > users.csv
 awless-ro list instances --filter state=stopped --ids
 ssh ec2-user@$(awless-ro show web-1 --values-for privateip)
+awless-ro show web-1 --format json | jq '.parents[].id'
 ```
 
 **Offline, or on a slow link.** Sync once, and `list`, `show` and `inspect` answer
@@ -357,7 +360,8 @@ awless-ro show web-1 --values-for publicip,keypair
 ```
 
 Output is the resource's properties, then its lineage (parents and children), then
-what it applies to, depends on, and its siblings.
+what it applies to, depends on, and its siblings. `--format json` gives the same as one
+object; see [JSON output](#json-output).
 
 **`search images`** — official AMIs by vendor, pinned to the publishing account,
 resolving to the vendor's ordinary image rather than a specialised build.
@@ -444,6 +448,41 @@ fail2ban. `--print-cli` / `--print-config` say which user they guessed and never
 a connection.
 
 **Aliases.** Reference a resource by its `Name` tag anywhere an id is accepted.
+
+### JSON output
+
+`--format json` works with every command but `ssh`, and prints JSON on stdout and
+nothing else: progress, warnings and prompts (a first-run region, an MFA code) go to
+stderr, with or without `--silent`. A command asked for a format it cannot print,
+such as `whoami --format csv`, refuses before doing anything; `list` alone also takes
+`csv`, `tsv` and `porcelain`.
+
+| Command | Prints |
+|---|---|
+| `list <type>` | an array of resources, each an object of its properties; `--ids` makes it an array of ids |
+| `list <service>` | an object of arrays, keyed by resource type (`"instances"`); with `--ids`, arrays of ids |
+| `show` | `{"type", "properties", "parents", "children", "appliedOn", "dependingOn"}`, plus `"siblings"` with `--siblings`; `--values-for` gives an object of the properties asked for |
+| `whoami` | `{"account", "arn", "userId", "resource", "resourceType", "resourcePath", "root", "policies"}`; `policies` only for an IAM user whose policies could be read; `--*-only` gives a one-key object |
+| `inspect` | an array of rows, one object per bucket or security group |
+| `tail` | one object per event, one per line (newline-delimited JSON), oldest first, so `--follow` streams |
+| `config` | an object of every key and its value; `--keys` an array; `get`, `set`, `unset` give `{"key", "value"}` |
+| `switch` | `{"profile", "region"}` |
+| `sync` | `{"profile", "region", "services", "errors"}`: per service the count of each resource type, the types left off, and an `"error"` when it could not be read in full; exits 1 when nothing could be synced |
+| `version` | `{"version", "commit", "buildDate", "os", "arch", "buildFor"}`, the build fields only when set |
+| `search images` | an array of images, as without `--format` (it has always printed JSON); `--latest-id` gives `{"id"}` |
+
+A resource is the same object from `list` and from `show` (under `"properties"`):
+property names as in `--columns`, numbers as numbers, dates in RFC 3339, CIDR blocks
+as text. Related resources are references, `{"id", "type", "name"}`; ask `show` for
+any of them. A command with no results prints `[]` or `{}`, never `null` (inside a
+firewall rule or a route, an absent list is still `null`, as it has been since
+v0.3.0), and the same graph prints the same bytes on every run.
+
+```sh
+awless-ro list instances --format json | jq -r '.[] | select(.State == "running") | .ID'
+awless-ro show my-database --format json | jq '.dependingOn'
+awless-ro tail stack-events my-stack --follow --format json | jq -r .status
+```
 
 ### Offline mode (optional)
 

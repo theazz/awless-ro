@@ -33,7 +33,6 @@ import (
 )
 
 var (
-	listingFormat              string
 	listingFiltersFlag         []string
 	listingTagFiltersFlag      []string
 	listingTagKeyFiltersFlag   []string
@@ -65,8 +64,6 @@ func init() {
 		}
 	}
 
-	listCmd.PersistentFlags().StringVar(&listingFormat, "format", "table", "Output format: table, csv, tsv, json, porcelain")
-	listCmd.RegisterFlagCompletionFunc("format", fixedCompletion("table", "csv", "tsv", "json", "porcelain"))
 	listCmd.PersistentFlags().StringSliceVar(&listingFiltersFlag, "filter", []string{}, "Filter resources by column, case insensitive: key=value matches a substring, key==value matches the whole value. Ex: --filter type=t2.micro --filter state==running")
 	listCmd.PersistentFlags().StringSliceVar(&listingTagFiltersFlag, "tag", []string{}, "Filter EC2 resources given tags (case sensitive!). Ex: --tag Env=Production")
 	listCmd.PersistentFlags().StringSliceVar(&listingTagKeyFiltersFlag, "tag-key", []string{}, "Filter EC2 resources given a tag key only (case sensitive!). Ex: --tag-key Env")
@@ -88,6 +85,7 @@ var listCmd = &cobra.Command{
 	PersistentPreRun:  applyHooks(initLoggerHook, initAwlessEnvHook, initCloudServicesHook, firstInstallDoneHook),
 	PersistentPostRun: applyHooks(onVersionUpgrade, networkMonitorHook),
 	Short:             "List resources: sorting, filtering via tag/properties, output formatting, etc...",
+	Annotations:       map[string]string{formatsAnnotation: "any"},
 }
 
 var listSpecificResourceCmd = func(resType string) *cobra.Command {
@@ -147,7 +145,7 @@ var listAllResourceInServiceCmd = func(srvName string) *cobra.Command {
 			g, err := sync.LoadLocalGraphForService(srvName, config.GetAWSProfile(), config.GetAWSRegion())
 			exitOn(err)
 			displayer, err := console.BuildOptions(
-				console.WithFormat(listingFormat),
+				console.WithFormat(formatGlobalFlag),
 				console.WithMaxWidth(tableMaxWidth()),
 				// --columns was accepted and ignored here, so asking a
 				// service-wide listing for particular columns silently got the
@@ -184,7 +182,7 @@ func printResources(g cloud.GraphAPI, resType string) {
 		console.WithTagKeyFilters(listingTagKeyFiltersFlag),
 		console.WithTagValueFilters(listingTagValueFiltersFlag),
 		console.WithMaxWidth(tableMaxWidth()),
-		console.WithFormat(listingFormat),
+		console.WithFormat(formatGlobalFlag),
 		console.WithIDsOnly(listOnlyIDs),
 		console.WithSortBy(sortBy...),
 		console.WithReverseSort(reverseFlag),

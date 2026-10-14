@@ -3,6 +3,7 @@ package awstailers
 import (
 	"bytes"
 	"context"
+	"encoding/json"
 	"errors"
 	"fmt"
 	"io"
@@ -10,6 +11,7 @@ import (
 	"text/tabwriter"
 	"time"
 
+	awssdk "github.com/aws/aws-sdk-go-v2/aws"
 	"github.com/aws/aws-sdk-go-v2/service/cloudformation"
 	cfntypes "github.com/aws/aws-sdk-go-v2/service/cloudformation/types"
 
@@ -42,6 +44,9 @@ type stackEventTailer struct {
 	filters          filters
 	deploymentStatus deploymentStatus
 	timeout          time.Duration
+	// json prints each event as one line of JSON, every field, instead of the
+	// columns --filters picks.
+	json bool
 }
 
 type stackEvent struct {
@@ -61,6 +66,13 @@ func NewCloudformationEventsTailer(stackName string, nbEvents int, enableFollow 
 	}
 }
 
+// WithJSON makes the tailer print newline-delimited JSON: one object per event, one
+// per line, so that --follow streams.
+func (t *stackEventTailer) WithJSON(on bool) *stackEventTailer {
+	t.json = on
+	return t
+}
+
 func (t *stackEventTailer) Name() string {
 	return "stack-events"
 }
@@ -76,10 +88,17 @@ func (t *stackEventTailer) Tail(w io.Writer) error {
 	}
 
 	tab := tabwriter.NewWriter(w, 8, 8, 8, '\t', 0)
-	tab.Write(t.filters.header())
+	// JSON goes straight to w: it has no columns to align, and a line held back
+	// by the tabwriter would hold up a --follow stream.
+	var out io.Writer = tab
+	if t.json {
+		out = w
+	} else {
+		tab.Write(t.filters.header())
+	}
 
 	if !t.follow {
-		if err := t.displayLastEvents(cfn, tab); err != nil {
+		if err := t.displayLastEvents(cfn, out); err != nil {
 			return err
 		}
 
@@ -113,7 +132,7 @@ func (t *stackEventTailer) Tail(w io.Writer) error {
 			isTimeoutReached = true
 			return fmt.Errorf("timeout (%s) reached while tailing stack %q", t.timeout.String(), t.stackName)
 		case <-ticker.C:
-			if err := t.displayRelevantEvents(cfn, tab); err != nil {
+			if err := t.displayRelevantEvents(cfn, out); err != nil {
 				return err
 			}
 
@@ -189,10 +208,49 @@ func (t *stackEventTailer) displayLastEvents(cfn *awsservices.Cloudformation, w 
 
 	if len(events) > 0 {
 		t.lastEventID = events[0].EventId
-		return events.printReverse(w, t.filters)
+		return t.print(w, events)
 	}
 
 	return nil
+}
+
+// print writes events oldest first, the order they happened in.
+func (t *stackEventTailer) print(w io.Writer, events stackEvents) error {
+	if !t.json {
+		return events.printReverse(w, t.filters)
+	}
+	enc := json.NewEncoder(w)
+	for i := len(events) - 1; i >= 0; i-- {
+		if err := enc.Encode(events[i].toJSON()); err != nil {
+			return err
+		}
+	}
+	return nil
+}
+
+// StackEvent is one line of `tail stack-events --format json`.
+type StackEvent struct {
+	Timestamp    *time.Time `json:"timestamp,omitempty"`
+	StackName    string     `json:"stackName"`
+	EventID      string     `json:"eventId"`
+	LogicalID    string     `json:"logicalId,omitempty"`
+	PhysicalID   string     `json:"physicalId,omitempty"`
+	ResourceType string     `json:"resourceType,omitempty"`
+	Status       string     `json:"status,omitempty"`
+	StatusReason string     `json:"statusReason,omitempty"`
+}
+
+func (e *stackEvent) toJSON() StackEvent {
+	return StackEvent{
+		Timestamp:    e.Timestamp,
+		StackName:    awssdk.ToString(e.StackName),
+		EventID:      awssdk.ToString(e.EventId),
+		LogicalID:    awssdk.ToString(e.LogicalResourceId),
+		PhysicalID:   awssdk.ToString(e.PhysicalResourceId),
+		ResourceType: awssdk.ToString(e.ResourceType),
+		Status:       string(e.ResourceStatus),
+		StatusReason: awssdk.ToString(e.ResourceStatusReason),
+	}
 }
 
 func (t *stackEventTailer) isStackBeingDeployed(cfn *awsservices.Cloudformation) (bool, error) {
@@ -274,7 +332,7 @@ func (t *stackEventTailer) displayRelevantEvents(cfn *awsservices.Cloudformation
 		t.lastEventID = events[0].EventId
 	}
 
-	return events.printReverse(w, t.filters)
+	return t.print(w, events)
 }
 
 func coloredResourceStatus(str string) string {

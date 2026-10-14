@@ -18,7 +18,6 @@ package commands
 
 import (
 	"fmt"
-	"os"
 	"time"
 
 	"github.com/spf13/cobra"
@@ -63,6 +62,11 @@ var tailCmd = &cobra.Command{
 	PersistentPreRun:  applyHooks(initLoggerHook, initAwlessEnvHook, initCloudServicesHook, firstInstallDoneHook),
 	PersistentPostRun: applyHooks(networkMonitorHook),
 	Short:             "Show recent CloudFormation stack events or autoscaling activities, or follow them",
+	Long: `Show recent CloudFormation stack events or autoscaling activities, or follow them.
+
+With --format json, each event is one JSON object on a line of its own (newline-delimited
+JSON), oldest first, so that --follow streams; stack events carry every field, whatever
+--filters says.`,
 	Example: `  awless-ro tail stack-events my-stack                 # the last 10 events of a stack
   awless-ro tail stack-events my-stack --follow        # follow a deployment until it completes
   awless-ro tail scaling-activities -n 20              # the last 20 autoscaling activities
@@ -75,7 +79,7 @@ var scalingActivitiesCmd = &cobra.Command{
 	Short:             "Autoscaling activities across all groups, newest last",
 
 	Run: func(cmd *cobra.Command, args []string) {
-		exitOn(awstailers.NewScalingActivitiesTailer(tailNumberEventsFlag, tailEnableFollowFlag, tailFollowFrequencyFlag).Tail(os.Stdout))
+		exitOn(awstailers.NewScalingActivitiesTailer(tailNumberEventsFlag, tailEnableFollowFlag, tailFollowFrequencyFlag).WithJSON(jsonOutput()).Tail(stdout))
 	},
 }
 
@@ -89,6 +93,6 @@ var stackEventsCmd = &cobra.Command{
 			exitOn(fmt.Errorf("expecting stack-name string"))
 		}
 
-		exitOn(awstailers.NewCloudformationEventsTailer(args[0], tailNumberEventsFlag, tailEnableFollowFlag, tailFollowFrequencyFlag, stackEventsFilters, stackEventsTailTimeout).Tail(os.Stdout))
+		exitOn(awstailers.NewCloudformationEventsTailer(args[0], tailNumberEventsFlag, tailEnableFollowFlag, tailFollowFrequencyFlag, stackEventsFilters, stackEventsTailTimeout).WithJSON(jsonOutput()).Tail(stdout))
 	},
 }

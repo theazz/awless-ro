@@ -44,11 +44,15 @@ func StdinRegionSelector() string {
 	}
 	var regionCompleter = readline.NewPrefixCompleter(regionItems...)
 
-	fmt.Println("Please enter one region: (Ctrl+C to quit, Tab for completion)")
+	// The question and the prompt go to stderr, like every other prompt: stdout is
+	// the command's output, and a first run with --format json would otherwise
+	// start its JSON with them.
+	fmt.Fprintln(os.Stderr, "Please enter one region: (Ctrl+C to quit, Tab for completion)")
 	var region string
 	rl, err := readline.NewEx(&readline.Config{
 		Prompt:       "> ",
 		AutoComplete: regionCompleter,
+		Stdout:       os.Stderr,
 	})
 	if err != nil {
 		fmt.Fprintf(os.Stderr, "error while selecting region: %s", err)

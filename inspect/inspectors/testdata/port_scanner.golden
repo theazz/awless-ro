@@ -1,0 +1,44 @@
+[
+ {
+  "securityGroup": "sg-1",
+  "appliesOn": [
+   {
+    "id": "i-1",
+    "type": "instance",
+    "name": "web"
+   }
+  ],
+  "inboundRules": [
+   {
+    "PortRange": {
+     "FromPort": 0,
+     "ToPort": 0,
+     "Any": true
+    },
+    "Protocol": "any",
+    "IPRanges": [
+     "0.0.0.0/0"
+    ],
+    "Sources": null
+   }
+  ]
+ },
+ {
+  "securityGroup": "sg-2",
+  "appliesOn": [],
+  "inboundRules": [
+   {
+    "PortRange": {
+     "FromPort": 22,
+     "ToPort": 22,
+     "Any": false
+    },
+    "Protocol": "tcp",
+    "IPRanges": [
+     "0.0.0.0/0"
+    ],
+    "Sources": null
+   }
+  ]
+ }
+]

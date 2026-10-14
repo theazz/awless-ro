@@ -80,7 +80,11 @@ var inspectCmd = &cobra.Command{
 
 		exitOn(inspector.Inspect(g))
 
-		inspector.Print(os.Stdout)
+		if jsonOutput() {
+			printJSON(inspector.Rows(os.Stderr))
+			return nil
+		}
+		inspector.Print(stdout)
 
 		return nil
 	},

@@ -3,6 +3,7 @@ package config
 import (
 	"bytes"
 	"fmt"
+	"os"
 	"sort"
 	"strconv"
 	"strings"
@@ -104,6 +105,24 @@ func DisplayConfig() string {
 		return fmt.Sprintf("%s\n%s", displayConfig(), defaults)
 	}
 	return displayConfig()
+}
+
+// Values is what DisplayConfig shows, as data: every stored key with its value,
+// from the config and the defaults stores alike, and every known config key that is
+// not set, as nil. `config get` reads both stores the same way.
+func Values() map[string]interface{} {
+	values := make(map[string]interface{}, len(Config)+len(Defaults)+len(configDefinitions))
+	for k := range configDefinitions {
+		values[k] = nil
+	}
+	for k, v := range Defaults {
+		values[k] = v
+	}
+	// Config last: Get prefers it over Defaults when a key is in both.
+	for k, v := range Config {
+		values[k] = v
+	}
+	return values
 }
 
 func InitConfig(fromEnv map[string]string) error {
@@ -234,7 +253,7 @@ func defaultParser(value string) (interface{}, error) {
 func defaultStdinParamProvider() string {
 	var value string
 	for value == "" {
-		fmt.Print("Value ? > ")
+		fmt.Fprint(os.Stderr, "Value ? > ")
 		fmt.Scan(&value)
 	}
 	return value

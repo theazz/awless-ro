@@ -33,11 +33,31 @@ var versionCmd = &cobra.Command{
 	Use:               "version",
 	ValidArgsFunction: cobra.NoFileCompletions,
 	Short:             "Show awless-ro version",
+	PreRun:            applyHooks(),
 
 	Run: printVersion,
 }
 
 func printVersion(*cobra.Command, []string) {
+	if jsonOutput() {
+		printJSON(newVersionOutput(config.CurrentBuildInfo))
+		return
+	}
 	fmt.Fprint(os.Stderr, config.AWLESS_ASCII_LOGO)
 	fmt.Println(config.CurrentBuildInfo)
+}
+
+// versionOutput is `version --format json`. The fields the build did not set are
+// left out, as the text form leaves them out.
+type versionOutput struct {
+	Version   string `json:"version"`
+	Commit    string `json:"commit,omitempty"`
+	BuildDate string `json:"buildDate,omitempty"`
+	OS        string `json:"os,omitempty"`
+	Arch      string `json:"arch,omitempty"`
+	BuildFor  string `json:"buildFor,omitempty"`
+}
+
+func newVersionOutput(b config.BuildInfo) versionOutput {
+	return versionOutput{Version: b.Version, Commit: b.Sha, BuildDate: b.Date, OS: b.OS, Arch: b.Arch, BuildFor: b.For}
 }

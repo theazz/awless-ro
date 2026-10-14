@@ -108,9 +108,16 @@ Use --owner with --name for those, or for any vendor not listed.`,
 		}
 
 		if latestImageIDOnly {
+			if jsonOutput() {
+				printJSON(map[string]string{"id": images[0].ID})
+				return nil
+			}
 			fmt.Println(images[0].ID)
 			return nil
 		}
+
+		// JSON whatever --format says (table or json; checkFormat refuses the rest):
+		// there has never been a table form, and the output is pinned as it is.
 
 		encoded, err := json.MarshalIndent(images, "", "  ")
 		if err != nil {

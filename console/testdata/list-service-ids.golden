@@ -1,0 +1,12 @@
+{
+ "instances": [
+  "i-1",
+  "i-2"
+ ],
+ "securitygroups": [
+  "sg-1"
+ ],
+ "subnets": [
+  "subnet-1"
+ ]
+}

@@ -2,6 +2,7 @@ package sync
 
 import (
 	"context"
+	"errors"
 	"os"
 	"testing"
 
@@ -71,4 +72,19 @@ func (s *mockService) Fetch(context.Context) (cloud.GraphAPI, error) { return s.
 func (s *mockService) IsSyncDisabled() bool                          { return false }
 func (s *mockService) FetchByType(context.Context, string) (cloud.GraphAPI, error) {
 	return nil, nil
+}
+
+// The message is the one Sync always returned; the type only adds what failed where.
+func TestSyncErrorsKeepTheirMessage(t *testing.T) {
+	err := concatErrors([]error{&ServiceError{Service: "infra", Err: errors.New("denied")}, errors.New("disk full")})
+	if got, want := err.Error(), "syncing errors:\n\t\tsyncing infra: denied\n\t\tdisk full"; got != want {
+		t.Fatalf("got %q, want %q", got, want)
+	}
+	var se *ServiceError
+	if !errors.As(err, &se) || se.Service != "infra" {
+		t.Fatalf("the failed service is not reachable through errors.As: %v", se)
+	}
+	if concatErrors(nil) != nil {
+		t.Fatal("no failure must be a nil error, not an empty Errors")
+	}
 }

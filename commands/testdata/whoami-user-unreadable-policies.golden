@@ -1,0 +1,9 @@
+{
+ "account": "123456789012",
+ "arn": "arn:aws:iam::123456789012:user/jsmith",
+ "userId": "AIDAEXAMPLE",
+ "resource": "jsmith",
+ "resourceType": "user",
+ "resourcePath": "user/jsmith",
+ "root": false
+}

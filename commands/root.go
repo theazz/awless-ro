@@ -32,6 +32,7 @@ var (
 	awsRegionGlobalFlag    string
 	awsProfileGlobalFlag   string
 	awsColorGlobalFlag     string
+	formatGlobalFlag       string
 	networkMonitorFlag     bool
 
 	renderGreenFn    = color.New(color.FgGreen).SprintFunc()
@@ -51,6 +52,9 @@ func init() {
 	RootCmd.PersistentFlags().StringVarP(&awsRegionGlobalFlag, "aws-region", "r", "", "Override AWS region temporarily for the current command")
 	RootCmd.PersistentFlags().StringVarP(&awsProfileGlobalFlag, "aws-profile", "p", "", "Override AWS profile temporarily for the current command")
 	RootCmd.PersistentFlags().StringVar(&awsColorGlobalFlag, "color", "auto", "Force enabling/disabling colors in display (auto, never, always)")
+	// Global rather than list's own, so that every command answers in JSON when asked
+	// to. list takes all five formats; the others print text or JSON (formatHook).
+	RootCmd.PersistentFlags().StringVar(&formatGlobalFlag, "format", "table", "Output format: table, json; list also takes csv, tsv, porcelain")
 	RootCmd.PersistentFlags().BoolVar(&networkMonitorFlag, "network-monitor", false, "Debug requests with network monitor")
 	RootCmd.PersistentFlags().MarkHidden("network-monitor")
 
@@ -59,6 +63,7 @@ func init() {
 	RootCmd.RegisterFlagCompletionFunc("aws-region", completeRegions)
 	RootCmd.RegisterFlagCompletionFunc("aws-profile", completeProfiles)
 	RootCmd.RegisterFlagCompletionFunc("color", fixedCompletion("auto", "never", "always"))
+	RootCmd.RegisterFlagCompletionFunc("format", completeFormat)
 
 	RootCmd.SetUsageTemplate(customRootUsage)
 
@@ -78,6 +83,10 @@ var RootCmd = &cobra.Command{
 	Long:  "awless-ro is a read-only CLI to explore and sync your cloud infrastructure",
 	RunE: func(c *cobra.Command, args []string) error {
 		if versionGlobalFlag {
+			if err := checkFormat(c); err != nil {
+				c.SilenceUsage = true
+				return err
+			}
 			printVersion(c, args)
 			return nil
 		}

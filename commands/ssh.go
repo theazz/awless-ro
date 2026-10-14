@@ -93,6 +93,9 @@ var sshCmd = &cobra.Command{
 	PersistentPreRun:  applyHooks(initLoggerHook, initAwlessEnvHook, initCloudServicesHook, firstInstallDoneHook),
 	PersistentPostRun: applyHooks(onVersionUpgrade, networkMonitorHook),
 
+	// ssh hands the terminal over to an ssh session; there is nothing to print as JSON.
+	Annotations: map[string]string{formatsAnnotation: "table"},
+
 	RunE: runSSH,
 }
 

@@ -35,6 +35,7 @@ func (rules FirewallRules) Sort() {
 		sort.Slice(r.IPRanges, func(i int, j int) bool {
 			return r.IPRanges[i].String() < r.IPRanges[j].String()
 		})
+		sort.Strings(r.Sources)
 	}
 	sort.Slice(rules, func(i int, j int) bool {
 		return rules[i].String() < rules[j].String()

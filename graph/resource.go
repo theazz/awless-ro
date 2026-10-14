@@ -375,7 +375,31 @@ func (res *Resource) unmarshalFullRdf(gph triplestore.RDFGraph) error {
 			res.properties[propKey] = propVal
 		}
 	}
+	sortStructLists(res.properties)
 	return nil
+}
+
+// sortStructLists puts the lists of structured values in a fixed order. Each element
+// of such a list is stored under a blank node with a random id, and the values inside
+// it (a rule's IP ranges, a route's targets) come back in map order, so without this
+// the same resource listed its rules in a different order on every read: in tables,
+// and in JSON, where a program comparing two runs saw a change that was not there.
+// Lists of strings need nothing, the sort in unmarshalFullRdf already fixes them.
+func sortStructLists(props map[string]interface{}) {
+	for _, v := range props {
+		switch list := v.(type) {
+		case []*FirewallRule:
+			FirewallRules(list).Sort()
+		case []*Route:
+			Routes(list).Sort()
+		case []*Grant:
+			Grants(list).Sort()
+		case []*KeyValue:
+			sort.Slice(list, func(i, j int) bool { return list[i].String() < list[j].String() })
+		case []*DistributionOrigin:
+			sort.Slice(list, func(i, j int) bool { return list[i].String() < list[j].String() })
+		}
+	}
 }
 
 func (r *Resource) unmarshalMeta(gph triplestore.RDFGraph) error {

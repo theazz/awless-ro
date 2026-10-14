@@ -1,0 +1,2 @@
+{"timestamp":"2026-10-14T08:00:00Z","group":"web","activityId":"1","status":"Failed","description":"Terminating EC2 instance: i-1"}
+{"timestamp":"2026-10-14T09:00:00Z","group":"web","activityId":"2","status":"Successful","description":"Launching a new EC2 instance: i-2"}

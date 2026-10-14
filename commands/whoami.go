@@ -18,10 +18,12 @@ package commands
 
 import (
 	"context"
+	"errors"
 	"fmt"
 	"io"
 	"net"
 	"net/http"
+	"sort"
 	"strings"
 	"time"
 
@@ -54,11 +56,25 @@ var whoamiCmd = &cobra.Command{
 
 	Run: func(cmd *cobra.Command, args []string) {
 		if onlyMyIPFlag {
-			fmt.Println(getMyIP())
+			ip := getMyIP()
+			if jsonOutput() {
+				// Text prints <nil> when the address could not be read; a JSON
+				// reader gets a failure instead of a value to misread.
+				if ip == nil {
+					exitOn(errors.New("cannot read your public IP address from https://checkip.amazonaws.com"))
+				}
+				printJSON(map[string]string{"ip": ip.String()})
+				return
+			}
+			fmt.Println(ip)
 			return
 		}
 
 		if localGlobalFlag {
+			// Nothing on stdout and exit 0 would hand a JSON reader an empty document.
+			if jsonOutput() {
+				exitOn(errors.New("whoami asks AWS, which --local rules out"))
+			}
 			logger.Warning("`--local` flag prevent the command from fetching remote information")
 			return
 		}
@@ -71,21 +87,21 @@ var whoamiCmd = &cobra.Command{
 			logger.Warning("Best practices suggest to create a new user and affecting it roles of access")
 		}
 
-		switch {
-		case onlyMyAccountFlag:
-			fmt.Println(me.Account)
+		if key, value, ok := whoamiOnly(me); ok {
+			if jsonOutput() {
+				printJSON(map[string]string{key: value})
+			} else {
+				fmt.Println(value)
+			}
 			return
-		case onlyMyIDFlag:
-			fmt.Println(me.UserId)
-			return
-		case onlyMyNameFlag:
-			fmt.Println(me.Resource)
-			return
-		case onlyMyTypeFlag:
-			fmt.Println(me.ResourceType)
-			return
-		case onlyMyResourcePathFlag:
-			fmt.Println(me.ResourcePath)
+		}
+
+		if jsonOutput() {
+			var policies *awsservices.UserPolicies
+			if me.IsUserType() {
+				policies = userPolicies(me.Resource)
+			}
+			printJSON(newWhoamiOutput(me, policies))
 			return
 		}
 
@@ -96,13 +112,8 @@ var whoamiCmd = &cobra.Command{
 
 		fmt.Printf("Username: %s, Id: %s, Account: %s\n", me.Resource, me.UserId, me.Account)
 
-		policies, err := awsservices.AccessService.(*awsservices.Access).GetUserPolicies(context.Background(), me.Resource)
-		if err != nil {
-			if awsfetch.IsAccessDenied(err) {
-				logger.Warningf("user '%s' is not authorized to list its policies", me.Resource)
-			} else {
-				logger.Error(err)
-			}
+		policies := userPolicies(me.Resource)
+		if policies == nil {
 			return
 		}
 
@@ -128,6 +139,91 @@ var whoamiCmd = &cobra.Command{
 			}
 		}
 	},
+}
+
+// whoamiOnly answers the --*-only flags: the one value asked for, and the key it has
+// in the JSON output.
+func whoamiOnly(me *awsservices.Identity) (key, value string, ok bool) {
+	switch {
+	case onlyMyAccountFlag:
+		return "account", me.Account, true
+	case onlyMyIDFlag:
+		return "userId", me.UserId, true
+	case onlyMyNameFlag:
+		return "resource", me.Resource, true
+	case onlyMyTypeFlag:
+		return "resourceType", me.ResourceType, true
+	case onlyMyResourcePathFlag:
+		return "resourcePath", me.ResourcePath, true
+	}
+	return "", "", false
+}
+
+// userPolicies reads the policies of a user, or says on stderr why it could not and
+// returns nil.
+func userPolicies(username string) *awsservices.UserPolicies {
+	policies, err := awsservices.AccessService.(*awsservices.Access).GetUserPolicies(context.Background(), username)
+	if err != nil {
+		if awsfetch.IsAccessDenied(err) {
+			logger.Warningf("user '%s' is not authorized to list its policies", username)
+		} else {
+			logger.Error(err)
+		}
+		return nil
+	}
+	return policies
+}
+
+// whoamiOutput is `whoami --format json`.
+type whoamiOutput struct {
+	Account      string `json:"account"`
+	Arn          string `json:"arn"`
+	UserID       string `json:"userId"`
+	Resource     string `json:"resource"`
+	ResourceType string `json:"resourceType"`
+	ResourcePath string `json:"resourcePath"`
+	Root         bool   `json:"root"`
+	// Only for a user whose policies could be read: absent says "not known", which
+	// an empty list would misstate as "none".
+	Policies *whoamiPolicies `json:"policies,omitempty"`
+}
+
+type whoamiPolicies struct {
+	Attached []string `json:"attached"`
+	Inlined  []string `json:"inlined"`
+	// Policy names by the group they come from.
+	ByGroup map[string][]string `json:"byGroup"`
+}
+
+func newWhoamiOutput(me *awsservices.Identity, policies *awsservices.UserPolicies) whoamiOutput {
+	out := whoamiOutput{
+		Account:      me.Account,
+		Arn:          me.Arn,
+		UserID:       me.UserId,
+		Resource:     me.Resource,
+		ResourceType: me.ResourceType,
+		ResourcePath: me.ResourcePath,
+		Root:         me.IsRoot(),
+	}
+	if policies != nil {
+		out.Policies = &whoamiPolicies{
+			Attached: sortedOrEmpty(policies.Attached),
+			Inlined:  sortedOrEmpty(policies.Inlined),
+			ByGroup:  make(map[string][]string, len(policies.ByGroup)),
+		}
+		for group, names := range policies.ByGroup {
+			out.Policies.ByGroup[group] = sortedOrEmpty(names)
+		}
+	}
+	return out
+}
+
+// sortedOrEmpty is a sorted copy of s, and [] rather than null when s is empty. The
+// policies are collected concurrently, so their order is the order the calls returned.
+func sortedOrEmpty(s []string) []string {
+	out := append([]string{}, s...)
+	sort.Strings(out)
+	return out
 }
 
 // getMyIP asks AWS for the public address this machine appears to come from. It

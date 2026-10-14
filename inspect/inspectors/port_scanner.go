@@ -20,16 +20,18 @@ import (
 	"fmt"
 	"io"
 	"net"
+	"sort"
 	"strings"
 
 	"github.com/theazz/awless-ro/cloud"
 	"github.com/theazz/awless-ro/cloud/rdf"
+	"github.com/theazz/awless-ro/console"
 	"github.com/theazz/awless-ro/graph"
 )
 
 type PortScanner struct {
 	inbounds   map[string][]*graph.FirewallRule
-	applyingOn map[string][]string
+	applyingOn map[string][]cloud.Resource
 }
 
 func (p *PortScanner) Name() string {
@@ -43,7 +45,7 @@ func (p *PortScanner) Inspect(g cloud.GraphAPI) error {
 	}
 
 	p.inbounds = make(map[string][]*graph.FirewallRule)
-	p.applyingOn = make(map[string][]string)
+	p.applyingOn = make(map[string][]cloud.Resource)
 	for _, sg := range sgroups {
 		rules := sg.Properties()["InboundRules"]
 		switch rules.(type) {
@@ -53,9 +55,7 @@ func (p *PortScanner) Inspect(g cloud.GraphAPI) error {
 			if err != nil {
 				return err
 			}
-			for _, r := range res {
-				p.applyingOn[sg.Id()] = append(p.applyingOn[sg.Id()], r.String())
-			}
+			p.applyingOn[sg.Id()] = append(p.applyingOn[sg.Id()], res...)
 
 		}
 	}
@@ -65,13 +65,49 @@ func (p *PortScanner) Inspect(g cloud.GraphAPI) error {
 
 var allLocalIPs = net.ParseIP("0.0.0.0")
 
+// OpenPorts is one row of `inspect -i port_scanner --format json`: a security group,
+// what it applies on, and its inbound rules as `list securitygroups --format json`
+// prints them.
+type OpenPorts struct {
+	SecurityGroup string                `json:"securityGroup"`
+	AppliesOn     []console.ResourceRef `json:"appliesOn"`
+	InboundRules  []*graph.FirewallRule `json:"inboundRules"`
+}
+
+func (p *PortScanner) Rows(io.Writer) interface{} {
+	rows := []OpenPorts{}
+	for _, sg := range p.securityGroups() {
+		rules := p.inbounds[sg]
+		if rules == nil {
+			rules = []*graph.FirewallRule{}
+		}
+		rows = append(rows, OpenPorts{SecurityGroup: sg, AppliesOn: console.RefsTo(p.applyingOn[sg]), InboundRules: rules})
+	}
+	return rows
+}
+
+// securityGroups is the ids in order, so that two runs print the same report.
+func (p *PortScanner) securityGroups() []string {
+	ids := make([]string, 0, len(p.inbounds))
+	for sg := range p.inbounds {
+		ids = append(ids, sg)
+	}
+	sort.Strings(ids)
+	return ids
+}
+
 func (p *PortScanner) Print(w io.Writer) {
-	for sg, inbounds := range p.inbounds {
+	for _, sg := range p.securityGroups() {
+		inbounds := p.inbounds[sg]
 		var targets string
 		if len(p.applyingOn[sg]) == 0 {
 			targets = "nothing"
 		} else {
-			targets = strings.Join(p.applyingOn[sg], ", ")
+			names := make([]string, 0, len(p.applyingOn[sg]))
+			for _, r := range p.applyingOn[sg] {
+				names = append(names, r.String())
+			}
+			targets = strings.Join(names, ", ")
 		}
 		fmt.Fprintf(w, "Securitygroup %s applying on %s: \n", sg, targets)
 

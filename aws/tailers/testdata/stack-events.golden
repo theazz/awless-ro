@@ -1,0 +1,3 @@
+{"timestamp":"2026-10-14T09:00:00Z","stackName":"app","eventId":"e1","logicalId":"app","resourceType":"AWS::CloudFormation::Stack","status":"UPDATE_IN_PROGRESS"}
+{"timestamp":"2026-10-14T09:01:00Z","stackName":"app","eventId":"e2","logicalId":"Bucket","physicalId":"app-bucket-1","resourceType":"AWS::S3::Bucket","status":"UPDATE_FAILED","statusReason":"Access Denied"}
+{"timestamp":"2026-10-14T09:02:00Z","stackName":"app","eventId":"e3","logicalId":"app","resourceType":"AWS::CloudFormation::Stack","status":"UPDATE_COMPLETE"}

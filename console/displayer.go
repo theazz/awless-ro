@@ -60,6 +60,7 @@ type Builder struct {
 	dataSource        interface{}
 	root              cloud.Resource
 	noHeaders         bool
+	idsOnly           bool
 }
 
 func (b *Builder) SetSource(i interface{}) *Builder {
@@ -113,7 +114,7 @@ func (b *Builder) buildQuery() (cloud.Query, error) {
 }
 
 func (b *Builder) Build() (Displayer, error) {
-	base := fromGraphDisplayer{sorter: &defaultSorter{sortBy: b.sort, descending: b.reverseSort}, rdfType: b.rdfType, columnDefinitions: b.columnDefinitions, maxwidth: b.maxwidth, noHeaders: b.noHeaders}
+	base := fromGraphDisplayer{sorter: &defaultSorter{sortBy: b.sort, descending: b.reverseSort}, rdfType: b.rdfType, columnDefinitions: b.columnDefinitions, maxwidth: b.maxwidth, noHeaders: b.noHeaders, idsOnly: b.idsOnly}
 
 	switch b.dataSource.(type) {
 	case cloud.GraphAPI:
@@ -319,13 +320,19 @@ func WithTagValueFilters(fs []string) optsFn {
 // read by something other than a person — it forces the porcelain format — so a name
 // in that stream is a value a script will use as an id and fail on. The one caller
 // that wanted both was the shell completion, which now asks for both by name.
+//
+// With --format json the format is kept, and the ids come out as a JSON array: a
+// program that asked for JSON should not have to parse lines instead.
 func WithIDsOnly(only bool) optsFn {
 	return func(b *Builder) *Builder {
 		if only {
 			b.columnDefinitions = []ColumnDefinition{
 				&StringColumnDefinition{Prop: "ID"},
 			}
-			b.format = "porcelain"
+			b.idsOnly = true
+			if b.format != "json" {
+				b.format = "porcelain"
+			}
 		}
 
 		return b
@@ -389,6 +396,7 @@ type fromGraphDisplayer struct {
 	columnDefinitions []ColumnDefinition
 	maxwidth          int
 	noHeaders         bool
+	idsOnly           bool
 }
 
 func (d *fromGraphDisplayer) setGraph(g cloud.GraphAPI) {
@@ -509,13 +517,25 @@ func (d *jsonDisplayer) Print(w io.Writer) error {
 
 	sort.Slice(resources, func(i, j int) bool { return resources[i].Id() < resources[j].Id() })
 
-	var props []map[string]interface{}
-	for _, res := range resources {
-		props = append(props, res.Properties())
-	}
-
 	enc := json.NewEncoder(w)
 	enc.SetIndent("", " ")
+
+	// --ids asks for ids and nothing else. In JSON that is an array of strings
+	// rather than the bare lines porcelain prints.
+	if d.idsOnly {
+		ids := make([]string, 0, len(resources))
+		for _, res := range resources {
+			ids = append(ids, res.Id())
+		}
+		return enc.Encode(ids)
+	}
+
+	// Allocated rather than declared, so that no result is [] and not null: a
+	// program reading the output can then treat every answer as a list.
+	props := make([]map[string]interface{}, 0, len(resources))
+	for _, res := range resources {
+		props = append(props, JSONProperties(res))
+	}
 
 	return enc.Encode(props)
 }
@@ -768,13 +788,26 @@ func (d *multiResourcesJSONDisplayer) Print(w io.Writer) error {
 		if err != nil {
 			return err
 		}
+		if len(resources) == 0 {
+			continue
+		}
+		// In id order, as for a single type, so that two runs over the same graph
+		// print the same thing.
+		sort.Slice(resources, func(i, j int) bool { return resources[i].Id() < resources[j].Id() })
+		// --ids: the ids of each type, keyed the same way.
+		if d.idsOnly {
+			ids := make([]string, 0, len(resources))
+			for _, res := range resources {
+				ids = append(ids, res.Id())
+			}
+			all[cloud.PluralizeResource(t)] = ids
+			continue
+		}
 		var props []map[string]interface{}
 		for _, res := range resources {
-			props = append(props, res.Properties())
+			props = append(props, JSONProperties(res))
 		}
-		if len(resources) > 0 {
-			all[cloud.PluralizeResource(t)] = props
-		}
+		all[cloud.PluralizeResource(t)] = props
 	}
 
 	enc := json.NewEncoder(w)

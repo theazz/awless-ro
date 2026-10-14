@@ -78,6 +78,23 @@ func newStdTerminal() *stdTerminal {
 	return &stdTerminal{in: os.Stdin, out: os.Stderr, r: bufio.NewReader(os.Stdin)}
 }
 
+// mfaTokenCode reads the MFA code a role assumed through a profile asks for. It stands
+// in for stscreds.StdinTokenProvider, which writes its prompt to stdout: into the
+// command's output, where it became the first line of what `--format json` printed.
+func mfaTokenCode() (string, error) {
+	return askMFATokenCode(newStdTerminal())
+}
+
+func askMFATokenCode(t terminal) (string, error) {
+	code, err := t.readLine("Assume Role MFA token code: ")
+	if err == nil && code == "" {
+		// Refused here, as fmt.Scanln did in the provider this replaces, rather
+		// than sent to STS to be refused there.
+		return "", errors.New("no MFA token code entered")
+	}
+	return code, err
+}
+
 func (t *stdTerminal) isInteractive() bool { return term.IsTerminal(int(t.in.Fd())) }
 
 func (t *stdTerminal) readLine(prompt string) (string, error) {

@@ -64,7 +64,7 @@ func ResolveRegionFromEnv(profile string) (region string) {
 
 	if !awsconfig.IsValidRegion(region) {
 		region = regionSelector()
-		fmt.Println()
+		fmt.Fprintln(os.Stderr)
 	}
 
 	return

@@ -1,0 +1,23 @@
+{
+ "profile": "default",
+ "region": "eu-west-1",
+ "services": [
+  {
+   "name": "access",
+   "resources": {
+    "accesskey": 0,
+    "group": 0,
+    "instanceprofile": 0,
+    "mfadevice": 0,
+    "policy": 0,
+    "role": 0,
+    "user": 0
+   },
+   "off": {},
+   "error": "AccessDenied: not authorized to perform iam:ListUsers"
+  }
+ ],
+ "errors": [
+  "creating /nope: permission denied"
+ ]
+}

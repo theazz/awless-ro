@@ -1,0 +1,49 @@
+{
+ "type": "region",
+ "properties": {
+  "ID": "eu-west-1"
+ },
+ "parents": [],
+ "children": [
+  {
+   "id": "vpc-1",
+   "type": "vpc",
+   "name": "main",
+   "children": [
+    {
+     "id": "sg-1",
+     "type": "securitygroup",
+     "name": "web"
+    },
+    {
+     "id": "subnet-1",
+     "type": "subnet",
+     "name": "private",
+     "children": [
+      {
+       "id": "i-1",
+       "type": "instance",
+       "name": "web"
+      },
+      {
+       "id": "i-2",
+       "type": "instance",
+       "name": "db"
+      },
+      {
+       "id": "i-3",
+       "type": "instance",
+       "name": "worker"
+      }
+     ]
+    },
+    {
+     "id": "subnet-2",
+     "type": "subnet"
+    }
+   ]
+  }
+ ],
+ "appliedOn": [],
+ "dependingOn": []
+}

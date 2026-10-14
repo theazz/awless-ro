@@ -1,0 +1,33 @@
+[
+ {
+  "ID": "sg-1",
+  "InboundRules": [
+   {
+    "PortRange": {
+     "FromPort": 22,
+     "ToPort": 22,
+     "Any": false
+    },
+    "Protocol": "tcp",
+    "IPRanges": null,
+    "Sources": [
+     "sg-2"
+    ]
+   },
+   {
+    "PortRange": {
+     "FromPort": 443,
+     "ToPort": 443,
+     "Any": false
+    },
+    "Protocol": "tcp",
+    "IPRanges": [
+     "0.0.0.0/0",
+     "10.0.0.0/8"
+    ],
+    "Sources": null
+   }
+  ],
+  "Name": "web"
+ }
+]

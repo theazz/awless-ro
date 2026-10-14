@@ -44,11 +44,32 @@ func applyHooks(funcs ...func(*cobra.Command, []string) error) func(*cobra.Comma
 		// mistyped flag still gets the usage text it needs.
 		cmd.SilenceUsage = true
 
+		exitOn(checkFormat(cmd))
 		for _, fn := range funcs {
 			if err := fn(cmd, args); err != nil {
 				exitOn(err)
 			}
 		}
+	}
+}
+
+// chainHooks runs hooks in order and stops at the first error, for the commands that
+// return their hook errors to cobra instead of exiting through applyHooks. Like
+// applyHooks, it checks --format first.
+func chainHooks(funcs ...func(*cobra.Command, []string) error) func(*cobra.Command, []string) error {
+	return func(cmd *cobra.Command, args []string) error {
+		// As in applyHooks: the command line parsed, so a failure from here on is not
+		// one the flag list helps with.
+		cmd.SilenceUsage = true
+		if err := checkFormat(cmd); err != nil {
+			return err
+		}
+		for _, fn := range funcs {
+			if err := fn(cmd, args); err != nil {
+				return err
+			}
+		}
+		return nil
 	}
 }
 
@@ -280,14 +301,14 @@ func onVersionUpgrade(cmd *cobra.Command, args []string) error {
 		lastVersion, err = db.GetStringValue("current.version")
 		return
 	}); derr != nil {
-		fmt.Printf("cannot verify stored version in db: %s\n", derr)
+		fmt.Fprintf(os.Stderr, "cannot verify stored version in db: %s\n", derr)
 	}
 
 	if config.IsSemverUpgrade(lastVersion, config.Version) {
 		if err := database.Execute(func(db *database.DB) error {
 			return db.SetStringValue("current.version", config.Version)
 		}); err != nil {
-			fmt.Printf("cannot store upgraded version in db: %s\n", err)
+			fmt.Fprintf(os.Stderr, "cannot store upgraded version in db: %s\n", err)
 		}
 		logger.Infof("You have just upgraded awless-ro from %s to %s", lastVersion, config.Version)
 		logger.Infof("Check out %s latest features at https://github.com/theazz/awless-ro/blob/master/CHANGELOG.md", config.Version)

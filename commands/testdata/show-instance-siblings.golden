@@ -1,0 +1,46 @@
+{
+ "type": "instance",
+ "properties": {
+  "ID": "i-1",
+  "Launched": "2026-10-01T08:30:00Z",
+  "Name": "web",
+  "State": "running"
+ },
+ "parents": [
+  {
+   "id": "eu-west-1",
+   "type": "region"
+  },
+  {
+   "id": "vpc-1",
+   "type": "vpc",
+   "name": "main"
+  },
+  {
+   "id": "subnet-1",
+   "type": "subnet",
+   "name": "private"
+  }
+ ],
+ "children": [],
+ "appliedOn": [],
+ "dependingOn": [
+  {
+   "id": "sg-1",
+   "type": "securitygroup",
+   "name": "web"
+  }
+ ],
+ "siblings": [
+  {
+   "id": "i-2",
+   "type": "instance",
+   "name": "db"
+  },
+  {
+   "id": "i-3",
+   "type": "instance",
+   "name": "worker"
+  }
+ ]
+}

@@ -1,0 +1,16 @@
+{
+ "profile": "default",
+ "region": "eu-west-1",
+ "services": [
+  {
+   "name": "storage",
+   "resources": {
+    "bucket": 2
+   },
+   "off": {
+    "s3object": "aws.storage.s3object.sync"
+   }
+  }
+ ],
+ "errors": []
+}

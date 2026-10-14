@@ -113,7 +113,7 @@ Loop:
 				break Loop
 			}
 			if res.err != nil {
-				allErrors = append(allErrors, fmt.Errorf("syncing %s: %s", res.service.Name(), res.err))
+				allErrors = append(allErrors, &ServiceError{Service: res.service.Name(), Err: res.err})
 			} else {
 				s.logger.ExtraVerbosef("sync: fetched %s service took %s", res.service.Name(), time.Since(res.start))
 			}
@@ -164,14 +164,34 @@ func concatErrors(errs []error) error {
 	if len(errs) == 0 {
 		return nil
 	}
+	return Errors(errs)
+}
 
+// Errors is the error Sync returns: every failure, each a *ServiceError when a
+// service could not be fetched. Kept apart rather than flattened into one message so
+// that `sync --format json` can say which services failed.
+type Errors []error
+
+func (e Errors) Error() string {
 	lines := []string{"syncing errors:"}
-	for _, err := range errs {
+	for _, err := range e {
 		lines = append(lines, fmt.Sprintf("\t\t%s", err))
 	}
-
-	return errors.New(strings.Join(lines, "\n"))
+	return strings.Join(lines, "\n")
 }
+
+func (e Errors) Unwrap() []error { return e }
+
+// ServiceError is a service whose fetch failed. What it did fetch is still in the
+// graph Sync returns for it, so the counts of such a service may be short.
+type ServiceError struct {
+	Service string
+	Err     error
+}
+
+func (e *ServiceError) Error() string { return fmt.Sprintf("syncing %s: %s", e.Service, e.Err) }
+
+func (e *ServiceError) Unwrap() error { return e.Err }
 
 // LoadLocalGraphForService reads the one synced file a `list --local` of this
 // service's resources depends on.

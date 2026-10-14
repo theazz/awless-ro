@@ -106,30 +106,7 @@ func TestJSONDisplays(t *testing.T) {
 		compareJSON(t, w.String(), expected)
 	})
 
-	t.Run("Multi resource", func(t *testing.T) {
-		t.Skip("Comparison fail: until we can order what is inside each resource")
-
-		displayer, _ := BuildOptions(
-			WithFormat("json"),
-		).SetSource(g).Build()
-
-		expected := `{"instances": [
-			{ "ID": "inst_1", "Name": "redis", "PublicIP": "1.2.3.4", "State": "running", "Type": "t2.micro"},
-		  { "ID": "inst_2", "Name": "django", "State": "stopped", "Type": "t2.medium" },
-		  { "ID": "inst_3", "Name": "apache", "State": "running", "Type": "t2.xlarge" }
-		 ], "subnets": [
-		  { "ID": "sub_1", "Name": "my_subnet", "Vpc": "vpc_1" }, {"ID": "sub_2", "Vpc": "vpc_2" }
-		 ], "vpcs": [
-		  { "ID": "vpc_1", "NewProp": "my_value" }, { "ID": "vpc_2", "Name": "my_vpc_2" }
-		 ]}`
-
-		w.Reset()
-		if err := displayer.Print(&w); err != nil {
-			t.Fatal(err)
-		}
-
-		compareJSON(t, w.String(), expected)
-	})
+	// The multi-resource form is pinned byte for byte in json_test.go.
 }
 
 func TestTabularDisplays(t *testing.T) {
@@ -673,8 +650,8 @@ func TestFilter(t *testing.T) {
 		if err := displayer.Print(&w); err != nil {
 			t.Fatal(err)
 		}
-		// An empty result set renders as a JSON null here.
-		compareJSON(t, w.String(), `null`)
+		// An empty result set is an empty array, not null.
+		compareJSON(t, w.String(), `[]`)
 	})
 	// A bool column is compared as a string, so the exact form works on it too.
 	t.Run("Exact filter on friendly name", func(t *testing.T) {

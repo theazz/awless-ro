@@ -1,0 +1,9 @@
+{
+ "account": "123456789012",
+ "arn": "arn:aws:sts::123456789012:assumed-role/admin/session",
+ "userId": "AROAEXAMPLE:session",
+ "resource": "admin/session",
+ "resourceType": "assumed-role",
+ "resourcePath": "assumed-role/admin/session",
+ "root": false
+}

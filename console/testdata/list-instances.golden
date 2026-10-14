@@ -1,0 +1,17 @@
+[
+ {
+  "ID": "i-1",
+  "Name": "db",
+  "State": "stopped"
+ },
+ {
+  "ID": "i-2",
+  "Launched": "2026-10-01T08:30:00Z",
+  "Name": "web",
+  "SecurityGroups": [
+   "sg-1",
+   "sg-2"
+  ],
+  "State": "running"
+ }
+]

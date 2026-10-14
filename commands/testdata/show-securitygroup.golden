@@ -1,0 +1,27 @@
+{
+ "type": "securitygroup",
+ "properties": {
+  "ID": "sg-1",
+  "Name": "web"
+ },
+ "parents": [
+  {
+   "id": "eu-west-1",
+   "type": "region"
+  },
+  {
+   "id": "vpc-1",
+   "type": "vpc",
+   "name": "main"
+  }
+ ],
+ "children": [],
+ "appliedOn": [
+  {
+   "id": "i-1",
+   "type": "instance",
+   "name": "web"
+  }
+ ],
+ "dependingOn": []
+}

@@ -1,0 +1,14 @@
+[
+ {
+  "bucket": "public-a",
+  "grantee": "AllUsers"
+ },
+ {
+  "bucket": "public-a",
+  "grantee": "AuthenticatedUsers"
+ },
+ {
+  "bucket": "public-b",
+  "grantee": "AllUsers"
+ }
+]

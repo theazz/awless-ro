@@ -2,6 +2,7 @@ package awstailers
 
 import (
 	"context"
+	"encoding/json"
 	"fmt"
 	"io"
 	"os"
@@ -25,10 +26,19 @@ type scalingActivitiesTailer struct {
 	notice io.Writer
 	// api is the autoscaling client; nil means the one set up for the session.
 	api awsfetch.AutoscalingAPI
+	// json prints each event as one line of JSON instead of text.
+	json bool
 }
 
 func NewScalingActivitiesTailer(nbEvents int, follow bool, frequency time.Duration) *scalingActivitiesTailer {
 	return &scalingActivitiesTailer{nbEvents: nbEvents, follow: follow, pollingFrequency: frequency, notice: os.Stderr}
+}
+
+// WithJSON makes the tailer print newline-delimited JSON: one object per activity,
+// one per line, so that --follow streams.
+func (t *scalingActivitiesTailer) WithJSON(on bool) *scalingActivitiesTailer {
+	t.json = on
+	return t
 }
 
 func (t *scalingActivitiesTailer) Name() string {
@@ -96,7 +106,7 @@ func (t *scalingActivitiesTailer) displayLastEvents(api awsfetch.AutoscalingAPI,
 	}
 	sort.Slice(events, func(i int, j int) bool { return events[i].stamp.Before(events[j].stamp) })
 	for _, evt := range events {
-		if err := evt.print(w); err != nil {
+		if err := t.print(w, evt); err != nil {
 			return err
 		}
 	}
@@ -129,27 +139,51 @@ func (t *scalingActivitiesTailer) displayNewEvents(api awsfetch.AutoscalingAPI, 
 	}
 	sort.Slice(newEvents, func(i int, j int) bool { return newEvents[i].stamp.Before(newEvents[j].stamp) })
 	for _, e := range newEvents {
-		if err := e.print(w); err != nil {
+		if err := t.print(w, e); err != nil {
 			return err
 		}
 	}
 	return nil
 }
 
+func (t *scalingActivitiesTailer) print(w io.Writer, e *event) error {
+	if t.json {
+		return json.NewEncoder(w).Encode(e.toJSON())
+	}
+	return e.print(w)
+}
+
 type event struct {
-	id      string
-	element string
-	stamp   time.Time
-	message string
+	id          string
+	element     string
+	stamp       time.Time
+	message     string
+	status      string
+	description string
 }
 
 func newEventFromScalingActivity(s autoscalingtypes.Activity) *event {
 	return &event{
-		id:      awssdk.ToString(s.ActivityId),
-		stamp:   awssdk.ToTime(s.StartTime),
-		message: fmt.Sprintf("%s: %s", string(s.StatusCode), awssdk.ToString(s.Description)),
-		element: awssdk.ToString(s.AutoScalingGroupName),
+		id:          awssdk.ToString(s.ActivityId),
+		stamp:       awssdk.ToTime(s.StartTime),
+		message:     fmt.Sprintf("%s: %s", string(s.StatusCode), awssdk.ToString(s.Description)),
+		element:     awssdk.ToString(s.AutoScalingGroupName),
+		status:      string(s.StatusCode),
+		description: awssdk.ToString(s.Description),
 	}
+}
+
+// ScalingActivity is one line of `tail scaling-activities --format json`.
+type ScalingActivity struct {
+	Timestamp   time.Time `json:"timestamp"`
+	Group       string    `json:"group"`
+	ActivityID  string    `json:"activityId"`
+	Status      string    `json:"status"`
+	Description string    `json:"description"`
+}
+
+func (e *event) toJSON() ScalingActivity {
+	return ScalingActivity{Timestamp: e.stamp, Group: e.element, ActivityID: e.id, Status: e.status, Description: e.description}
 }
 
 func (e *event) print(w io.Writer) error {

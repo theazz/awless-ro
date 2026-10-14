@@ -17,11 +17,13 @@ limitations under the License.
 package commands
 
 import (
+	"errors"
 	"fmt"
 	"log"
 	"os"
 	"runtime"
 	"runtime/pprof"
+	"sort"
 	"strings"
 	"time"
 
@@ -29,6 +31,7 @@ import (
 	"github.com/theazz/awless-ro/aws/services"
 	"github.com/theazz/awless-ro/cloud"
 	"github.com/theazz/awless-ro/config"
+	"github.com/theazz/awless-ro/graph"
 	"github.com/theazz/awless-ro/logger"
 	"github.com/theazz/awless-ro/sync"
 )
@@ -83,17 +86,118 @@ var syncCmd = &cobra.Command{
 		} else {
 			syncFn()
 		}
-		if syncErr != nil {
-			logger.Verbose(syncErr)
-		}
+		failed, otherErrs := splitSyncErrors(syncErr)
 
+		out := syncOutput{Profile: config.GetAWSProfile(), Region: config.GetAWSRegion(), Services: []syncedService{}, Errors: otherErrs}
+		// A failed service may have no graph at all; it is listed all the same.
+		if graphs == nil {
+			graphs = map[string]cloud.GraphAPI{}
+		}
+		for k := range failed {
+			if _, ok := graphs[k]; !ok {
+				graphs[k] = graph.NewGraph()
+			}
+		}
 		for k, g := range graphs {
-			displaySyncStats(k, g)
+			stats := syncStats(k, g)
+			stats.Error = failed[k]
+			out.Services = append(out.Services, stats)
+			if stats.Error != "" {
+				// The README promises a service that could not be read is reported.
+				// It used to be said only with -v, so expired credentials looked like
+				// an empty account.
+				logger.Warningf("-> %s: not synced, or only in part: %s", k, stats.Error)
+				continue
+			}
+			logger.Infof("-> %s", stats)
+		}
+		for _, e := range otherErrs {
+			logger.Warning(e)
 		}
 		logger.Infof("sync took %s", time.Since(start))
 
+		if jsonOutput() {
+			sort.Slice(out.Services, func(i, j int) bool { return out.Services[i].Name < out.Services[j].Name })
+			printJSON(out)
+		}
+		// One service refused is an account with limited permissions, and the rest is
+		// still worth having; nothing synced at all is a failure.
+		if len(failed) > 0 && len(failed) == len(graphs) {
+			exitOn(errors.New("nothing could be synced"))
+		}
 		return nil
 	},
+}
+
+// splitSyncErrors sorts what Sync reported into the services that failed, by name,
+// and everything else.
+func splitSyncErrors(err error) (map[string]string, []string) {
+	failed, other := map[string]string{}, []string{}
+	var all sync.Errors
+	if !errors.As(err, &all) {
+		if err != nil {
+			other = append(other, err.Error())
+		}
+		return failed, other
+	}
+	for _, e := range all {
+		var se *sync.ServiceError
+		if errors.As(e, &se) {
+			failed[se.Service] = se.Err.Error()
+		} else {
+			other = append(other, e.Error())
+		}
+	}
+	return failed, other
+}
+
+// syncOutput is `sync --format json`: what was synced, per service. The progress and
+// the timing stay on stderr, as in text.
+type syncOutput struct {
+	Profile  string          `json:"profile"`
+	Region   string          `json:"region"`
+	Services []syncedService `json:"services"`
+	// Failures not tied to one service, such as a local file that could not be
+	// written.
+	Errors []string `json:"errors"`
+}
+
+type syncedService struct {
+	Name string `json:"name"`
+	// The number of resources of each type, by type name (as in show's "type").
+	Resources map[string]int `json:"resources"`
+	// The types configuration left out, with the key that did. They are not in
+	// Resources: a count of zero would say the account has none.
+	Off map[string]string `json:"off"`
+	// Why the service could not be fetched, or not all of it. Its counts are then
+	// what was read, not what the account holds.
+	Error string `json:"error,omitempty"`
+}
+
+// String is the line sync logs for the service, in type order.
+func (s syncedService) String() string {
+	types := make([]string, 0, len(s.Resources)+len(s.Off))
+	for rt := range s.Resources {
+		types = append(types, rt)
+	}
+	for rt := range s.Off {
+		types = append(types, rt)
+	}
+	sort.Strings(types)
+
+	strs := make([]string, 0, len(types))
+	for _, rt := range types {
+		if key, off := s.Off[rt]; off {
+			strs = append(strs, fmt.Sprintf("%s: off (%s)", cloud.PluralizeResource(rt), key))
+			continue
+		}
+		n := s.Resources[rt]
+		if n > 1 {
+			rt = cloud.PluralizeResource(rt)
+		}
+		strs = append(strs, fmt.Sprintf("%d %s", n, rt))
+	}
+	return fmt.Sprintf("%s: %s", s.Name, strings.Join(strs, ", "))
 }
 
 func withProfiling(fn func()) {
@@ -123,8 +227,8 @@ func withProfiling(fn func()) {
 	logger.Infof("Generated profiling files %s and %s", cpu.Name(), mem.Name())
 }
 
-func displaySyncStats(serviceName string, g cloud.GraphAPI) {
-	var strs []string
+func syncStats(serviceName string, g cloud.GraphAPI) syncedService {
+	stats := syncedService{Name: serviceName, Resources: map[string]int{}, Off: map[string]string{}}
 	for rt, service := range awsservices.ServicePerResourceType {
 		if service != serviceName {
 			continue
@@ -136,7 +240,7 @@ func displaySyncStats(serviceName string, g cloud.GraphAPI) {
 		// parent — one per hosted zone, one per bucket — so this is the common case,
 		// not an edge one.
 		if key, off := syncDisabledFor(serviceName, rt); off {
-			strs = append(strs, fmt.Sprintf("%s: off (%s)", cloud.PluralizeResource(rt), key))
+			stats.Off[rt] = key
 			continue
 		}
 
@@ -144,14 +248,9 @@ func displaySyncStats(serviceName string, g cloud.GraphAPI) {
 		if err != nil {
 			continue
 		}
-		nbRes := len(res)
-		if nbRes > 1 {
-			strs = append(strs, fmt.Sprintf("%d %s", nbRes, cloud.PluralizeResource(rt)))
-		} else {
-			strs = append(strs, fmt.Sprintf("%d %s", nbRes, rt))
-		}
+		stats.Resources[rt] = len(res)
 	}
-	logger.Infof("-> %s: %s", serviceName, strings.Join(strs, ", "))
+	return stats
 }
 
 // syncDisabledFor reports whether a resource type was skipped by configuration, and

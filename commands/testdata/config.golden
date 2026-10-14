@@ -1,0 +1,18 @@
+{
+ "autosync": true,
+ "aws.access.sync": null,
+ "aws.cdn.sync": null,
+ "aws.cloudformation.sync": null,
+ "aws.dns.record.sync": null,
+ "aws.dns.sync": null,
+ "aws.infra.sync": null,
+ "aws.lambda.sync": null,
+ "aws.messaging.sync": null,
+ "aws.monitoring.sync": null,
+ "aws.notification.sync": null,
+ "aws.profile": "default",
+ "aws.region": "eu-west-1",
+ "aws.storage.s3object.sync": false,
+ "aws.storage.sync": null,
+ "region": "us-east-1"
+}
