@@ -117,3 +117,41 @@ func TestJSONPropertiesWritesNonNumbersAsNull(t *testing.T) {
 		t.Fatalf("got %s, want %s", got, want)
 	}
 }
+
+// UserData is withheld in JSON as in the table: bootstrap scripts hold passwords and
+// tokens. Only a request naming the property gets the value.
+func TestJSONWithholdsUserData(t *testing.T) {
+	script := "IyEvYmluL2Jhc2gKZXhwb3J0IERCX1BBU1NXT1JEPWh1bnRlcjI="
+	lc := resourcetest.LaunchConfig("lc-1").Prop(p.Name, "web-lc").Prop(p.UserData, script).Build()
+
+	got := JSONProperties(lc)
+	if got[p.UserData] == script {
+		t.Fatalf("JSONProperties returned the UserData value")
+	}
+	if want := withheldNotice(p.UserData, script); got[p.UserData] != want {
+		t.Errorf("UserData = %q, want the notice %q", got[p.UserData], want)
+	}
+	if got[p.Name] != "web-lc" {
+		t.Errorf("other properties must be untouched, Name = %v", got[p.Name])
+	}
+
+	if all := JSONPropertiesWithheldToo(lc); all[p.UserData] != script {
+		t.Errorf("JSONPropertiesWithheldToo UserData = %v, want the value", all[p.UserData])
+	}
+
+	g := graph.NewGraph()
+	if err := g.AddResource(lc); err != nil {
+		t.Fatal(err)
+	}
+	var w bytes.Buffer
+	d, err := BuildOptions(WithRdfType("launchconfiguration"), WithFormat("json")).SetSource(g).Build()
+	if err != nil {
+		t.Fatal(err)
+	}
+	if err := d.Print(&w); err != nil {
+		t.Fatal(err)
+	}
+	if bytes.Contains(w.Bytes(), []byte(script)) {
+		t.Errorf("list --format json printed the UserData value: %s", w.String())
+	}
+}

@@ -31,8 +31,8 @@ type tableResourceDisplayer struct {
 	columnDefinitions []ColumnDefinition
 }
 
-// withheldFromTable lists properties whose value is not printed in the property table
-// that `show` prints by default.
+// withheldProperties lists properties whose value is not printed when a resource is
+// shown or listed, in a table or in JSON.
 //
 // UserData is a launch configuration's bootstrap script, and bootstrap scripts are a
 // standard place to find tokens, registry credentials and database passwords. Printing
@@ -44,10 +44,9 @@ type tableResourceDisplayer struct {
 // UserData` prints it in full, and it is stored in the graph as before. The point is
 // only that showing a resource should not spray a secret.
 //
-// That single escape hatch is the only one, because displaying one resource ignores
-// --format and always comes through here. That is a separate oddity, not something
-// this relies on.
-var withheldFromTable = map[string]bool{
+// JSON follows the same rule (JSONProperties): it is what a program, or an LLM behind
+// an MCP server, reads, and a secret in its input is no better than one on screen.
+var withheldProperties = map[string]bool{
 	properties.UserData: true,
 }
 
@@ -74,7 +73,7 @@ func (d *tableResourceDisplayer) Print(w io.Writer) error {
 			values[i] = make([]interface{}, 2)
 		}
 		values[i][0] = header.title()
-		if withheldFromTable[prop] {
+		if withheldProperties[prop] {
 			values[i][1] = withheldNotice(prop, val)
 		} else {
 			values[i][1] = header.format(val)

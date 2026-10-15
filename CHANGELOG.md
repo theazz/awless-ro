@@ -21,6 +21,8 @@
 
 ### Fixed
 
+- `--format json` withholds `UserData`, as the table already did; only
+  `show --values-for UserData` prints it. `list --format json` used to print it in full.
 - `sync` says which services could not be read, on stderr without `-v` and as
   `"error"` in JSON, and exits 1 when nothing could be synced, instead of reporting
   an account with nothing in it.

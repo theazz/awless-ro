@@ -140,7 +140,7 @@ func showResourceValuesOnlyFor(resource cloud.Resource, propKeys []string) {
 	// In JSON the values keep their types and the keys their property names, so that
 	// a date is a date and a list a list rather than their printed forms.
 	jsonValues := map[string]interface{}{}
-	for k, v := range console.JSONProperties(resource) {
+	for k, v := range console.JSONPropertiesWithheldToo(resource) {
 		if ok, p := isIncluded(k); ok {
 			valuesForKeys[p] = fmt.Sprint(v)
 			jsonValues[k] = v

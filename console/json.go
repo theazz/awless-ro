@@ -16,10 +16,27 @@ import (
 // netmask encode it as CIDR text (graph/type_json.go). The one value encoding/json
 // cannot write at all is a float that is not a number; it becomes null rather than
 // failing the whole output.
+//
+// A withheld property (withheldProperties) is replaced by the same notice the table
+// prints; only `show --values-for` returns its value (JSONPropertiesWithheldToo).
 func JSONProperties(res cloud.Resource) map[string]interface{} {
+	return jsonProperties(res, false)
+}
+
+// JSONPropertiesWithheldToo is JSONProperties including the withheld values, for a
+// request that names the property explicitly.
+func JSONPropertiesWithheldToo(res cloud.Resource) map[string]interface{} {
+	return jsonProperties(res, true)
+}
+
+func jsonProperties(res cloud.Resource, withheldToo bool) map[string]interface{} {
 	props := res.Properties()
 	out := make(map[string]interface{}, len(props))
 	for k, v := range props {
+		if withheldProperties[k] && !withheldToo {
+			out[k] = withheldNotice(k, v)
+			continue
+		}
 		out[k] = jsonValue(v)
 	}
 	return out
