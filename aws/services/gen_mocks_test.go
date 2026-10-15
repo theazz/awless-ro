@@ -54,6 +54,8 @@ import (
 	ec2types "github.com/aws/aws-sdk-go-v2/service/ec2/types"
 	"github.com/aws/aws-sdk-go-v2/service/ecr"
 	ecrtypes "github.com/aws/aws-sdk-go-v2/service/ecr/types"
+	"github.com/aws/aws-sdk-go-v2/service/efs"
+	efstypes "github.com/aws/aws-sdk-go-v2/service/efs/types"
 	"github.com/aws/aws-sdk-go-v2/service/elasticloadbalancing"
 	elbtypes "github.com/aws/aws-sdk-go-v2/service/elasticloadbalancing/types"
 	"github.com/aws/aws-sdk-go-v2/service/elasticloadbalancingv2"
@@ -421,6 +423,33 @@ func (m *mockEcs) Fetch(context.Context) (cloud.GraphAPI, error) {
 
 func (m *mockEcs) FetchByType(context.Context, string) (cloud.GraphAPI, error) {
 	return nil, nil
+}
+
+type mockEfs struct {
+	awsfetch.EfsAPI
+	manualEfsMock
+	filesystemdescriptions []efstypes.FileSystemDescription
+}
+
+// cloud.Service, so that a mock can stand in for a whole service in the
+// registry. The graph-building tests drive the fetchers directly, so these are
+// inert on purpose.
+func (m *mockEfs) Name() string            { return "" }
+func (m *mockEfs) Region() string          { return "" }
+func (m *mockEfs) Profile() string         { return "" }
+func (m *mockEfs) ResourceTypes() []string { return []string{} }
+func (m *mockEfs) IsSyncDisabled() bool    { return false }
+
+func (m *mockEfs) Fetch(context.Context) (cloud.GraphAPI, error) {
+	return nil, nil
+}
+
+func (m *mockEfs) FetchByType(context.Context, string) (cloud.GraphAPI, error) {
+	return nil, nil
+}
+
+func (m *mockEfs) DescribeFileSystems(_ context.Context, _ *efs.DescribeFileSystemsInput, _ ...func(*efs.Options)) (*efs.DescribeFileSystemsOutput, error) {
+	return &efs.DescribeFileSystemsOutput{FileSystems: m.filesystemdescriptions}, nil
 }
 
 type mockElb struct {

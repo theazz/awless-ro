@@ -327,4 +327,11 @@ var FetchersDefs = []FetchersDef{
 			{Api: "cloudtrail", ResourceType: cloud.Trail, AWSType: "cloudtrailtypes.Trail", ApiMethod: "DescribeTrails", InputFields: `IncludeShadowTrails: new(false)`, OutputsExtractor: "TrailList"},
 		},
 	},
+	{
+		Name: "efs",
+		Api:  []string{"efs"},
+		Fetchers: []Fetcher{
+			{Api: "efs", ResourceType: cloud.FileSystem, AWSType: "efstypes.FileSystemDescription", ApiMethod: "DescribeFileSystems", OutputsExtractor: "FileSystems", Paginated: true},
+		},
+	},
 }

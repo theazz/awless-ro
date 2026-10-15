@@ -74,6 +74,7 @@ var ColumnsInListing = map[string][]string{
 	cloud.Distribution:        {properties.ID, properties.PublicDNS, properties.Enabled, properties.State, properties.Modified, properties.Aliases, properties.SSLSupportMethod, properties.Origins},
 	cloud.Stack:               {properties.ID, properties.Name, properties.State, properties.Created, properties.Modified},
 	cloud.Trail:               {properties.Name, properties.Bucket, properties.MultiRegion, properties.OrganizationTrail, properties.LogFileValidation},
+	cloud.FileSystem:          {properties.ID, properties.Name, properties.State, properties.Size, properties.PerformanceMode, properties.ThroughputMode, properties.Encrypted, properties.Created},
 }
 
 var DefaultsColumnDefinitions = map[string][]ColumnDefinition{
@@ -510,5 +511,16 @@ var DefaultsColumnDefinitions = map[string][]ColumnDefinition{
 		StringColumnDefinition{Prop: properties.MultiRegion, Friendly: "Multi-region"},
 		StringColumnDefinition{Prop: properties.OrganizationTrail, Friendly: "Organization"},
 		StringColumnDefinition{Prop: properties.LogFileValidation, Friendly: "Log file validation"},
+	},
+	//EFS
+	cloud.FileSystem: {
+		StringColumnDefinition{Prop: properties.ID},
+		StringColumnDefinition{Prop: properties.Name},
+		StringColumnDefinition{Prop: properties.State},
+		StorageColumnDefinition{Unit: b, StringColumnDefinition: StringColumnDefinition{Prop: properties.Size}},
+		StringColumnDefinition{Prop: properties.PerformanceMode, Friendly: "Performance"},
+		StringColumnDefinition{Prop: properties.ThroughputMode, Friendly: "Throughput"},
+		StringColumnDefinition{Prop: properties.Encrypted},
+		TimeColumnDefinition{StringColumnDefinition: StringColumnDefinition{Prop: properties.Created}},
 	},
 }

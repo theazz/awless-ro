@@ -163,6 +163,7 @@ const (
 	Path                              = "cloud:path"
 	PathPrefix                        = "cloud:pathPrefix"
 	PendingTasksCount                 = "cloud:pendingTasksCount"
+	PerformanceMode                   = "cloud:performanceMode"
 	PlacementGroup                    = "cloud:placementGroup"
 	Port                              = "net:port"
 	Ports                             = "net:ports"
@@ -212,6 +213,7 @@ const (
 	Subnets                           = "cloud:subnets"
 	Tags                              = "cloud:tags"
 	TargetGroups                      = "cloud:targetGroups"
+	ThroughputMode                    = "cloud:throughputMode"
 	Timeout                           = "cloud:timezone"
 	Timezone                          = "cloud:timeout"
 	TLSVersionRequired                = "cloud:tlsVersionRequired"
@@ -381,6 +383,7 @@ func init() {
 		properties.Path:                              Path,
 		properties.PathPrefix:                        PathPrefix,
 		properties.PendingTasksCount:                 PendingTasksCount,
+		properties.PerformanceMode:                   PerformanceMode,
 		properties.PlacementGroup:                    PlacementGroup,
 		properties.Port:                              Port,
 		properties.Ports:                             Ports,
@@ -430,6 +433,7 @@ func init() {
 		properties.Subnets:                           Subnets,
 		properties.Tags:                              Tags,
 		properties.TargetGroups:                      TargetGroups,
+		properties.ThroughputMode:                    ThroughputMode,
 		properties.Timeout:                           Timeout,
 		properties.Timezone:                          Timezone,
 		properties.TLSVersionRequired:                TLSVersionRequired,
@@ -599,6 +603,7 @@ var Properties = RDFProperties{
 	Path:                              {ID: Path, RdfType: "rdf:Property", RdfsLabel: "Path", RdfsDefinedBy: "rdfs:Literal", RdfsDataType: "xsd:string"},
 	PathPrefix:                        {ID: PathPrefix, RdfType: "rdf:Property", RdfsLabel: "PathPrefix", RdfsDefinedBy: "rdfs:Literal", RdfsDataType: "xsd:string"},
 	PendingTasksCount:                 {ID: PendingTasksCount, RdfType: "rdf:Property", RdfsLabel: "PendingTasksCount", RdfsDefinedBy: "rdfs:Literal", RdfsDataType: "xsd:int"},
+	PerformanceMode:                   {ID: PerformanceMode, RdfType: "rdf:Property", RdfsLabel: "PerformanceMode", RdfsDefinedBy: "rdfs:Literal", RdfsDataType: "xsd:string"},
 	PlacementGroup:                    {ID: PlacementGroup, RdfType: "rdf:Property", RdfsLabel: "PlacementGroup", RdfsDefinedBy: "rdfs:Literal", RdfsDataType: "xsd:string"},
 	Port:                              {ID: Port, RdfType: "rdf:Property", RdfsLabel: "Port", RdfsDefinedBy: "rdfs:Literal", RdfsDataType: "xsd:int"},
 	Ports:                             {ID: Ports, RdfType: "rdf:Property", RdfsLabel: "Ports", RdfsDefinedBy: "rdfs:list", RdfsDataType: "xsd:string"},
@@ -648,6 +653,7 @@ var Properties = RDFProperties{
 	Subnets:                           {ID: Subnets, RdfType: "rdf:Property", RdfsLabel: "Subnets", RdfsDefinedBy: "rdfs:list", RdfsDataType: "rdfs:Class"},
 	Tags:                              {ID: Tags, RdfType: "rdf:Property", RdfsLabel: "Tags", RdfsDefinedBy: "rdfs:list", RdfsDataType: "xsd:string"},
 	TargetGroups:                      {ID: TargetGroups, RdfType: "rdf:Property", RdfsLabel: "TargetGroups", RdfsDefinedBy: "rdfs:list", RdfsDataType: "xsd:string"},
+	ThroughputMode:                    {ID: ThroughputMode, RdfType: "rdf:Property", RdfsLabel: "ThroughputMode", RdfsDefinedBy: "rdfs:Literal", RdfsDataType: "xsd:string"},
 	Timeout:                           {ID: Timeout, RdfType: "rdf:Property", RdfsLabel: "Timeout", RdfsDefinedBy: "rdfs:Literal", RdfsDataType: "xsd:int"},
 	Timezone:                          {ID: Timezone, RdfType: "rdf:Property", RdfsLabel: "Timezone", RdfsDefinedBy: "rdfs:Literal", RdfsDataType: "xsd:string"},
 	TLSVersionRequired:                {ID: TLSVersionRequired, RdfType: "rdf:Property", RdfsLabel: "TLSVersionRequired", RdfsDefinedBy: "rdfs:Literal", RdfsDataType: "xsd:string"},

@@ -46,6 +46,7 @@ type (
 	manualCloudfrontAPI     interface{}
 	manualCloudwatchAPI     interface{}
 	manualCloudwatchlogsAPI interface{}
+	manualEfsAPI            interface{}
 	manualEc2API            interface{}
 	manualEcrAPI            interface{}
 	manualElbAPI            interface{}

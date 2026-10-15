@@ -6,6 +6,8 @@
 
 - `list trails`: CloudTrail trails, each in its home region only, in a new `cloudtrail`
   service synced by default (`aws.cloudtrail.sync`). (#65)
+- `list filesystems`: EFS file systems, in a new `efs` service synced by default
+  (`aws.efs.sync`). (#70)
 
 ## v0.5.0
 

@@ -40,6 +40,8 @@ import (
 	ec2types "github.com/aws/aws-sdk-go-v2/service/ec2/types"
 	"github.com/aws/aws-sdk-go-v2/service/ecr"
 	ecrtypes "github.com/aws/aws-sdk-go-v2/service/ecr/types"
+	"github.com/aws/aws-sdk-go-v2/service/efs"
+	efstypes "github.com/aws/aws-sdk-go-v2/service/efs/types"
 	"github.com/aws/aws-sdk-go-v2/service/elasticloadbalancing"
 	elbtypes "github.com/aws/aws-sdk-go-v2/service/elasticloadbalancing/types"
 	"github.com/aws/aws-sdk-go-v2/service/elasticloadbalancingv2"
@@ -1262,6 +1264,44 @@ func BuildCloudtrailFetchFuncs(conf *Config) fetch.Funcs {
 				return resources, objects, err
 			}
 			resources = append(resources, res)
+		}
+
+		return resources, objects, nil
+	}
+	return funcs
+}
+
+func BuildEfsFetchFuncs(conf *Config) fetch.Funcs {
+	funcs := make(map[string]fetch.Func)
+
+	addManualEfsFetchFuncs(conf, funcs)
+
+	funcs["filesystem"] = func(ctx context.Context, cache fetch.Cache) ([]*graph.Resource, interface{}, error) {
+		var resources []*graph.Resource
+		var objects []efstypes.FileSystemDescription
+
+		if !conf.getBoolDefaultTrue("aws.efs.filesystem.sync") && !getBoolFromContext(ctx, "force") {
+			conf.Log.Verbose("sync: *disabled* for resource efs[filesystem]")
+			return resources, objects, nil
+		}
+
+		input := &efs.DescribeFileSystemsInput{}
+
+		paginator := efs.NewDescribeFileSystemsPaginator(conf.APIs.Efs, input)
+		for paginator.HasMorePages() {
+			out, err := paginator.NextPage(ctx)
+			if err != nil {
+				return resources, objects, err
+			}
+
+			for _, output := range out.FileSystems {
+				objects = append(objects, output)
+				res, err := awsconv.NewResource(output)
+				if err != nil {
+					return resources, objects, err
+				}
+				resources = append(resources, res)
+			}
 		}
 
 		return resources, objects, nil

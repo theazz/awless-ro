@@ -60,6 +60,7 @@ import (
 	ec2types "github.com/aws/aws-sdk-go-v2/service/ec2/types"
 	ecrtypes "github.com/aws/aws-sdk-go-v2/service/ecr/types"
 	ecstypes "github.com/aws/aws-sdk-go-v2/service/ecs/types"
+	efstypes "github.com/aws/aws-sdk-go-v2/service/efs/types"
 	elbtypes "github.com/aws/aws-sdk-go-v2/service/elasticloadbalancing/types"
 	elbv2types "github.com/aws/aws-sdk-go-v2/service/elasticloadbalancingv2/types"
 	iamtypes "github.com/aws/aws-sdk-go-v2/service/iam/types"
@@ -246,6 +247,9 @@ func InitResource(source interface{}) (*graph.Resource, error) {
 	// CloudTrail
 	case cloudtrailtypes.Trail:
 		res = graph.InitResource(cloud.Trail, awssdk.ToString(ss.TrailARN))
+	// EFS
+	case efstypes.FileSystemDescription:
+		res = graph.InitResource(cloud.FileSystem, awssdk.ToString(ss.FileSystemId))
 	default:
 		return nil, fmt.Errorf("unknown type of resource %T", source)
 	}
@@ -715,6 +719,10 @@ var extractTagsFn = func(i interface{}) (interface{}, error) {
 			out = append(out, fmt.Sprintf("%s=%s", awssdk.ToString(t.Key), awssdk.ToString(t.Value)))
 		}
 	case []iamtypes.Tag:
+		for _, t := range tags {
+			out = append(out, fmt.Sprintf("%s=%s", awssdk.ToString(t.Key), awssdk.ToString(t.Value)))
+		}
+	case []efstypes.Tag:
 		for _, t := range tags {
 			out = append(out, fmt.Sprintf("%s=%s", awssdk.ToString(t.Key), awssdk.ToString(t.Value)))
 		}
