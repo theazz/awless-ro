@@ -54,6 +54,8 @@ import (
 	route53types "github.com/aws/aws-sdk-go-v2/service/route53/types"
 	"github.com/aws/aws-sdk-go-v2/service/sns"
 	snstypes "github.com/aws/aws-sdk-go-v2/service/sns/types"
+	"github.com/aws/aws-sdk-go-v2/service/ssm"
+	ssmtypes "github.com/aws/aws-sdk-go-v2/service/ssm/types"
 
 	"github.com/theazz/awless-ro/aws/conv"
 	"github.com/theazz/awless-ro/fetch"
@@ -1262,6 +1264,44 @@ func BuildCloudtrailFetchFuncs(conf *Config) fetch.Funcs {
 				return resources, objects, err
 			}
 			resources = append(resources, res)
+		}
+
+		return resources, objects, nil
+	}
+	return funcs
+}
+
+func BuildSsmFetchFuncs(conf *Config) fetch.Funcs {
+	funcs := make(map[string]fetch.Func)
+
+	addManualSsmFetchFuncs(conf, funcs)
+
+	funcs["parameter"] = func(ctx context.Context, cache fetch.Cache) ([]*graph.Resource, interface{}, error) {
+		var resources []*graph.Resource
+		var objects []ssmtypes.ParameterMetadata
+
+		if !conf.getBoolDefaultTrue("aws.ssm.parameter.sync") && !getBoolFromContext(ctx, "force") {
+			conf.Log.Verbose("sync: *disabled* for resource ssm[parameter]")
+			return resources, objects, nil
+		}
+
+		input := &ssm.DescribeParametersInput{MaxResults: new(int32(50))}
+
+		paginator := ssm.NewDescribeParametersPaginator(conf.APIs.Ssm, input)
+		for paginator.HasMorePages() {
+			out, err := paginator.NextPage(ctx)
+			if err != nil {
+				return resources, objects, err
+			}
+
+			for _, output := range out.Parameters {
+				objects = append(objects, output)
+				res, err := awsconv.NewResource(output)
+				if err != nil {
+					return resources, objects, err
+				}
+				resources = append(resources, res)
+			}
 		}
 
 		return resources, objects, nil

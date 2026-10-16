@@ -565,6 +565,18 @@ var awsResourcesDef = map[string]map[string]*propertyTransform{
 		properties.OrganizationTrail: {name: "IsOrganizationTrail", transform: extractValueFn},
 		properties.LogFileValidation: {name: "LogFileValidationEnabled", transform: extractValueFn},
 	},
+	// SSM
+	cloud.Parameter: {
+		properties.Arn:         {name: "ARN", transform: extractValueFn},
+		properties.Name:        {name: "Name", transform: extractValueFn},
+		properties.Type:        {name: "Type", transform: extractValueFn},
+		properties.Tier:        {name: "Tier", transform: extractValueFn},
+		properties.Version:     {name: "Version", transform: extractValueAsStringFn},
+		properties.Description: {name: "Description", transform: extractValueFn},
+		properties.KMSKey:      {name: "KeyId", transform: extractValueFn},
+		properties.Modified:    {name: "LastModifiedDate", transform: extractTimeFn},
+		properties.ModifiedBy:  {name: "LastModifiedUser", transform: extractValueFn},
+	},
 	//Queue
 	cloud.Queue: {}, //Manually set
 }

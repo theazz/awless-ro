@@ -57,6 +57,7 @@ import (
 	route53types "github.com/aws/aws-sdk-go-v2/service/route53/types"
 	s3types "github.com/aws/aws-sdk-go-v2/service/s3/types"
 	snstypes "github.com/aws/aws-sdk-go-v2/service/sns/types"
+	ssmtypes "github.com/aws/aws-sdk-go-v2/service/ssm/types"
 
 	"github.com/theazz/awless-ro/cloud"
 )
@@ -216,6 +217,11 @@ var sdkPrototypes = map[string][]func() interface{}{
 	// CloudTrail
 	cloud.Trail: {func() interface{} {
 		return cloudtrailtypes.Trail{TrailARN: awssdk.String("arn:aws:cloudtrail:trail/1")}
+	}},
+
+	// SSM
+	cloud.Parameter: {func() interface{} {
+		return ssmtypes.ParameterMetadata{ARN: awssdk.String("arn:aws:ssm:parameter/1")}
 	}},
 }
 

@@ -63,6 +63,8 @@ import (
 	"github.com/aws/aws-sdk-go-v2/service/sns"
 	snstypes "github.com/aws/aws-sdk-go-v2/service/sns/types"
 	"github.com/aws/aws-sdk-go-v2/service/sqs"
+	"github.com/aws/aws-sdk-go-v2/service/ssm"
+	ssmtypes "github.com/aws/aws-sdk-go-v2/service/ssm/types"
 	"github.com/aws/aws-sdk-go-v2/service/sts"
 
 	"github.com/theazz/awless-ro/aws/fetch"
@@ -84,6 +86,7 @@ var ServiceNames = []string{
 	"cdn",
 	"cloudformation",
 	"cloudtrail",
+	"ssm",
 }
 
 var ResourceTypes = []string{
@@ -138,6 +141,7 @@ var ResourceTypes = []string{
 	"distribution",
 	"stack",
 	"trail",
+	"parameter",
 }
 
 var ServicePerAPI = map[string]string{
@@ -161,6 +165,7 @@ var ServicePerAPI = map[string]string{
 	"cloudfront":     "cdn",
 	"cloudformation": "cloudformation",
 	"cloudtrail":     "cloudtrail",
+	"ssm":            "ssm",
 }
 
 var ServicePerResourceType = map[string]string{
@@ -215,6 +220,7 @@ var ServicePerResourceType = map[string]string{
 	"distribution":        "cdn",
 	"stack":               "cloudformation",
 	"trail":               "cloudtrail",
+	"parameter":           "ssm",
 }
 
 var APIPerResourceType = map[string]string{
@@ -269,6 +275,7 @@ var APIPerResourceType = map[string]string{
 	"distribution":        "cloudfront",
 	"stack":               "cloudformation",
 	"trail":               "cloudtrail",
+	"parameter":           "ssm",
 }
 
 type Infra struct {
@@ -2451,4 +2458,128 @@ func (s *Cloudtrail) FetchByType(ctx context.Context, t string) (cloud.GraphAPI,
 
 func (s *Cloudtrail) IsSyncDisabled() bool {
 	return !getBool(s.config, "aws.cloudtrail.sync", true)
+}
+
+type Ssm struct {
+	fetcher         fetch.Fetcher
+	region, profile string
+	config          map[string]interface{}
+	log             *logger.Logger
+	awsfetch.SsmAPI
+}
+
+func NewSsm(cfg awssdk.Config, profile string, extraConf map[string]interface{}, log *logger.Logger) cloud.Service {
+	region := cfg.Region
+	ssmAPI := ssm.NewFromConfig(cfg)
+
+	fetchConfig := awsfetch.NewConfig(&awsfetch.AWSAPI{
+		Ssm: ssmAPI,
+	})
+	fetchConfig.Extra = extraConf
+	fetchConfig.Log = log
+
+	return &Ssm{
+		SsmAPI:  ssmAPI,
+		fetcher: fetch.NewFetcher(awsfetch.BuildSsmFetchFuncs(fetchConfig)),
+		config:  extraConf,
+		region:  region,
+		profile: profile,
+		log:     log,
+	}
+}
+
+func (s *Ssm) Name() string {
+	return "ssm"
+}
+
+func (s *Ssm) Region() string {
+	return s.region
+}
+
+func (s *Ssm) Profile() string {
+	return s.profile
+}
+
+func (s *Ssm) ResourceTypes() []string {
+	return []string{
+		"parameter",
+	}
+}
+
+func (s *Ssm) Fetch(ctx context.Context) (cloud.GraphAPI, error) {
+	if s.IsSyncDisabled() {
+		return graph.NewGraph(), nil
+	}
+
+	allErrors := new(fetch.Error)
+
+	gph, err := s.fetcher.Fetch(context.WithValue(ctx, "region", s.region))
+	defer s.fetcher.Reset()
+
+	for _, e := range *fetch.WrapError(err) {
+		switch {
+		case e == nil:
+			continue
+		case awsfetch.IsAccessDenied(e):
+			allErrors.Add(cloud.ErrFetchAccessDenied)
+		default:
+			allErrors.Add(e)
+		}
+	}
+
+	if err := gph.AddResource(graph.InitResource(cloud.Region, s.region)); err != nil {
+		return gph, err
+	}
+
+	snap := gph.AsRDFGraphSnaphot()
+
+	errc := make(chan error)
+	var wg sync.WaitGroup
+	if getBool(s.config, "aws.ssm.parameter.sync", true) {
+		list, err := s.fetcher.Get("parameter_objects")
+		if err != nil {
+			return gph, err
+		}
+		objects, ok := list.([]ssmtypes.ParameterMetadata)
+		if !ok {
+			return gph, errors.New("cannot cast to '[]ssmtypes.ParameterMetadata' type from fetch context")
+		}
+		for _, r := range objects {
+			for _, fn := range addParentsFns["parameter"] {
+				wg.Add(1)
+				go func(f addParentFn, snap triplestore.RDFGraph, region string, res ssmtypes.ParameterMetadata) {
+					defer wg.Done()
+					if err := f(gph, snap, region, res); err != nil {
+						errc <- err
+					}
+				}(fn, snap, s.region, r)
+			}
+		}
+	}
+
+	go func() {
+		wg.Wait()
+		close(errc)
+	}()
+
+	for err := range errc {
+		if err != nil {
+			allErrors.Add(err)
+		}
+	}
+
+	if allErrors.Any() {
+		return gph, allErrors
+	}
+
+	return gph, nil
+}
+
+func (s *Ssm) FetchByType(ctx context.Context, t string) (cloud.GraphAPI, error) {
+	defer s.fetcher.Reset()
+	return s.fetcher.FetchByType(context.WithValue(ctx, "region", s.region), t)
+}
+
+func (s *Ssm) IsSyncDisabled() bool {
+	return !getBool(s.config, "aws.ssm.sync", true)
 }

@@ -52,6 +52,7 @@ type (
 	manualLambdaAPI         interface{}
 	manualRdsAPI            interface{}
 	manualSnsAPI            interface{}
+	manualSsmAPI            interface{}
 )
 
 // autoscaling: the scaling activity tailer.

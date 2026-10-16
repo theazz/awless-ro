@@ -68,6 +68,8 @@ import (
 	route53types "github.com/aws/aws-sdk-go-v2/service/route53/types"
 	"github.com/aws/aws-sdk-go-v2/service/sns"
 	snstypes "github.com/aws/aws-sdk-go-v2/service/sns/types"
+	"github.com/aws/aws-sdk-go-v2/service/ssm"
+	ssmtypes "github.com/aws/aws-sdk-go-v2/service/ssm/types"
 
 	"github.com/theazz/awless-ro/aws/fetch"
 	"github.com/theazz/awless-ro/cloud"
@@ -674,6 +676,33 @@ func (m *mockSqs) Fetch(context.Context) (cloud.GraphAPI, error) {
 
 func (m *mockSqs) FetchByType(context.Context, string) (cloud.GraphAPI, error) {
 	return nil, nil
+}
+
+type mockSsm struct {
+	awsfetch.SsmAPI
+	manualSsmMock
+	parametermetadatas []ssmtypes.ParameterMetadata
+}
+
+// cloud.Service, so that a mock can stand in for a whole service in the
+// registry. The graph-building tests drive the fetchers directly, so these are
+// inert on purpose.
+func (m *mockSsm) Name() string            { return "" }
+func (m *mockSsm) Region() string          { return "" }
+func (m *mockSsm) Profile() string         { return "" }
+func (m *mockSsm) ResourceTypes() []string { return []string{} }
+func (m *mockSsm) IsSyncDisabled() bool    { return false }
+
+func (m *mockSsm) Fetch(context.Context) (cloud.GraphAPI, error) {
+	return nil, nil
+}
+
+func (m *mockSsm) FetchByType(context.Context, string) (cloud.GraphAPI, error) {
+	return nil, nil
+}
+
+func (m *mockSsm) DescribeParameters(_ context.Context, _ *ssm.DescribeParametersInput, _ ...func(*ssm.Options)) (*ssm.DescribeParametersOutput, error) {
+	return &ssm.DescribeParametersOutput{Parameters: m.parametermetadatas}, nil
 }
 
 type mockSts struct {

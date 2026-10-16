@@ -27,7 +27,7 @@ import (
 )
 
 var (
-	AccessService, InfraService, StorageService, MessagingService, DnsService, LambdaService, MonitoringService, CdnService, CloudformationService, CloudtrailService cloud.Service
+	AccessService, InfraService, StorageService, MessagingService, DnsService, LambdaService, MonitoringService, CdnService, CloudformationService, CloudtrailService, SsmService cloud.Service
 )
 
 // Init builds every service client from one resolved AWS config.
@@ -68,6 +68,7 @@ func Init(profile string, profileExplicit bool, region string, extraConf map[str
 	CdnService = NewCdn(cfg, profile, extraConf, log)
 	CloudformationService = NewCloudformation(cfg, profile, extraConf, log)
 	CloudtrailService = NewCloudtrail(cfg, profile, extraConf, log)
+	SsmService = NewSsm(cfg, profile, extraConf, log)
 
 	cloud.ServiceRegistry[InfraService.Name()] = InfraService
 	cloud.ServiceRegistry[AccessService.Name()] = AccessService
@@ -79,6 +80,7 @@ func Init(profile string, profileExplicit bool, region string, extraConf map[str
 	cloud.ServiceRegistry[CdnService.Name()] = CdnService
 	cloud.ServiceRegistry[CloudformationService.Name()] = CloudformationService
 	cloud.ServiceRegistry[CloudtrailService.Name()] = CloudtrailService
+	cloud.ServiceRegistry[SsmService.Name()] = SsmService
 
 	return nil
 }

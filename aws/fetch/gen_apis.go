@@ -52,6 +52,7 @@ import (
 	"github.com/aws/aws-sdk-go-v2/service/s3"
 	"github.com/aws/aws-sdk-go-v2/service/sns"
 	"github.com/aws/aws-sdk-go-v2/service/sqs"
+	"github.com/aws/aws-sdk-go-v2/service/ssm"
 	"github.com/aws/aws-sdk-go-v2/service/sts"
 )
 
@@ -266,6 +267,16 @@ type generatedSqsAPI interface {
 	// no generated fetcher calls sqs directly
 }
 
+// SsmAPI is every ssm operation awless-ro calls.
+type SsmAPI interface {
+	generatedSsmAPI
+	manualSsmAPI
+}
+
+type generatedSsmAPI interface {
+	DescribeParameters(context.Context, *ssm.DescribeParametersInput, ...func(*ssm.Options)) (*ssm.DescribeParametersOutput, error)
+}
+
 // StsAPI is every sts operation awless-ro calls.
 type StsAPI interface {
 	generatedStsAPI
@@ -296,5 +307,6 @@ var (
 	_ S3API             = (*s3.Client)(nil)
 	_ SnsAPI            = (*sns.Client)(nil)
 	_ SqsAPI            = (*sqs.Client)(nil)
+	_ SsmAPI            = (*ssm.Client)(nil)
 	_ StsAPI            = (*sts.Client)(nil)
 )

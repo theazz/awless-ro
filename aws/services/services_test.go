@@ -44,6 +44,7 @@ import (
 	route53types "github.com/aws/aws-sdk-go-v2/service/route53/types"
 	s3types "github.com/aws/aws-sdk-go-v2/service/s3/types"
 	snstypes "github.com/aws/aws-sdk-go-v2/service/sns/types"
+	ssmtypes "github.com/aws/aws-sdk-go-v2/service/ssm/types"
 	awsconv "github.com/theazz/awless-ro/aws/conv"
 	"github.com/theazz/awless-ro/aws/fetch"
 	"github.com/theazz/awless-ro/cloud"
@@ -1216,6 +1217,56 @@ func TestBuildCloudtrailGraph(t *testing.T) {
 
 	expectedChildren := map[string][]string{
 		"eu-west-1": {"trail_1", "trail_2"},
+	}
+	expectedAppliedOn := map[string][]string{}
+
+	compareResources(t, g, resources, expected, expectedChildren, expectedAppliedOn)
+}
+
+func TestBuildSsmGraph(t *testing.T) {
+	modified := time.Now().UTC().Truncate(time.Second)
+	parameters := []ssmtypes.ParameterMetadata{
+		{ARN: awssdk.String("param_1"), Name: awssdk.String("/app/region"), Type: ssmtypes.ParameterTypeString, Tier: ssmtypes.ParameterTierStandard, Version: 1},
+		{
+			ARN:              awssdk.String("param_2"),
+			Name:             awssdk.String("/app/db/password"),
+			Type:             ssmtypes.ParameterTypeSecureString,
+			Tier:             ssmtypes.ParameterTierAdvanced,
+			Version:          7,
+			Description:      awssdk.String("database password"),
+			KeyId:            awssdk.String("alias/aws/ssm"),
+			LastModifiedDate: awssdk.Time(modified),
+			LastModifiedUser: awssdk.String("arn:aws:iam::1:user/ops"),
+		},
+	}
+
+	mock := &mockSsm{parametermetadatas: parameters}
+
+	service := Ssm{
+		SsmAPI: mock, region: "eu-west-1", config: map[string]interface{}{"aws.ssm.sync": true},
+		fetcher: fetch.NewFetcher(awsfetch.BuildSsmFetchFuncs(awsfetch.NewConfig(&awsfetch.AWSAPI{Ssm: mock}))),
+	}
+
+	g, err := service.Fetch(context.Background())
+	if err != nil {
+		t.Fatal(err)
+	}
+
+	resources, err := g.Find(cloud.NewQuery("parameter"))
+	if err != nil {
+		t.Fatal(err)
+	}
+
+	expected := map[string]cloud.Resource{
+		"param_1": resourcetest.Parameter("param_1").Prop(p.Arn, "param_1").Prop(p.Name, "/app/region").Prop(p.Type, "String").
+			Prop(p.Tier, "Standard").Prop(p.Version, "1").Build(),
+		"param_2": resourcetest.Parameter("param_2").Prop(p.Arn, "param_2").Prop(p.Name, "/app/db/password").Prop(p.Type, "SecureString").
+			Prop(p.Tier, "Advanced").Prop(p.Version, "7").Prop(p.Description, "database password").Prop(p.KMSKey, "alias/aws/ssm").
+			Prop(p.Modified, modified).Prop(p.ModifiedBy, "arn:aws:iam::1:user/ops").Build(),
+	}
+
+	expectedChildren := map[string][]string{
+		"eu-west-1": {"param_1", "param_2"},
 	}
 	expectedAppliedOn := map[string][]string{}
 

@@ -150,6 +150,10 @@ func Trail(id string) *rBuilder {
 	return new("trail", id)
 }
 
+func Parameter(id string) *rBuilder {
+	return new("parameter", id)
+}
+
 func Image(id string) *rBuilder {
 	return new("image", id)
 }

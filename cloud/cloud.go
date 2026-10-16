@@ -90,6 +90,8 @@ const (
 	Stack string = "stack"
 	//cloudtrail
 	Trail string = "trail"
+	//ssm
+	Parameter string = "parameter"
 	//container
 	Repository        string = "repository"
 	Registry          string = "registry"

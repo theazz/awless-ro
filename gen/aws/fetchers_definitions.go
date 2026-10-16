@@ -327,4 +327,11 @@ var FetchersDefs = []FetchersDef{
 			{Api: "cloudtrail", ResourceType: cloud.Trail, AWSType: "cloudtrailtypes.Trail", ApiMethod: "DescribeTrails", InputFields: `IncludeShadowTrails: new(false)`, OutputsExtractor: "TrailList"},
 		},
 	},
+	{
+		Name: "ssm",
+		Api:  []string{"ssm"},
+		Fetchers: []Fetcher{
+			{Api: "ssm", ResourceType: cloud.Parameter, AWSType: "ssmtypes.ParameterMetadata", ApiMethod: "DescribeParameters", InputFields: `MaxResults: new(int32(50))`, OutputsExtractor: "Parameters", Paginated: true},
+		},
+	},
 }

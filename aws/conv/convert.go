@@ -68,6 +68,7 @@ import (
 	route53types "github.com/aws/aws-sdk-go-v2/service/route53/types"
 	s3types "github.com/aws/aws-sdk-go-v2/service/s3/types"
 	snstypes "github.com/aws/aws-sdk-go-v2/service/sns/types"
+	ssmtypes "github.com/aws/aws-sdk-go-v2/service/ssm/types"
 
 	"github.com/theazz/awless-ro/cloud"
 	"github.com/theazz/awless-ro/cloud/properties"
@@ -246,6 +247,9 @@ func InitResource(source interface{}) (*graph.Resource, error) {
 	// CloudTrail
 	case cloudtrailtypes.Trail:
 		res = graph.InitResource(cloud.Trail, awssdk.ToString(ss.TrailARN))
+	// SSM
+	case ssmtypes.ParameterMetadata:
+		res = graph.InitResource(cloud.Parameter, awssdk.ToString(ss.ARN))
 	default:
 		return nil, fmt.Errorf("unknown type of resource %T", source)
 	}

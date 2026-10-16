@@ -6,6 +6,8 @@
 
 - `list trails`: CloudTrail trails, each in its home region only, in a new `cloudtrail`
   service synced by default (`aws.cloudtrail.sync`). (#65)
+- `list parameters`: SSM Parameter Store parameters, metadata only (never values), in a
+  new `ssm` service off by default in `sync` (`aws.ssm.sync`). (#75)
 
 ## v0.5.0
 
