@@ -67,6 +67,7 @@ import (
 	rdstypes "github.com/aws/aws-sdk-go-v2/service/rds/types"
 	route53types "github.com/aws/aws-sdk-go-v2/service/route53/types"
 	s3types "github.com/aws/aws-sdk-go-v2/service/s3/types"
+	secretsmanagertypes "github.com/aws/aws-sdk-go-v2/service/secretsmanager/types"
 	snstypes "github.com/aws/aws-sdk-go-v2/service/sns/types"
 
 	"github.com/theazz/awless-ro/cloud"
@@ -246,6 +247,9 @@ func InitResource(source interface{}) (*graph.Resource, error) {
 	// CloudTrail
 	case cloudtrailtypes.Trail:
 		res = graph.InitResource(cloud.Trail, awssdk.ToString(ss.TrailARN))
+	// Secrets Manager
+	case secretsmanagertypes.SecretListEntry:
+		res = graph.InitResource(cloud.Secret, awssdk.ToString(ss.ARN))
 	default:
 		return nil, fmt.Errorf("unknown type of resource %T", source)
 	}
@@ -715,6 +719,10 @@ var extractTagsFn = func(i interface{}) (interface{}, error) {
 			out = append(out, fmt.Sprintf("%s=%s", awssdk.ToString(t.Key), awssdk.ToString(t.Value)))
 		}
 	case []iamtypes.Tag:
+		for _, t := range tags {
+			out = append(out, fmt.Sprintf("%s=%s", awssdk.ToString(t.Key), awssdk.ToString(t.Value)))
+		}
+	case []secretsmanagertypes.Tag:
 		for _, t := range tags {
 			out = append(out, fmt.Sprintf("%s=%s", awssdk.ToString(t.Key), awssdk.ToString(t.Value)))
 		}

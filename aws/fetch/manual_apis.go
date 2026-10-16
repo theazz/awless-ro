@@ -51,6 +51,7 @@ type (
 	manualElbAPI            interface{}
 	manualLambdaAPI         interface{}
 	manualRdsAPI            interface{}
+	manualSecretsmanagerAPI interface{}
 	manualSnsAPI            interface{}
 )
 

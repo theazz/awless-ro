@@ -125,6 +125,8 @@ const (
 	Key                               = "cloud:key"
 	KeyName                           = "cloud:keyName"
 	KeyPair                           = "cloud:keyPair"
+	LastAccessed                      = "cloud:lastAccessed"
+	LastRotated                       = "cloud:lastRotated"
 	LatestRestorableTime              = "cloud:latestRestorableTime"
 	LaunchConfigurationName           = "cloud:launchConfigurationName"
 	Launched                          = "cloud:launched"
@@ -189,6 +191,7 @@ const (
 	Roles                             = "cloud:roles"
 	RootDevice                        = "cloud:rootDevice"
 	RootDeviceType                    = "cloud:rootDeviceType"
+	RotationEnabled                   = "cloud:rotationEnabled"
 	Routes                            = "net:routes"
 	RunningTasksCount                 = "cloud:runningTasksCount"
 	Runtime                           = "cloud:runtime"
@@ -343,6 +346,8 @@ func init() {
 		properties.Key:                               Key,
 		properties.KeyName:                           KeyName,
 		properties.KeyPair:                           KeyPair,
+		properties.LastAccessed:                      LastAccessed,
+		properties.LastRotated:                       LastRotated,
 		properties.LatestRestorableTime:              LatestRestorableTime,
 		properties.LaunchConfigurationName:           LaunchConfigurationName,
 		properties.Launched:                          Launched,
@@ -407,6 +412,7 @@ func init() {
 		properties.Roles:                             Roles,
 		properties.RootDevice:                        RootDevice,
 		properties.RootDeviceType:                    RootDeviceType,
+		properties.RotationEnabled:                   RotationEnabled,
 		properties.Routes:                            Routes,
 		properties.RunningTasksCount:                 RunningTasksCount,
 		properties.Runtime:                           Runtime,
@@ -561,6 +567,8 @@ var Properties = RDFProperties{
 	Key:                               {ID: Key, RdfType: "rdf:Property", RdfsLabel: "Key", RdfsDefinedBy: "rdfs:Literal", RdfsDataType: "xsd:string"},
 	KeyName:                           {ID: KeyName, RdfType: "rdf:Property", RdfsLabel: "KeyName", RdfsDefinedBy: "rdfs:Literal", RdfsDataType: "xsd:string"},
 	KeyPair:                           {ID: KeyPair, RdfType: "rdf:Property", RdfsLabel: "KeyPair", RdfsDefinedBy: "rdfs:Class", RdfsDataType: "xsd:string"},
+	LastAccessed:                      {ID: LastAccessed, RdfType: "rdf:Property", RdfsLabel: "LastAccessed", RdfsDefinedBy: "rdfs:Literal", RdfsDataType: "xsd:dateTime"},
+	LastRotated:                       {ID: LastRotated, RdfType: "rdf:Property", RdfsLabel: "LastRotated", RdfsDefinedBy: "rdfs:Literal", RdfsDataType: "xsd:dateTime"},
 	LatestRestorableTime:              {ID: LatestRestorableTime, RdfType: "rdf:Property", RdfsLabel: "LatestRestorableTime", RdfsDefinedBy: "rdfs:Literal", RdfsDataType: "xsd:dateTime"},
 	LaunchConfigurationName:           {ID: LaunchConfigurationName, RdfType: "rdf:Property", RdfsLabel: "LaunchConfigurationName", RdfsDefinedBy: "rdfs:Literal", RdfsDataType: "xsd:string"},
 	Launched:                          {ID: Launched, RdfType: "rdf:Property", RdfsLabel: "Launched", RdfsDefinedBy: "rdfs:Literal", RdfsDataType: "xsd:dateTime"},
@@ -625,6 +633,7 @@ var Properties = RDFProperties{
 	Roles:                             {ID: Roles, RdfType: "rdf:Property", RdfsLabel: "Roles", RdfsDefinedBy: "rdfs:list", RdfsDataType: "rdfs:Class"},
 	RootDevice:                        {ID: RootDevice, RdfType: "rdf:Property", RdfsLabel: "RootDevice", RdfsDefinedBy: "rdfs:Literal", RdfsDataType: "xsd:string"},
 	RootDeviceType:                    {ID: RootDeviceType, RdfType: "rdf:Property", RdfsLabel: "RootDeviceType", RdfsDefinedBy: "rdfs:Literal", RdfsDataType: "xsd:string"},
+	RotationEnabled:                   {ID: RotationEnabled, RdfType: "rdf:Property", RdfsLabel: "RotationEnabled", RdfsDefinedBy: "rdfs:Literal", RdfsDataType: "xsd:boolean"},
 	Routes:                            {ID: Routes, RdfType: "rdf:Property", RdfsLabel: "Routes", RdfsDefinedBy: "rdfs:list", RdfsDataType: "net-owl:Route"},
 	RunningTasksCount:                 {ID: RunningTasksCount, RdfType: "rdf:Property", RdfsLabel: "RunningTasksCount", RdfsDefinedBy: "rdfs:Literal", RdfsDataType: "xsd:int"},
 	Runtime:                           {ID: Runtime, RdfType: "rdf:Property", RdfsLabel: "Runtime", RdfsDefinedBy: "rdfs:Literal", RdfsDataType: "xsd:string"},

@@ -43,6 +43,7 @@ import (
 	lambdatypes "github.com/aws/aws-sdk-go-v2/service/lambda/types"
 	route53types "github.com/aws/aws-sdk-go-v2/service/route53/types"
 	s3types "github.com/aws/aws-sdk-go-v2/service/s3/types"
+	secretsmanagertypes "github.com/aws/aws-sdk-go-v2/service/secretsmanager/types"
 	snstypes "github.com/aws/aws-sdk-go-v2/service/sns/types"
 	awsconv "github.com/theazz/awless-ro/aws/conv"
 	"github.com/theazz/awless-ro/aws/fetch"
@@ -1216,6 +1217,58 @@ func TestBuildCloudtrailGraph(t *testing.T) {
 
 	expectedChildren := map[string][]string{
 		"eu-west-1": {"trail_1", "trail_2"},
+	}
+	expectedAppliedOn := map[string][]string{}
+
+	compareResources(t, g, resources, expected, expectedChildren, expectedAppliedOn)
+}
+
+func TestBuildSecretsmanagerGraph(t *testing.T) {
+	created := time.Now().UTC().Truncate(time.Second)
+	changed := created.Add(time.Hour)
+	accessed := created.Add(24 * time.Hour)
+	rotated := created.Add(2 * time.Hour)
+	secrets := []secretsmanagertypes.SecretListEntry{
+		{ARN: awssdk.String("secret_1"), Name: awssdk.String("app/db")},
+		{
+			ARN:              awssdk.String("secret_2"),
+			Name:             awssdk.String("app/api-key"),
+			Description:      awssdk.String("third-party API key"),
+			RotationEnabled:  awssdk.Bool(true),
+			LastRotatedDate:  awssdk.Time(rotated),
+			LastChangedDate:  awssdk.Time(changed),
+			LastAccessedDate: awssdk.Time(accessed),
+			CreatedDate:      awssdk.Time(created),
+			Tags:             []secretsmanagertypes.Tag{{Key: awssdk.String("team"), Value: awssdk.String("payments")}},
+		},
+	}
+
+	mock := &mockSecretsmanager{secretlistentrys: secrets}
+
+	service := Secretsmanager{
+		SecretsmanagerAPI: mock, region: "eu-west-1",
+		fetcher: fetch.NewFetcher(awsfetch.BuildSecretsmanagerFetchFuncs(awsfetch.NewConfig(&awsfetch.AWSAPI{Secretsmanager: mock}))),
+	}
+
+	g, err := service.Fetch(context.Background())
+	if err != nil {
+		t.Fatal(err)
+	}
+
+	resources, err := g.Find(cloud.NewQuery("secret"))
+	if err != nil {
+		t.Fatal(err)
+	}
+
+	expected := map[string]cloud.Resource{
+		"secret_1": resourcetest.Secret("secret_1").Prop(p.Arn, "secret_1").Prop(p.Name, "app/db").Build(),
+		"secret_2": resourcetest.Secret("secret_2").Prop(p.Arn, "secret_2").Prop(p.Name, "app/api-key").Prop(p.Description, "third-party API key").
+			Prop(p.RotationEnabled, true).Prop(p.LastRotated, rotated).Prop(p.Modified, changed).Prop(p.LastAccessed, accessed).
+			Prop(p.Created, created).Prop(p.Tags, []string{"team=payments"}).Build(),
+	}
+
+	expectedChildren := map[string][]string{
+		"eu-west-1": {"secret_1", "secret_2"},
 	}
 	expectedAppliedOn := map[string][]string{}
 

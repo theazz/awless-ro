@@ -60,6 +60,8 @@ import (
 	route53types "github.com/aws/aws-sdk-go-v2/service/route53/types"
 	"github.com/aws/aws-sdk-go-v2/service/s3"
 	s3types "github.com/aws/aws-sdk-go-v2/service/s3/types"
+	"github.com/aws/aws-sdk-go-v2/service/secretsmanager"
+	secretsmanagertypes "github.com/aws/aws-sdk-go-v2/service/secretsmanager/types"
 	"github.com/aws/aws-sdk-go-v2/service/sns"
 	snstypes "github.com/aws/aws-sdk-go-v2/service/sns/types"
 	"github.com/aws/aws-sdk-go-v2/service/sqs"
@@ -84,6 +86,7 @@ var ServiceNames = []string{
 	"cdn",
 	"cloudformation",
 	"cloudtrail",
+	"secretsmanager",
 }
 
 var ResourceTypes = []string{
@@ -138,6 +141,7 @@ var ResourceTypes = []string{
 	"distribution",
 	"stack",
 	"trail",
+	"secret",
 }
 
 var ServicePerAPI = map[string]string{
@@ -161,6 +165,7 @@ var ServicePerAPI = map[string]string{
 	"cloudfront":     "cdn",
 	"cloudformation": "cloudformation",
 	"cloudtrail":     "cloudtrail",
+	"secretsmanager": "secretsmanager",
 }
 
 var ServicePerResourceType = map[string]string{
@@ -215,6 +220,7 @@ var ServicePerResourceType = map[string]string{
 	"distribution":        "cdn",
 	"stack":               "cloudformation",
 	"trail":               "cloudtrail",
+	"secret":              "secretsmanager",
 }
 
 var APIPerResourceType = map[string]string{
@@ -269,6 +275,7 @@ var APIPerResourceType = map[string]string{
 	"distribution":        "cloudfront",
 	"stack":               "cloudformation",
 	"trail":               "cloudtrail",
+	"secret":              "secretsmanager",
 }
 
 type Infra struct {
@@ -2451,4 +2458,128 @@ func (s *Cloudtrail) FetchByType(ctx context.Context, t string) (cloud.GraphAPI,
 
 func (s *Cloudtrail) IsSyncDisabled() bool {
 	return !getBool(s.config, "aws.cloudtrail.sync", true)
+}
+
+type Secretsmanager struct {
+	fetcher         fetch.Fetcher
+	region, profile string
+	config          map[string]interface{}
+	log             *logger.Logger
+	awsfetch.SecretsmanagerAPI
+}
+
+func NewSecretsmanager(cfg awssdk.Config, profile string, extraConf map[string]interface{}, log *logger.Logger) cloud.Service {
+	region := cfg.Region
+	secretsmanagerAPI := secretsmanager.NewFromConfig(cfg)
+
+	fetchConfig := awsfetch.NewConfig(&awsfetch.AWSAPI{
+		Secretsmanager: secretsmanagerAPI,
+	})
+	fetchConfig.Extra = extraConf
+	fetchConfig.Log = log
+
+	return &Secretsmanager{
+		SecretsmanagerAPI: secretsmanagerAPI,
+		fetcher:           fetch.NewFetcher(awsfetch.BuildSecretsmanagerFetchFuncs(fetchConfig)),
+		config:            extraConf,
+		region:            region,
+		profile:           profile,
+		log:               log,
+	}
+}
+
+func (s *Secretsmanager) Name() string {
+	return "secretsmanager"
+}
+
+func (s *Secretsmanager) Region() string {
+	return s.region
+}
+
+func (s *Secretsmanager) Profile() string {
+	return s.profile
+}
+
+func (s *Secretsmanager) ResourceTypes() []string {
+	return []string{
+		"secret",
+	}
+}
+
+func (s *Secretsmanager) Fetch(ctx context.Context) (cloud.GraphAPI, error) {
+	if s.IsSyncDisabled() {
+		return graph.NewGraph(), nil
+	}
+
+	allErrors := new(fetch.Error)
+
+	gph, err := s.fetcher.Fetch(context.WithValue(ctx, "region", s.region))
+	defer s.fetcher.Reset()
+
+	for _, e := range *fetch.WrapError(err) {
+		switch {
+		case e == nil:
+			continue
+		case awsfetch.IsAccessDenied(e):
+			allErrors.Add(cloud.ErrFetchAccessDenied)
+		default:
+			allErrors.Add(e)
+		}
+	}
+
+	if err := gph.AddResource(graph.InitResource(cloud.Region, s.region)); err != nil {
+		return gph, err
+	}
+
+	snap := gph.AsRDFGraphSnaphot()
+
+	errc := make(chan error)
+	var wg sync.WaitGroup
+	if getBool(s.config, "aws.secretsmanager.secret.sync", true) {
+		list, err := s.fetcher.Get("secret_objects")
+		if err != nil {
+			return gph, err
+		}
+		objects, ok := list.([]secretsmanagertypes.SecretListEntry)
+		if !ok {
+			return gph, errors.New("cannot cast to '[]secretsmanagertypes.SecretListEntry' type from fetch context")
+		}
+		for _, r := range objects {
+			for _, fn := range addParentsFns["secret"] {
+				wg.Add(1)
+				go func(f addParentFn, snap triplestore.RDFGraph, region string, res secretsmanagertypes.SecretListEntry) {
+					defer wg.Done()
+					if err := f(gph, snap, region, res); err != nil {
+						errc <- err
+					}
+				}(fn, snap, s.region, r)
+			}
+		}
+	}
+
+	go func() {
+		wg.Wait()
+		close(errc)
+	}()
+
+	for err := range errc {
+		if err != nil {
+			allErrors.Add(err)
+		}
+	}
+
+	if allErrors.Any() {
+		return gph, allErrors
+	}
+
+	return gph, nil
+}
+
+func (s *Secretsmanager) FetchByType(ctx context.Context, t string) (cloud.GraphAPI, error) {
+	defer s.fetcher.Reset()
+	return s.fetcher.FetchByType(context.WithValue(ctx, "region", s.region), t)
+}
+
+func (s *Secretsmanager) IsSyncDisabled() bool {
+	return !getBool(s.config, "aws.secretsmanager.sync", true)
 }

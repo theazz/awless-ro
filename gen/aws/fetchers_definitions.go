@@ -327,4 +327,11 @@ var FetchersDefs = []FetchersDef{
 			{Api: "cloudtrail", ResourceType: cloud.Trail, AWSType: "cloudtrailtypes.Trail", ApiMethod: "DescribeTrails", InputFields: `IncludeShadowTrails: new(false)`, OutputsExtractor: "TrailList"},
 		},
 	},
+	{
+		Name: "secretsmanager",
+		Api:  []string{"secretsmanager"},
+		Fetchers: []Fetcher{
+			{Api: "secretsmanager", ResourceType: cloud.Secret, AWSType: "secretsmanagertypes.SecretListEntry", ApiMethod: "ListSecrets", OutputsExtractor: "SecretList", Paginated: true},
+		},
+	},
 }

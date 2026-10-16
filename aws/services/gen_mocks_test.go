@@ -66,6 +66,8 @@ import (
 	rdstypes "github.com/aws/aws-sdk-go-v2/service/rds/types"
 	"github.com/aws/aws-sdk-go-v2/service/route53"
 	route53types "github.com/aws/aws-sdk-go-v2/service/route53/types"
+	"github.com/aws/aws-sdk-go-v2/service/secretsmanager"
+	secretsmanagertypes "github.com/aws/aws-sdk-go-v2/service/secretsmanager/types"
 	"github.com/aws/aws-sdk-go-v2/service/sns"
 	snstypes "github.com/aws/aws-sdk-go-v2/service/sns/types"
 
@@ -620,6 +622,33 @@ func (m *mockS3) Fetch(context.Context) (cloud.GraphAPI, error) {
 
 func (m *mockS3) FetchByType(context.Context, string) (cloud.GraphAPI, error) {
 	return nil, nil
+}
+
+type mockSecretsmanager struct {
+	awsfetch.SecretsmanagerAPI
+	manualSecretsmanagerMock
+	secretlistentrys []secretsmanagertypes.SecretListEntry
+}
+
+// cloud.Service, so that a mock can stand in for a whole service in the
+// registry. The graph-building tests drive the fetchers directly, so these are
+// inert on purpose.
+func (m *mockSecretsmanager) Name() string            { return "" }
+func (m *mockSecretsmanager) Region() string          { return "" }
+func (m *mockSecretsmanager) Profile() string         { return "" }
+func (m *mockSecretsmanager) ResourceTypes() []string { return []string{} }
+func (m *mockSecretsmanager) IsSyncDisabled() bool    { return false }
+
+func (m *mockSecretsmanager) Fetch(context.Context) (cloud.GraphAPI, error) {
+	return nil, nil
+}
+
+func (m *mockSecretsmanager) FetchByType(context.Context, string) (cloud.GraphAPI, error) {
+	return nil, nil
+}
+
+func (m *mockSecretsmanager) ListSecrets(_ context.Context, _ *secretsmanager.ListSecretsInput, _ ...func(*secretsmanager.Options)) (*secretsmanager.ListSecretsOutput, error) {
+	return &secretsmanager.ListSecretsOutput{SecretList: m.secretlistentrys}, nil
 }
 
 type mockSns struct {

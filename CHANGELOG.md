@@ -6,6 +6,8 @@
 
 - `list trails`: CloudTrail trails, each in its home region only, in a new `cloudtrail`
   service synced by default (`aws.cloudtrail.sync`). (#65)
+- `list secrets`: Secrets Manager secrets, metadata only (never their values), in a new
+  `secretsmanager` service that is not synced by default (`aws.secretsmanager.sync`). (#74)
 
 ## v0.5.0
 

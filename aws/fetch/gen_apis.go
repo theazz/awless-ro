@@ -50,6 +50,7 @@ import (
 	"github.com/aws/aws-sdk-go-v2/service/rds"
 	"github.com/aws/aws-sdk-go-v2/service/route53"
 	"github.com/aws/aws-sdk-go-v2/service/s3"
+	"github.com/aws/aws-sdk-go-v2/service/secretsmanager"
 	"github.com/aws/aws-sdk-go-v2/service/sns"
 	"github.com/aws/aws-sdk-go-v2/service/sqs"
 	"github.com/aws/aws-sdk-go-v2/service/sts"
@@ -245,6 +246,16 @@ type generatedS3API interface {
 	// no generated fetcher calls s3 directly
 }
 
+// SecretsmanagerAPI is every secretsmanager operation awless-ro calls.
+type SecretsmanagerAPI interface {
+	generatedSecretsmanagerAPI
+	manualSecretsmanagerAPI
+}
+
+type generatedSecretsmanagerAPI interface {
+	ListSecrets(context.Context, *secretsmanager.ListSecretsInput, ...func(*secretsmanager.Options)) (*secretsmanager.ListSecretsOutput, error)
+}
+
 // SnsAPI is every sns operation awless-ro calls.
 type SnsAPI interface {
 	generatedSnsAPI
@@ -294,6 +305,7 @@ var (
 	_ RdsAPI            = (*rds.Client)(nil)
 	_ Route53API        = (*route53.Client)(nil)
 	_ S3API             = (*s3.Client)(nil)
+	_ SecretsmanagerAPI = (*secretsmanager.Client)(nil)
 	_ SnsAPI            = (*sns.Client)(nil)
 	_ SqsAPI            = (*sqs.Client)(nil)
 	_ StsAPI            = (*sts.Client)(nil)
