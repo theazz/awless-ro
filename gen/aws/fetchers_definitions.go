@@ -327,4 +327,11 @@ var FetchersDefs = []FetchersDef{
 			{Api: "cloudtrail", ResourceType: cloud.Trail, AWSType: "cloudtrailtypes.Trail", ApiMethod: "DescribeTrails", InputFields: `IncludeShadowTrails: new(false)`, OutputsExtractor: "TrailList"},
 		},
 	},
+	{
+		Name: "eks",
+		Api:  []string{"eks"},
+		Fetchers: []Fetcher{
+			{Api: "eks", ResourceType: cloud.EksCluster, AWSType: "ekstypes.Cluster", ManualFetcher: true},
+		},
+	},
 }

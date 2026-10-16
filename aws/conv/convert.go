@@ -43,6 +43,7 @@ import (
 	"net"
 	"net/url"
 	"reflect"
+	"sort"
 	"strconv"
 	"strings"
 	"sync"
@@ -60,6 +61,7 @@ import (
 	ec2types "github.com/aws/aws-sdk-go-v2/service/ec2/types"
 	ecrtypes "github.com/aws/aws-sdk-go-v2/service/ecr/types"
 	ecstypes "github.com/aws/aws-sdk-go-v2/service/ecs/types"
+	ekstypes "github.com/aws/aws-sdk-go-v2/service/eks/types"
 	elbtypes "github.com/aws/aws-sdk-go-v2/service/elasticloadbalancing/types"
 	elbv2types "github.com/aws/aws-sdk-go-v2/service/elasticloadbalancingv2/types"
 	iamtypes "github.com/aws/aws-sdk-go-v2/service/iam/types"
@@ -246,6 +248,9 @@ func InitResource(source interface{}) (*graph.Resource, error) {
 	// CloudTrail
 	case cloudtrailtypes.Trail:
 		res = graph.InitResource(cloud.Trail, awssdk.ToString(ss.TrailARN))
+	// EKS
+	case ekstypes.Cluster:
+		res = graph.InitResource(cloud.EksCluster, awssdk.ToString(ss.Arn))
 	default:
 		return nil, fmt.Errorf("unknown type of resource %T", source)
 	}
@@ -717,6 +722,15 @@ var extractTagsFn = func(i interface{}) (interface{}, error) {
 	case []iamtypes.Tag:
 		for _, t := range tags {
 			out = append(out, fmt.Sprintf("%s=%s", awssdk.ToString(t.Key), awssdk.ToString(t.Value)))
+		}
+	case map[string]string:
+		keys := make([]string, 0, len(tags))
+		for k := range tags {
+			keys = append(keys, k)
+		}
+		sort.Strings(keys)
+		for _, k := range keys {
+			out = append(out, fmt.Sprintf("%s=%s", k, tags[k]))
 		}
 	default:
 		return nil, fmt.Errorf("extract tags: not a tag slice, but a %T", i)

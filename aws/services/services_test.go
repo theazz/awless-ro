@@ -37,6 +37,7 @@ import (
 	ec2types "github.com/aws/aws-sdk-go-v2/service/ec2/types"
 	ecrtypes "github.com/aws/aws-sdk-go-v2/service/ecr/types"
 	ecstypes "github.com/aws/aws-sdk-go-v2/service/ecs/types"
+	ekstypes "github.com/aws/aws-sdk-go-v2/service/eks/types"
 	elbtypes "github.com/aws/aws-sdk-go-v2/service/elasticloadbalancing/types"
 	elbv2types "github.com/aws/aws-sdk-go-v2/service/elasticloadbalancingv2/types"
 	iamtypes "github.com/aws/aws-sdk-go-v2/service/iam/types"
@@ -1216,6 +1217,54 @@ func TestBuildCloudtrailGraph(t *testing.T) {
 
 	expectedChildren := map[string][]string{
 		"eu-west-1": {"trail_1", "trail_2"},
+	}
+	expectedAppliedOn := map[string][]string{}
+
+	compareResources(t, g, resources, expected, expectedChildren, expectedAppliedOn)
+}
+
+func TestBuildEksGraph(t *testing.T) {
+	created := time.Now().UTC().Truncate(time.Second)
+	clusters := []ekstypes.Cluster{
+		{Arn: awssdk.String("cluster_1"), Name: awssdk.String("staging"), Status: ekstypes.ClusterStatusCreating},
+		{
+			Arn:             awssdk.String("cluster_2"),
+			Name:            awssdk.String("prod"),
+			Status:          ekstypes.ClusterStatusActive,
+			Version:         awssdk.String("1.33"),
+			PlatformVersion: awssdk.String("eks.9"),
+			Endpoint:        awssdk.String("https://ABC.gr7.eu-west-1.eks.amazonaws.com"),
+			CreatedAt:       awssdk.Time(created),
+			Tags:            map[string]string{"team": "platform", "env": "prod"},
+		},
+	}
+
+	mock := &mockEks{manualEksMock: manualEksMock{clusters: clusters}}
+
+	service := Eks{
+		EksAPI: mock, region: "eu-west-1",
+		fetcher: fetch.NewFetcher(awsfetch.BuildEksFetchFuncs(awsfetch.NewConfig(&awsfetch.AWSAPI{Eks: mock}))),
+	}
+
+	g, err := service.Fetch(context.Background())
+	if err != nil {
+		t.Fatal(err)
+	}
+
+	resources, err := g.Find(cloud.NewQuery("ekscluster"))
+	if err != nil {
+		t.Fatal(err)
+	}
+
+	expected := map[string]cloud.Resource{
+		"cluster_1": resourcetest.EksCluster("cluster_1").Prop(p.Arn, "cluster_1").Prop(p.Name, "staging").Prop(p.State, "CREATING").Build(),
+		"cluster_2": resourcetest.EksCluster("cluster_2").Prop(p.Arn, "cluster_2").Prop(p.Name, "prod").Prop(p.State, "ACTIVE").
+			Prop(p.Version, "1.33").Prop(p.PlatformVersion, "eks.9").Prop(p.Endpoint, "https://ABC.gr7.eu-west-1.eks.amazonaws.com").
+			Prop(p.Created, created).Prop(p.Tags, []string{"env=prod", "team=platform"}).Build(),
+	}
+
+	expectedChildren := map[string][]string{
+		"eu-west-1": {"cluster_1", "cluster_2"},
 	}
 	expectedAppliedOn := map[string][]string{}
 

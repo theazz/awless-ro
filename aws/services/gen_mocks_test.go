@@ -423,6 +423,28 @@ func (m *mockEcs) FetchByType(context.Context, string) (cloud.GraphAPI, error) {
 	return nil, nil
 }
 
+type mockEks struct {
+	awsfetch.EksAPI
+	manualEksMock
+}
+
+// cloud.Service, so that a mock can stand in for a whole service in the
+// registry. The graph-building tests drive the fetchers directly, so these are
+// inert on purpose.
+func (m *mockEks) Name() string            { return "" }
+func (m *mockEks) Region() string          { return "" }
+func (m *mockEks) Profile() string         { return "" }
+func (m *mockEks) ResourceTypes() []string { return []string{} }
+func (m *mockEks) IsSyncDisabled() bool    { return false }
+
+func (m *mockEks) Fetch(context.Context) (cloud.GraphAPI, error) {
+	return nil, nil
+}
+
+func (m *mockEks) FetchByType(context.Context, string) (cloud.GraphAPI, error) {
+	return nil, nil
+}
+
 type mockElb struct {
 	awsfetch.ElbAPI
 	manualElbMock

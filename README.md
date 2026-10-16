@@ -291,8 +291,8 @@ for `show`. It never calls AWS: a Tab press does not wait on the network.
 
 ## Commands
 
-**`list`** — 51 resource types across EC2, IAM, S3, RDS, AutoScaling, SNS, SQS,
-Route53, CloudWatch, CloudWatch Logs, CloudTrail, CloudFormation, Lambda, ECS, ECR,
+**`list`** — 52 resource types across EC2, IAM, S3, RDS, AutoScaling, SNS, SQS,
+Route53, CloudWatch, CloudWatch Logs, CloudTrail, CloudFormation, Lambda, ECS, EKS, ECR,
 ELB, CloudFront and ACM,
 fetched from AWS when you ask (`awless-ro list -h` shows them all; `ls` is an alias).
 

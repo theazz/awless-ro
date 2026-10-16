@@ -74,6 +74,7 @@ var ColumnsInListing = map[string][]string{
 	cloud.Distribution:        {properties.ID, properties.PublicDNS, properties.Enabled, properties.State, properties.Modified, properties.Aliases, properties.SSLSupportMethod, properties.Origins},
 	cloud.Stack:               {properties.ID, properties.Name, properties.State, properties.Created, properties.Modified},
 	cloud.Trail:               {properties.Name, properties.Bucket, properties.MultiRegion, properties.OrganizationTrail, properties.LogFileValidation},
+	cloud.EksCluster:          {properties.Name, properties.State, properties.Version, properties.PlatformVersion, properties.Created},
 }
 
 var DefaultsColumnDefinitions = map[string][]ColumnDefinition{
@@ -510,5 +511,13 @@ var DefaultsColumnDefinitions = map[string][]ColumnDefinition{
 		StringColumnDefinition{Prop: properties.MultiRegion, Friendly: "Multi-region"},
 		StringColumnDefinition{Prop: properties.OrganizationTrail, Friendly: "Organization"},
 		StringColumnDefinition{Prop: properties.LogFileValidation, Friendly: "Log file validation"},
+	},
+	//EKS
+	cloud.EksCluster: {
+		StringColumnDefinition{Prop: properties.Name},
+		StringColumnDefinition{Prop: properties.State},
+		StringColumnDefinition{Prop: properties.Version, Friendly: "Kubernetes"},
+		StringColumnDefinition{Prop: properties.PlatformVersion, Friendly: "Platform"},
+		TimeColumnDefinition{StringColumnDefinition: StringColumnDefinition{Prop: properties.Created}},
 	},
 }

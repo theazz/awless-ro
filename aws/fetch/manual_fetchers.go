@@ -12,6 +12,8 @@ import (
 	awssdk "github.com/aws/aws-sdk-go-v2/aws"
 	"github.com/aws/aws-sdk-go-v2/service/ecs"
 	ecstypes "github.com/aws/aws-sdk-go-v2/service/ecs/types"
+	"github.com/aws/aws-sdk-go-v2/service/eks"
+	ekstypes "github.com/aws/aws-sdk-go-v2/service/eks/types"
 	"github.com/aws/aws-sdk-go-v2/service/elasticloadbalancingv2"
 	elbv2types "github.com/aws/aws-sdk-go-v2/service/elasticloadbalancingv2/types"
 	"github.com/aws/aws-sdk-go-v2/service/iam"
@@ -856,4 +858,46 @@ func addManualCdnFetchFuncs(conf *Config, funcs map[string]fetch.Func) {
 func addManualCloudformationFetchFuncs(conf *Config, funcs map[string]fetch.Func) {
 }
 func addManualCloudtrailFetchFuncs(conf *Config, funcs map[string]fetch.Func) {
+}
+func addManualEksFetchFuncs(conf *Config, funcs map[string]fetch.Func) {
+	funcs["ekscluster"] = func(ctx context.Context, cache fetch.Cache) ([]*graph.Resource, interface{}, error) {
+		var resources []*graph.Resource
+		var objects []ekstypes.Cluster
+
+		if !conf.getBoolDefaultTrue("aws.eks.ekscluster.sync") && !getBoolFromContext(ctx, "force") {
+			conf.Log.Verbose("sync: *disabled* for resource eks[ekscluster]")
+			return resources, objects, nil
+		}
+
+		var names []string
+		clusters := eks.NewListClustersPaginator(conf.APIs.Eks, &eks.ListClustersInput{})
+		for clusters.HasMorePages() {
+			out, err := clusters.NextPage(ctx)
+			if err != nil {
+				return resources, objects, err
+			}
+			names = append(names, out.Clusters...)
+		}
+
+		var mu sync.Mutex
+		err := forEachParallel(ctx, names, func(ctx context.Context, name string) error {
+			out, err := conf.APIs.Eks.DescribeCluster(ctx, &eks.DescribeClusterInput{Name: awssdk.String(name)})
+			if err != nil {
+				return err
+			}
+			if out.Cluster == nil {
+				return nil
+			}
+			res, err := awsconv.NewResource(*out.Cluster)
+			if err != nil {
+				return err
+			}
+			mu.Lock()
+			objects = append(objects, *out.Cluster)
+			resources = append(resources, res)
+			mu.Unlock()
+			return nil
+		})
+		return resources, objects, err
+	}
 }

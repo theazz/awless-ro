@@ -164,6 +164,7 @@ const (
 	PathPrefix                        = "cloud:pathPrefix"
 	PendingTasksCount                 = "cloud:pendingTasksCount"
 	PlacementGroup                    = "cloud:placementGroup"
+	PlatformVersion                   = "cloud:platformVersion"
 	Port                              = "net:port"
 	Ports                             = "net:ports"
 	PortRange                         = "net:portRange"
@@ -382,6 +383,7 @@ func init() {
 		properties.PathPrefix:                        PathPrefix,
 		properties.PendingTasksCount:                 PendingTasksCount,
 		properties.PlacementGroup:                    PlacementGroup,
+		properties.PlatformVersion:                   PlatformVersion,
 		properties.Port:                              Port,
 		properties.Ports:                             Ports,
 		properties.PortRange:                         PortRange,
@@ -600,6 +602,7 @@ var Properties = RDFProperties{
 	PathPrefix:                        {ID: PathPrefix, RdfType: "rdf:Property", RdfsLabel: "PathPrefix", RdfsDefinedBy: "rdfs:Literal", RdfsDataType: "xsd:string"},
 	PendingTasksCount:                 {ID: PendingTasksCount, RdfType: "rdf:Property", RdfsLabel: "PendingTasksCount", RdfsDefinedBy: "rdfs:Literal", RdfsDataType: "xsd:int"},
 	PlacementGroup:                    {ID: PlacementGroup, RdfType: "rdf:Property", RdfsLabel: "PlacementGroup", RdfsDefinedBy: "rdfs:Literal", RdfsDataType: "xsd:string"},
+	PlatformVersion:                   {ID: PlatformVersion, RdfType: "rdf:Property", RdfsLabel: "PlatformVersion", RdfsDefinedBy: "rdfs:Literal", RdfsDataType: "xsd:string"},
 	Port:                              {ID: Port, RdfType: "rdf:Property", RdfsLabel: "Port", RdfsDefinedBy: "rdfs:Literal", RdfsDataType: "xsd:int"},
 	Ports:                             {ID: Ports, RdfType: "rdf:Property", RdfsLabel: "Ports", RdfsDefinedBy: "rdfs:list", RdfsDataType: "xsd:string"},
 	PortRange:                         {ID: PortRange, RdfType: "rdfs:subPropertyOf", RdfsLabel: "PortRange", RdfsDefinedBy: "rdfs:Literal", RdfsDataType: "xsd:string"},

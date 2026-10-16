@@ -170,6 +170,10 @@ func ContainerCluster(id string) *rBuilder {
 	return new("containercluster", id)
 }
 
+func EksCluster(id string) *rBuilder {
+	return new("ekscluster", id)
+}
+
 func ContainerTask(id string) *rBuilder {
 	return new("containertask", id)
 }

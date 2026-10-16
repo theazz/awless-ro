@@ -43,6 +43,7 @@ import (
 	"github.com/aws/aws-sdk-go-v2/service/ec2"
 	"github.com/aws/aws-sdk-go-v2/service/ecr"
 	"github.com/aws/aws-sdk-go-v2/service/ecs"
+	"github.com/aws/aws-sdk-go-v2/service/eks"
 	"github.com/aws/aws-sdk-go-v2/service/elasticloadbalancing"
 	"github.com/aws/aws-sdk-go-v2/service/elasticloadbalancingv2"
 	"github.com/aws/aws-sdk-go-v2/service/iam"
@@ -172,6 +173,16 @@ type generatedEcsAPI interface {
 	// no generated fetcher calls ecs directly
 }
 
+// EksAPI is every eks operation awless-ro calls.
+type EksAPI interface {
+	generatedEksAPI
+	manualEksAPI
+}
+
+type generatedEksAPI interface {
+	// no generated fetcher calls eks directly
+}
+
 // ElbAPI is every elasticloadbalancing operation awless-ro calls.
 type ElbAPI interface {
 	generatedElbAPI
@@ -287,6 +298,7 @@ var (
 	_ Ec2API            = (*ec2.Client)(nil)
 	_ EcrAPI            = (*ecr.Client)(nil)
 	_ EcsAPI            = (*ecs.Client)(nil)
+	_ EksAPI            = (*eks.Client)(nil)
 	_ ElbAPI            = (*elasticloadbalancing.Client)(nil)
 	_ Elbv2API          = (*elasticloadbalancingv2.Client)(nil)
 	_ IamAPI            = (*iam.Client)(nil)

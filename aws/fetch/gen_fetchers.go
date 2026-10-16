@@ -1268,3 +1268,10 @@ func BuildCloudtrailFetchFuncs(conf *Config) fetch.Funcs {
 	}
 	return funcs
 }
+
+func BuildEksFetchFuncs(conf *Config) fetch.Funcs {
+	funcs := make(map[string]fetch.Func)
+
+	addManualEksFetchFuncs(conf, funcs)
+	return funcs
+}

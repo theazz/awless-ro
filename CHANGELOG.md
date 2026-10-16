@@ -6,6 +6,8 @@
 
 - `list trails`: CloudTrail trails, each in its home region only, in a new `cloudtrail`
   service synced by default (`aws.cloudtrail.sync`). (#65)
+- `list eksclusters`: EKS clusters, in a new `eks` service synced by default
+  (`aws.eks.sync`). (#72)
 
 ## v0.5.0
 
