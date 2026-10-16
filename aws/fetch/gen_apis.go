@@ -46,6 +46,7 @@ import (
 	"github.com/aws/aws-sdk-go-v2/service/elasticloadbalancing"
 	"github.com/aws/aws-sdk-go-v2/service/elasticloadbalancingv2"
 	"github.com/aws/aws-sdk-go-v2/service/iam"
+	"github.com/aws/aws-sdk-go-v2/service/kms"
 	"github.com/aws/aws-sdk-go-v2/service/lambda"
 	"github.com/aws/aws-sdk-go-v2/service/rds"
 	"github.com/aws/aws-sdk-go-v2/service/route53"
@@ -204,6 +205,16 @@ type generatedIamAPI interface {
 	ListVirtualMFADevices(context.Context, *iam.ListVirtualMFADevicesInput, ...func(*iam.Options)) (*iam.ListVirtualMFADevicesOutput, error)
 }
 
+// KmsAPI is every kms operation awless-ro calls.
+type KmsAPI interface {
+	generatedKmsAPI
+	manualKmsAPI
+}
+
+type generatedKmsAPI interface {
+	// no generated fetcher calls kms directly
+}
+
 // LambdaAPI is every lambda operation awless-ro calls.
 type LambdaAPI interface {
 	generatedLambdaAPI
@@ -290,6 +301,7 @@ var (
 	_ ElbAPI            = (*elasticloadbalancing.Client)(nil)
 	_ Elbv2API          = (*elasticloadbalancingv2.Client)(nil)
 	_ IamAPI            = (*iam.Client)(nil)
+	_ KmsAPI            = (*kms.Client)(nil)
 	_ LambdaAPI         = (*lambda.Client)(nil)
 	_ RdsAPI            = (*rds.Client)(nil)
 	_ Route53API        = (*route53.Client)(nil)

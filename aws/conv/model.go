@@ -565,6 +565,17 @@ var awsResourcesDef = map[string]map[string]*propertyTransform{
 		properties.OrganizationTrail: {name: "IsOrganizationTrail", transform: extractValueFn},
 		properties.LogFileValidation: {name: "LogFileValidationEnabled", transform: extractValueFn},
 	},
+	// KMS
+	cloud.KmsKey: {
+		properties.Arn:         {name: "Arn", transform: extractValueFn},
+		properties.Description: {name: "Description", transform: extractValueFn},
+		properties.State:       {name: "KeyState", transform: extractValueFn},
+		properties.KeyManager:  {name: "KeyManager", transform: extractValueFn},
+		properties.KeyUsage:    {name: "KeyUsage", transform: extractValueFn},
+		properties.KeySpec:     {name: "KeySpec", transform: extractValueFn},
+		properties.MultiRegion: {name: "MultiRegion", transform: extractValueFn},
+		properties.Created:     {name: "CreationDate", transform: extractTimeFn},
+	},
 	//Queue
 	cloud.Queue: {}, //Manually set
 }

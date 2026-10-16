@@ -123,8 +123,11 @@ const (
 	IPv6Addresses                     = "cloud:ipv6Addresses"
 	IPv6Enabled                       = "cloud:ipv6Enabled"
 	Key                               = "cloud:key"
+	KeyManager                        = "cloud:keyManager"
 	KeyName                           = "cloud:keyName"
 	KeyPair                           = "cloud:keyPair"
+	KeySpec                           = "cloud:keySpec"
+	KeyUsage                          = "cloud:keyUsage"
 	LatestRestorableTime              = "cloud:latestRestorableTime"
 	LaunchConfigurationName           = "cloud:launchConfigurationName"
 	Launched                          = "cloud:launched"
@@ -341,8 +344,11 @@ func init() {
 		properties.IPv6Addresses:                     IPv6Addresses,
 		properties.IPv6Enabled:                       IPv6Enabled,
 		properties.Key:                               Key,
+		properties.KeyManager:                        KeyManager,
 		properties.KeyName:                           KeyName,
 		properties.KeyPair:                           KeyPair,
+		properties.KeySpec:                           KeySpec,
+		properties.KeyUsage:                          KeyUsage,
 		properties.LatestRestorableTime:              LatestRestorableTime,
 		properties.LaunchConfigurationName:           LaunchConfigurationName,
 		properties.Launched:                          Launched,
@@ -559,8 +565,11 @@ var Properties = RDFProperties{
 	IPv6Addresses:                     {ID: IPv6Addresses, RdfType: "rdf:Property", RdfsLabel: "IPv6Addresses", RdfsDefinedBy: "rdfs:list", RdfsDataType: "xsd:string"},
 	IPv6Enabled:                       {ID: IPv6Enabled, RdfType: "rdf:Property", RdfsLabel: "IPv6Enabled", RdfsDefinedBy: "rdfs:Literal", RdfsDataType: "xsd:boolean"},
 	Key:                               {ID: Key, RdfType: "rdf:Property", RdfsLabel: "Key", RdfsDefinedBy: "rdfs:Literal", RdfsDataType: "xsd:string"},
+	KeyManager:                        {ID: KeyManager, RdfType: "rdf:Property", RdfsLabel: "KeyManager", RdfsDefinedBy: "rdfs:Literal", RdfsDataType: "xsd:string"},
 	KeyName:                           {ID: KeyName, RdfType: "rdf:Property", RdfsLabel: "KeyName", RdfsDefinedBy: "rdfs:Literal", RdfsDataType: "xsd:string"},
 	KeyPair:                           {ID: KeyPair, RdfType: "rdf:Property", RdfsLabel: "KeyPair", RdfsDefinedBy: "rdfs:Class", RdfsDataType: "xsd:string"},
+	KeySpec:                           {ID: KeySpec, RdfType: "rdf:Property", RdfsLabel: "KeySpec", RdfsDefinedBy: "rdfs:Literal", RdfsDataType: "xsd:string"},
+	KeyUsage:                          {ID: KeyUsage, RdfType: "rdf:Property", RdfsLabel: "KeyUsage", RdfsDefinedBy: "rdfs:Literal", RdfsDataType: "xsd:string"},
 	LatestRestorableTime:              {ID: LatestRestorableTime, RdfType: "rdf:Property", RdfsLabel: "LatestRestorableTime", RdfsDefinedBy: "rdfs:Literal", RdfsDataType: "xsd:dateTime"},
 	LaunchConfigurationName:           {ID: LaunchConfigurationName, RdfType: "rdf:Property", RdfsLabel: "LaunchConfigurationName", RdfsDefinedBy: "rdfs:Literal", RdfsDataType: "xsd:string"},
 	Launched:                          {ID: Launched, RdfType: "rdf:Property", RdfsLabel: "Launched", RdfsDefinedBy: "rdfs:Literal", RdfsDataType: "xsd:dateTime"},

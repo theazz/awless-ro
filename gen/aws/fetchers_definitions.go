@@ -327,4 +327,11 @@ var FetchersDefs = []FetchersDef{
 			{Api: "cloudtrail", ResourceType: cloud.Trail, AWSType: "cloudtrailtypes.Trail", ApiMethod: "DescribeTrails", InputFields: `IncludeShadowTrails: new(false)`, OutputsExtractor: "TrailList"},
 		},
 	},
+	{
+		Name: "kms",
+		Api:  []string{"kms"},
+		Fetchers: []Fetcher{
+			{Api: "kms", ResourceType: cloud.KmsKey, AWSType: "kmstypes.KeyMetadata", ManualFetcher: true},
+		},
+	},
 }

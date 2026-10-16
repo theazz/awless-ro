@@ -514,6 +514,28 @@ func (m *mockIam) ListVirtualMFADevices(_ context.Context, _ *iam.ListVirtualMFA
 	return &iam.ListVirtualMFADevicesOutput{VirtualMFADevices: m.virtualmfadevices}, nil
 }
 
+type mockKms struct {
+	awsfetch.KmsAPI
+	manualKmsMock
+}
+
+// cloud.Service, so that a mock can stand in for a whole service in the
+// registry. The graph-building tests drive the fetchers directly, so these are
+// inert on purpose.
+func (m *mockKms) Name() string            { return "" }
+func (m *mockKms) Region() string          { return "" }
+func (m *mockKms) Profile() string         { return "" }
+func (m *mockKms) ResourceTypes() []string { return []string{} }
+func (m *mockKms) IsSyncDisabled() bool    { return false }
+
+func (m *mockKms) Fetch(context.Context) (cloud.GraphAPI, error) {
+	return nil, nil
+}
+
+func (m *mockKms) FetchByType(context.Context, string) (cloud.GraphAPI, error) {
+	return nil, nil
+}
+
 type mockLambda struct {
 	awsfetch.LambdaAPI
 	manualLambdaMock

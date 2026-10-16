@@ -52,6 +52,7 @@ import (
 	elbtypes "github.com/aws/aws-sdk-go-v2/service/elasticloadbalancing/types"
 	elbv2types "github.com/aws/aws-sdk-go-v2/service/elasticloadbalancingv2/types"
 	iamtypes "github.com/aws/aws-sdk-go-v2/service/iam/types"
+	kmstypes "github.com/aws/aws-sdk-go-v2/service/kms/types"
 	lambdatypes "github.com/aws/aws-sdk-go-v2/service/lambda/types"
 	rdstypes "github.com/aws/aws-sdk-go-v2/service/rds/types"
 	route53types "github.com/aws/aws-sdk-go-v2/service/route53/types"
@@ -216,6 +217,11 @@ var sdkPrototypes = map[string][]func() interface{}{
 	// CloudTrail
 	cloud.Trail: {func() interface{} {
 		return cloudtrailtypes.Trail{TrailARN: awssdk.String("arn:aws:cloudtrail:trail/1")}
+	}},
+
+	// KMS
+	cloud.KmsKey: {func() interface{} {
+		return kmstypes.KeyMetadata{KeyId: awssdk.String("key-1")}
 	}},
 }
 

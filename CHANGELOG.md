@@ -6,6 +6,9 @@
 
 - `list trails`: CloudTrail trails, each in its home region only, in a new `cloudtrail`
   service synced by default (`aws.cloudtrail.sync`). (#65)
+- `list kmskeys`: KMS keys with their alias, state, manager, usage, spec and creation
+  time, in a new `kms` service. Its sync is off by default, one API call per key:
+  `awless-ro config set aws.kms.sync true` turns it on. (#73)
 
 ## v0.5.0
 

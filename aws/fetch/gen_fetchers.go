@@ -1268,3 +1268,10 @@ func BuildCloudtrailFetchFuncs(conf *Config) fetch.Funcs {
 	}
 	return funcs
 }
+
+func BuildKmsFetchFuncs(conf *Config) fetch.Funcs {
+	funcs := make(map[string]fetch.Func)
+
+	addManualKmsFetchFuncs(conf, funcs)
+	return funcs
+}

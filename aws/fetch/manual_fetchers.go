@@ -16,6 +16,8 @@ import (
 	elbv2types "github.com/aws/aws-sdk-go-v2/service/elasticloadbalancingv2/types"
 	"github.com/aws/aws-sdk-go-v2/service/iam"
 	iamtypes "github.com/aws/aws-sdk-go-v2/service/iam/types"
+	"github.com/aws/aws-sdk-go-v2/service/kms"
+	kmstypes "github.com/aws/aws-sdk-go-v2/service/kms/types"
 	"github.com/aws/aws-sdk-go-v2/service/route53"
 	route53types "github.com/aws/aws-sdk-go-v2/service/route53/types"
 	s3types "github.com/aws/aws-sdk-go-v2/service/s3/types"
@@ -856,4 +858,71 @@ func addManualCdnFetchFuncs(conf *Config, funcs map[string]fetch.Func) {
 func addManualCloudformationFetchFuncs(conf *Config, funcs map[string]fetch.Func) {
 }
 func addManualCloudtrailFetchFuncs(conf *Config, funcs map[string]fetch.Func) {
+}
+func addManualKmsFetchFuncs(conf *Config, funcs map[string]fetch.Func) {
+	funcs["kmskey"] = func(ctx context.Context, cache fetch.Cache) ([]*graph.Resource, interface{}, error) {
+		var resources []*graph.Resource
+		var objects []kmstypes.KeyMetadata
+
+		if !conf.getBoolDefaultTrue("aws.kms.kmskey.sync") && !getBoolFromContext(ctx, "force") {
+			conf.Log.Verbose("sync: *disabled* for resource kms[kmskey]")
+			return resources, objects, nil
+		}
+
+		var keys []kmstypes.KeyListEntry
+		keysPaginator := kms.NewListKeysPaginator(conf.APIs.Kms, &kms.ListKeysInput{})
+		for keysPaginator.HasMorePages() {
+			out, err := keysPaginator.NextPage(ctx)
+			if err != nil {
+				return resources, objects, err
+			}
+			keys = append(keys, out.Keys...)
+		}
+
+		// A key can have several aliases; the alphabetically first one names it, so
+		// the name does not change between syncs. Aliases AWS reserves for managed
+		// keys not created yet have no target.
+		aliases := make(map[string]string)
+		aliasesPaginator := kms.NewListAliasesPaginator(conf.APIs.Kms, &kms.ListAliasesInput{})
+		for aliasesPaginator.HasMorePages() {
+			out, err := aliasesPaginator.NextPage(ctx)
+			if err != nil {
+				return resources, objects, err
+			}
+			for _, a := range out.Aliases {
+				id, name := awssdk.ToString(a.TargetKeyId), awssdk.ToString(a.AliasName)
+				if id == "" {
+					continue
+				}
+				if cur, ok := aliases[id]; !ok || name < cur {
+					aliases[id] = name
+				}
+			}
+		}
+
+		// ListKeys returns ids only: one DescribeKey per key.
+		var mu sync.Mutex
+		err := forEachParallel(ctx, keys, func(ctx context.Context, k kmstypes.KeyListEntry) error {
+			out, err := conf.APIs.Kms.DescribeKey(ctx, &kms.DescribeKeyInput{KeyId: k.KeyId})
+			if err != nil {
+				return err
+			}
+			if out.KeyMetadata == nil {
+				return nil
+			}
+			res, err := awsconv.NewResource(*out.KeyMetadata)
+			if err != nil {
+				return err
+			}
+			if alias, ok := aliases[awssdk.ToString(k.KeyId)]; ok {
+				res.Properties()[properties.Name] = alias
+			}
+			mu.Lock()
+			objects = append(objects, *out.KeyMetadata)
+			resources = append(resources, res)
+			mu.Unlock()
+			return nil
+		})
+		return resources, objects, err
+	}
 }
