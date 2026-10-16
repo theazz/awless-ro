@@ -565,6 +565,16 @@ var awsResourcesDef = map[string]map[string]*propertyTransform{
 		properties.OrganizationTrail: {name: "IsOrganizationTrail", transform: extractValueFn},
 		properties.LogFileValidation: {name: "LogFileValidationEnabled", transform: extractValueFn},
 	},
+	// DynamoDB
+	cloud.Table: {
+		properties.Arn:         {name: "TableArn", transform: extractValueFn},
+		properties.Name:        {name: "TableName", transform: extractValueFn},
+		properties.State:       {name: "TableStatus", transform: extractValueFn},
+		properties.ItemCount:   {name: "ItemCount", transform: extractValueFn},
+		properties.Size:        {name: "TableSizeBytes", transform: extractValueFn},
+		properties.BillingMode: {fetch: fetchBillingModeFn},
+		properties.Created:     {name: "CreationDateTime", transform: extractTimeFn},
+	},
 	//Queue
 	cloud.Queue: {}, //Manually set
 }

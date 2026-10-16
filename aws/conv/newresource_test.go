@@ -46,6 +46,7 @@ import (
 	cloudtrailtypes "github.com/aws/aws-sdk-go-v2/service/cloudtrail/types"
 	cloudwatchtypes "github.com/aws/aws-sdk-go-v2/service/cloudwatch/types"
 	cloudwatchlogstypes "github.com/aws/aws-sdk-go-v2/service/cloudwatchlogs/types"
+	dynamodbtypes "github.com/aws/aws-sdk-go-v2/service/dynamodb/types"
 	ec2types "github.com/aws/aws-sdk-go-v2/service/ec2/types"
 	ecrtypes "github.com/aws/aws-sdk-go-v2/service/ecr/types"
 	ecstypes "github.com/aws/aws-sdk-go-v2/service/ecs/types"
@@ -216,6 +217,11 @@ var sdkPrototypes = map[string][]func() interface{}{
 	// CloudTrail
 	cloud.Trail: {func() interface{} {
 		return cloudtrailtypes.Trail{TrailARN: awssdk.String("arn:aws:cloudtrail:trail/1")}
+	}},
+
+	// DynamoDB
+	cloud.Table: {func() interface{} {
+		return dynamodbtypes.TableDescription{TableArn: awssdk.String("arn:aws:dynamodb:table/1")}
 	}},
 }
 

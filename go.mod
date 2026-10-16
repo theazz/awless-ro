@@ -14,6 +14,7 @@ require (
 	github.com/aws/aws-sdk-go-v2/service/cloudtrail v1.65.4
 	github.com/aws/aws-sdk-go-v2/service/cloudwatch v1.73.3
 	github.com/aws/aws-sdk-go-v2/service/cloudwatchlogs v1.89.3
+	github.com/aws/aws-sdk-go-v2/service/dynamodb v1.70.3
 	github.com/aws/aws-sdk-go-v2/service/ec2 v1.338.4
 	github.com/aws/aws-sdk-go-v2/service/ecr v1.66.4
 	github.com/aws/aws-sdk-go-v2/service/ecs v1.100.3
@@ -44,6 +45,7 @@ require (
 	github.com/aws/aws-sdk-go-v2/internal/v4a v1.5.6 // indirect
 	github.com/aws/aws-sdk-go-v2/service/internal/accept-encoding v1.13.21 // indirect
 	github.com/aws/aws-sdk-go-v2/service/internal/checksum v1.11.7 // indirect
+	github.com/aws/aws-sdk-go-v2/service/internal/endpoint-discovery v1.13.6 // indirect
 	github.com/aws/aws-sdk-go-v2/service/internal/presigned-url v1.14.6 // indirect
 	github.com/aws/aws-sdk-go-v2/service/internal/s3shared v1.20.6 // indirect
 	github.com/aws/aws-sdk-go-v2/service/signin v1.10.4 // indirect

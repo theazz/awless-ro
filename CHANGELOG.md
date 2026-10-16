@@ -6,6 +6,8 @@
 
 - `list trails`: CloudTrail trails, each in its home region only, in a new `cloudtrail`
   service synced by default (`aws.cloudtrail.sync`). (#65)
+- `list tables`: DynamoDB tables, in a new `dynamodb` service synced by default
+  (`aws.dynamodb.sync`). (#71)
 
 ## v0.5.0
 

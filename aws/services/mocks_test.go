@@ -5,6 +5,8 @@ import (
 	"fmt"
 
 	awssdk "github.com/aws/aws-sdk-go-v2/aws"
+	"github.com/aws/aws-sdk-go-v2/service/dynamodb"
+	dynamodbtypes "github.com/aws/aws-sdk-go-v2/service/dynamodb/types"
 	"github.com/aws/aws-sdk-go-v2/service/ecs"
 	ecstypes "github.com/aws/aws-sdk-go-v2/service/ecs/types"
 	"github.com/aws/aws-sdk-go-v2/service/elasticloadbalancingv2"
@@ -65,6 +67,10 @@ type manualS3Mock struct {
 	buckets map[string][]s3types.Bucket
 	objects map[string][]s3types.Object
 	grants  map[string][]s3types.Grant
+}
+
+type manualDynamodbMock struct {
+	tables []dynamodbtypes.TableDescription
 }
 
 type manualSqsMock struct {
@@ -153,6 +159,23 @@ func (m *mockSqs) GetQueueAttributes(_ context.Context, input *sqs.GetQueueAttri
 	return &sqs.GetQueueAttributesOutput{
 		Attributes: m.attributes[awssdk.ToString(input.QueueUrl)],
 	}, nil
+}
+
+func (m *mockDynamodb) ListTables(_ context.Context, _ *dynamodb.ListTablesInput, _ ...func(*dynamodb.Options)) (*dynamodb.ListTablesOutput, error) {
+	var names []string
+	for _, t := range m.tables {
+		names = append(names, awssdk.ToString(t.TableName))
+	}
+	return &dynamodb.ListTablesOutput{TableNames: names}, nil
+}
+
+func (m *mockDynamodb) DescribeTable(_ context.Context, input *dynamodb.DescribeTableInput, _ ...func(*dynamodb.Options)) (*dynamodb.DescribeTableOutput, error) {
+	for _, t := range m.tables {
+		if awssdk.ToString(t.TableName) == awssdk.ToString(input.TableName) {
+			return &dynamodb.DescribeTableOutput{Table: &t}, nil
+		}
+	}
+	return nil, &dynamodbtypes.ResourceNotFoundException{Message: input.TableName}
 }
 
 func (m *mockEcs) ListClusters(_ context.Context, _ *ecs.ListClustersInput, _ ...func(*ecs.Options)) (*ecs.ListClustersOutput, error) {

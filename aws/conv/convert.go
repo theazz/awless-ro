@@ -57,6 +57,7 @@ import (
 	cloudtrailtypes "github.com/aws/aws-sdk-go-v2/service/cloudtrail/types"
 	cloudwatchtypes "github.com/aws/aws-sdk-go-v2/service/cloudwatch/types"
 	cloudwatchlogstypes "github.com/aws/aws-sdk-go-v2/service/cloudwatchlogs/types"
+	dynamodbtypes "github.com/aws/aws-sdk-go-v2/service/dynamodb/types"
 	ec2types "github.com/aws/aws-sdk-go-v2/service/ec2/types"
 	ecrtypes "github.com/aws/aws-sdk-go-v2/service/ecr/types"
 	ecstypes "github.com/aws/aws-sdk-go-v2/service/ecs/types"
@@ -246,6 +247,9 @@ func InitResource(source interface{}) (*graph.Resource, error) {
 	// CloudTrail
 	case cloudtrailtypes.Trail:
 		res = graph.InitResource(cloud.Trail, awssdk.ToString(ss.TrailARN))
+	// DynamoDB
+	case dynamodbtypes.TableDescription:
+		res = graph.InitResource(cloud.Table, awssdk.ToString(ss.TableArn))
 	default:
 		return nil, fmt.Errorf("unknown type of resource %T", source)
 	}
@@ -567,6 +571,21 @@ var extractRouteTableAssociationsFn = func(i interface{}) (interface{}, error) {
 		})
 	}
 	return keyVals, nil
+}
+
+// fetchBillingModeFn reads a DynamoDB table's billing mode. DynamoDB leaves the
+// summary out for a table that has only ever been provisioned, so no summary means
+// provisioned rather than unknown. It reads the whole table because a nil field
+// never reaches a transform.
+var fetchBillingModeFn = func(i interface{}) (interface{}, error) {
+	table, ok := i.(dynamodbtypes.TableDescription)
+	if !ok {
+		return nil, fmt.Errorf("fetch billing mode: not a table description but a %T", i)
+	}
+	if table.BillingModeSummary == nil || table.BillingModeSummary.BillingMode == "" {
+		return string(dynamodbtypes.BillingModeProvisioned), nil
+	}
+	return string(table.BillingModeSummary.BillingMode), nil
 }
 
 // extractFieldFn reads one field of a nested shape. SDK v2 keeps nested shapes

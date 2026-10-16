@@ -34,6 +34,7 @@ import (
 	cloudtrailtypes "github.com/aws/aws-sdk-go-v2/service/cloudtrail/types"
 	cloudwatchtypes "github.com/aws/aws-sdk-go-v2/service/cloudwatch/types"
 	cloudwatchlogstypes "github.com/aws/aws-sdk-go-v2/service/cloudwatchlogs/types"
+	dynamodbtypes "github.com/aws/aws-sdk-go-v2/service/dynamodb/types"
 	ec2types "github.com/aws/aws-sdk-go-v2/service/ec2/types"
 	ecrtypes "github.com/aws/aws-sdk-go-v2/service/ecr/types"
 	ecstypes "github.com/aws/aws-sdk-go-v2/service/ecs/types"
@@ -1216,6 +1217,59 @@ func TestBuildCloudtrailGraph(t *testing.T) {
 
 	expectedChildren := map[string][]string{
 		"eu-west-1": {"trail_1", "trail_2"},
+	}
+	expectedAppliedOn := map[string][]string{}
+
+	compareResources(t, g, resources, expected, expectedChildren, expectedAppliedOn)
+}
+
+func TestBuildDynamodbGraph(t *testing.T) {
+	created := time.Date(2024, time.February, 14, 16, 20, 52, 0, time.UTC)
+	tables := []dynamodbtypes.TableDescription{
+		{
+			TableArn:           awssdk.String("table_1"),
+			TableName:          awssdk.String("sessions"),
+			TableStatus:        dynamodbtypes.TableStatusActive,
+			ItemCount:          awssdk.Int64(1200),
+			TableSizeBytes:     awssdk.Int64(48000),
+			BillingModeSummary: &dynamodbtypes.BillingModeSummary{BillingMode: dynamodbtypes.BillingModePayPerRequest},
+			CreationDateTime:   &created,
+		},
+		{
+			TableArn:       awssdk.String("table_2"),
+			TableName:      awssdk.String("locks"),
+			TableStatus:    dynamodbtypes.TableStatusUpdating,
+			ItemCount:      awssdk.Int64(0),
+			TableSizeBytes: awssdk.Int64(0),
+		},
+	}
+
+	mock := &mockDynamodb{manualDynamodbMock: manualDynamodbMock{tables: tables}}
+
+	service := Dynamodb{
+		DynamodbAPI: mock, region: "eu-west-1",
+		fetcher: fetch.NewFetcher(awsfetch.BuildDynamodbFetchFuncs(awsfetch.NewConfig(&awsfetch.AWSAPI{Dynamodb: mock}))),
+	}
+
+	g, err := service.Fetch(context.Background())
+	if err != nil {
+		t.Fatal(err)
+	}
+
+	resources, err := g.Find(cloud.NewQuery("table"))
+	if err != nil {
+		t.Fatal(err)
+	}
+
+	expected := map[string]cloud.Resource{
+		"table_1": resourcetest.Table("table_1").Prop(p.Arn, "table_1").Prop(p.Name, "sessions").Prop(p.State, "ACTIVE").
+			Prop(p.ItemCount, 1200).Prop(p.Size, 48000).Prop(p.BillingMode, "PAY_PER_REQUEST").Prop(p.Created, created).Build(),
+		"table_2": resourcetest.Table("table_2").Prop(p.Arn, "table_2").Prop(p.Name, "locks").Prop(p.State, "UPDATING").
+			Prop(p.ItemCount, 0).Prop(p.Size, 0).Prop(p.BillingMode, "PROVISIONED").Build(),
+	}
+
+	expectedChildren := map[string][]string{
+		"eu-west-1": {"table_1", "table_2"},
 	}
 	expectedAppliedOn := map[string][]string{}
 

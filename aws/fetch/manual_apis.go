@@ -29,6 +29,7 @@ import (
 
 	"github.com/aws/aws-sdk-go-v2/service/autoscaling"
 	"github.com/aws/aws-sdk-go-v2/service/cloudformation"
+	"github.com/aws/aws-sdk-go-v2/service/dynamodb"
 	"github.com/aws/aws-sdk-go-v2/service/ecs"
 	"github.com/aws/aws-sdk-go-v2/service/elasticloadbalancingv2"
 	"github.com/aws/aws-sdk-go-v2/service/iam"
@@ -62,6 +63,12 @@ type manualAutoscalingAPI interface {
 // cloudformation: the stack event tailer.
 type manualCloudformationAPI interface {
 	DescribeStackEvents(context.Context, *cloudformation.DescribeStackEventsInput, ...func(*cloudformation.Options)) (*cloudformation.DescribeStackEventsOutput, error)
+}
+
+// dynamodb: ListTables returns only names, so each table is described in turn.
+type manualDynamodbAPI interface {
+	DescribeTable(context.Context, *dynamodb.DescribeTableInput, ...func(*dynamodb.Options)) (*dynamodb.DescribeTableOutput, error)
+	ListTables(context.Context, *dynamodb.ListTablesInput, ...func(*dynamodb.Options)) (*dynamodb.ListTablesOutput, error)
 }
 
 // ecs: clusters, tasks and container instances each take several chained calls,

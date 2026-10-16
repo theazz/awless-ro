@@ -277,6 +277,28 @@ func (m *mockCloudwatchlogs) DescribeLogGroups(_ context.Context, _ *cloudwatchl
 	return &cloudwatchlogs.DescribeLogGroupsOutput{LogGroups: m.loggroups}, nil
 }
 
+type mockDynamodb struct {
+	awsfetch.DynamodbAPI
+	manualDynamodbMock
+}
+
+// cloud.Service, so that a mock can stand in for a whole service in the
+// registry. The graph-building tests drive the fetchers directly, so these are
+// inert on purpose.
+func (m *mockDynamodb) Name() string            { return "" }
+func (m *mockDynamodb) Region() string          { return "" }
+func (m *mockDynamodb) Profile() string         { return "" }
+func (m *mockDynamodb) ResourceTypes() []string { return []string{} }
+func (m *mockDynamodb) IsSyncDisabled() bool    { return false }
+
+func (m *mockDynamodb) Fetch(context.Context) (cloud.GraphAPI, error) {
+	return nil, nil
+}
+
+func (m *mockDynamodb) FetchByType(context.Context, string) (cloud.GraphAPI, error) {
+	return nil, nil
+}
+
 type mockEc2 struct {
 	awsfetch.Ec2API
 	manualEc2Mock

@@ -48,6 +48,7 @@ const (
 	AvailabilityZone                  = "cloud:availabilityZone"
 	AvailabilityZones                 = "cloud:availabilityZones"
 	BackupRetentionPeriod             = "cloud:backupRetentionPeriod"
+	BillingMode                       = "cloud:billingMode"
 	Bucket                            = "cloud:bucketName"
 	CallerReference                   = "cloud:callerReference"
 	Capabilities                      = "cloud:capabilities"
@@ -120,6 +121,7 @@ const (
 	InsufficientDataActions           = "cloud:insufficientDataActions"
 	IOPS                              = "cloud:iops"
 	IPType                            = "net:ipType"
+	ItemCount                         = "cloud:itemCount"
 	IPv6Addresses                     = "cloud:ipv6Addresses"
 	IPv6Enabled                       = "cloud:ipv6Enabled"
 	Key                               = "cloud:key"
@@ -266,6 +268,7 @@ func init() {
 		properties.AvailabilityZone:                  AvailabilityZone,
 		properties.AvailabilityZones:                 AvailabilityZones,
 		properties.BackupRetentionPeriod:             BackupRetentionPeriod,
+		properties.BillingMode:                       BillingMode,
 		properties.Bucket:                            Bucket,
 		properties.CallerReference:                   CallerReference,
 		properties.Capabilities:                      Capabilities,
@@ -338,6 +341,7 @@ func init() {
 		properties.InsufficientDataActions:           InsufficientDataActions,
 		properties.IOPS:                              IOPS,
 		properties.IPType:                            IPType,
+		properties.ItemCount:                         ItemCount,
 		properties.IPv6Addresses:                     IPv6Addresses,
 		properties.IPv6Enabled:                       IPv6Enabled,
 		properties.Key:                               Key,
@@ -484,6 +488,7 @@ var Properties = RDFProperties{
 	AvailabilityZone:                  {ID: AvailabilityZone, RdfType: "rdf:Property", RdfsLabel: "AvailabilityZone", RdfsDefinedBy: "rdfs:Class", RdfsDataType: "xsd:string"},
 	AvailabilityZones:                 {ID: AvailabilityZones, RdfType: "rdf:Property", RdfsLabel: "AvailabilityZones", RdfsDefinedBy: "rdfs:list", RdfsDataType: "rdfs:Class"},
 	BackupRetentionPeriod:             {ID: BackupRetentionPeriod, RdfType: "rdf:Property", RdfsLabel: "BackupRetentionPeriod", RdfsDefinedBy: "rdfs:Literal", RdfsDataType: "xsd:dateTime"},
+	BillingMode:                       {ID: BillingMode, RdfType: "rdf:Property", RdfsLabel: "BillingMode", RdfsDefinedBy: "rdfs:Literal", RdfsDataType: "xsd:string"},
 	Bucket:                            {ID: Bucket, RdfType: "rdf:Property", RdfsLabel: "Bucket", RdfsDefinedBy: "rdfs:Class", RdfsDataType: "xsd:string"},
 	CallerReference:                   {ID: CallerReference, RdfType: "rdf:Property", RdfsLabel: "CallerReference", RdfsDefinedBy: "rdfs:Literal", RdfsDataType: "xsd:string"},
 	Capabilities:                      {ID: Capabilities, RdfType: "rdf:Property", RdfsLabel: "Capabilities", RdfsDefinedBy: "rdfs:list", RdfsDataType: "xsd:string"},
@@ -556,6 +561,7 @@ var Properties = RDFProperties{
 	InsufficientDataActions:           {ID: InsufficientDataActions, RdfType: "rdf:Property", RdfsLabel: "InsufficientDataActions", RdfsDefinedBy: "rdfs:list", RdfsDataType: "xsd:string"},
 	IOPS:                              {ID: IOPS, RdfType: "rdf:Property", RdfsLabel: "IOPS", RdfsDefinedBy: "rdfs:Literal", RdfsDataType: "xsd:int"},
 	IPType:                            {ID: IPType, RdfType: "rdf:Property", RdfsLabel: "IPType", RdfsDefinedBy: "rdfs:Literal", RdfsDataType: "xsd:string"},
+	ItemCount:                         {ID: ItemCount, RdfType: "rdf:Property", RdfsLabel: "ItemCount", RdfsDefinedBy: "rdfs:Literal", RdfsDataType: "xsd:int"},
 	IPv6Addresses:                     {ID: IPv6Addresses, RdfType: "rdf:Property", RdfsLabel: "IPv6Addresses", RdfsDefinedBy: "rdfs:list", RdfsDataType: "xsd:string"},
 	IPv6Enabled:                       {ID: IPv6Enabled, RdfType: "rdf:Property", RdfsLabel: "IPv6Enabled", RdfsDefinedBy: "rdfs:Literal", RdfsDataType: "xsd:boolean"},
 	Key:                               {ID: Key, RdfType: "rdf:Property", RdfsLabel: "Key", RdfsDefinedBy: "rdfs:Literal", RdfsDataType: "xsd:string"},

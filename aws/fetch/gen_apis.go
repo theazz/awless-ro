@@ -40,6 +40,7 @@ import (
 	"github.com/aws/aws-sdk-go-v2/service/cloudtrail"
 	"github.com/aws/aws-sdk-go-v2/service/cloudwatch"
 	"github.com/aws/aws-sdk-go-v2/service/cloudwatchlogs"
+	"github.com/aws/aws-sdk-go-v2/service/dynamodb"
 	"github.com/aws/aws-sdk-go-v2/service/ec2"
 	"github.com/aws/aws-sdk-go-v2/service/ecr"
 	"github.com/aws/aws-sdk-go-v2/service/ecs"
@@ -126,6 +127,16 @@ type CloudwatchlogsAPI interface {
 
 type generatedCloudwatchlogsAPI interface {
 	DescribeLogGroups(context.Context, *cloudwatchlogs.DescribeLogGroupsInput, ...func(*cloudwatchlogs.Options)) (*cloudwatchlogs.DescribeLogGroupsOutput, error)
+}
+
+// DynamodbAPI is every dynamodb operation awless-ro calls.
+type DynamodbAPI interface {
+	generatedDynamodbAPI
+	manualDynamodbAPI
+}
+
+type generatedDynamodbAPI interface {
+	// no generated fetcher calls dynamodb directly
 }
 
 // Ec2API is every ec2 operation awless-ro calls.
@@ -284,6 +295,7 @@ var (
 	_ CloudtrailAPI     = (*cloudtrail.Client)(nil)
 	_ CloudwatchAPI     = (*cloudwatch.Client)(nil)
 	_ CloudwatchlogsAPI = (*cloudwatchlogs.Client)(nil)
+	_ DynamodbAPI       = (*dynamodb.Client)(nil)
 	_ Ec2API            = (*ec2.Client)(nil)
 	_ EcrAPI            = (*ecr.Client)(nil)
 	_ EcsAPI            = (*ecs.Client)(nil)

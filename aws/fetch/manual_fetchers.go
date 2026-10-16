@@ -10,6 +10,8 @@ import (
 	"time"
 
 	awssdk "github.com/aws/aws-sdk-go-v2/aws"
+	"github.com/aws/aws-sdk-go-v2/service/dynamodb"
+	dynamodbtypes "github.com/aws/aws-sdk-go-v2/service/dynamodb/types"
 	"github.com/aws/aws-sdk-go-v2/service/ecs"
 	ecstypes "github.com/aws/aws-sdk-go-v2/service/ecs/types"
 	"github.com/aws/aws-sdk-go-v2/service/elasticloadbalancingv2"
@@ -856,4 +858,52 @@ func addManualCdnFetchFuncs(conf *Config, funcs map[string]fetch.Func) {
 func addManualCloudformationFetchFuncs(conf *Config, funcs map[string]fetch.Func) {
 }
 func addManualCloudtrailFetchFuncs(conf *Config, funcs map[string]fetch.Func) {
+}
+func addManualDynamodbFetchFuncs(conf *Config, funcs map[string]fetch.Func) {
+	funcs["table"] = func(ctx context.Context, cache fetch.Cache) ([]*graph.Resource, interface{}, error) {
+		var resources []*graph.Resource
+		var objects []dynamodbtypes.TableDescription
+
+		if !conf.getBoolDefaultTrue("aws.dynamodb.table.sync") && !getBoolFromContext(ctx, "force") {
+			conf.Log.Verbose("sync: *disabled* for resource dynamodb[table]")
+			return resources, objects, nil
+		}
+
+		var names []string
+		paginator := dynamodb.NewListTablesPaginator(conf.APIs.Dynamodb, &dynamodb.ListTablesInput{})
+		for paginator.HasMorePages() {
+			out, err := paginator.NextPage(ctx)
+			if err != nil {
+				return resources, objects, err
+			}
+			names = append(names, out.TableNames...)
+		}
+
+		var mu sync.Mutex
+		err := forEachParallel(ctx, names, func(ctx context.Context, name string) error {
+			out, err := conf.APIs.Dynamodb.DescribeTable(ctx, &dynamodb.DescribeTableInput{TableName: awssdk.String(name)})
+			// A table can be deleted between listing and describing it; that is
+			// not a sync failure.
+			var notFound *dynamodbtypes.ResourceNotFoundException
+			if errors.As(err, &notFound) {
+				return nil
+			}
+			if err != nil {
+				return fmt.Errorf("describe table %s: %w", name, err)
+			}
+			if out.Table == nil {
+				return nil
+			}
+			res, err := awsconv.NewResource(*out.Table)
+			if err != nil {
+				return err
+			}
+			mu.Lock()
+			objects = append(objects, *out.Table)
+			resources = append(resources, res)
+			mu.Unlock()
+			return nil
+		})
+		return resources, objects, err
+	}
 }

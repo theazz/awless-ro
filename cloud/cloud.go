@@ -90,6 +90,8 @@ const (
 	Stack string = "stack"
 	//cloudtrail
 	Trail string = "trail"
+	//dynamodb
+	Table string = "table"
 	//container
 	Repository        string = "repository"
 	Registry          string = "registry"

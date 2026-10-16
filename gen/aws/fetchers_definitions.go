@@ -327,4 +327,11 @@ var FetchersDefs = []FetchersDef{
 			{Api: "cloudtrail", ResourceType: cloud.Trail, AWSType: "cloudtrailtypes.Trail", ApiMethod: "DescribeTrails", InputFields: `IncludeShadowTrails: new(false)`, OutputsExtractor: "TrailList"},
 		},
 	},
+	{
+		Name: "dynamodb",
+		Api:  []string{"dynamodb"},
+		Fetchers: []Fetcher{
+			{Api: "dynamodb", ResourceType: cloud.Table, AWSType: "dynamodbtypes.TableDescription", ManualFetcher: true},
+		},
+	},
 }
