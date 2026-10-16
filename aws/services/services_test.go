@@ -28,6 +28,7 @@ import (
 
 	awssdk "github.com/aws/aws-sdk-go-v2/aws"
 	acmtypes "github.com/aws/aws-sdk-go-v2/service/acm/types"
+	apigatewayv2types "github.com/aws/aws-sdk-go-v2/service/apigatewayv2/types"
 	autoscalingtypes "github.com/aws/aws-sdk-go-v2/service/autoscaling/types"
 	cloudformationtypes "github.com/aws/aws-sdk-go-v2/service/cloudformation/types"
 	cloudfronttypes "github.com/aws/aws-sdk-go-v2/service/cloudfront/types"
@@ -1222,6 +1223,56 @@ func TestBuildCloudtrailGraph(t *testing.T) {
 	compareResources(t, g, resources, expected, expectedChildren, expectedAppliedOn)
 }
 
+func TestBuildApigatewayv2Graph(t *testing.T) {
+	created := time.Now().UTC().Truncate(time.Second)
+	apis := []apigatewayv2types.Api{
+		{ApiId: awssdk.String("api_1"), Name: awssdk.String("chat"), ProtocolType: apigatewayv2types.ProtocolTypeWebsocket},
+		{
+			ApiId:        awssdk.String("api_2"),
+			Name:         awssdk.String("orders"),
+			ProtocolType: apigatewayv2types.ProtocolTypeHttp,
+			ApiEndpoint:  awssdk.String("https://api_2.execute-api.eu-west-1.amazonaws.com"),
+			Description:  awssdk.String("orders backend"),
+			CreatedDate:  awssdk.Time(created),
+			Tags:         map[string]string{"team": "payments", "env": "prod"},
+		},
+	}
+
+	mock := &mockApigatewayv2{manualApigatewayv2Mock: manualApigatewayv2Mock{apis: apis}}
+
+	service := Apigatewayv2{
+		Apigatewayv2API: mock, region: "eu-west-1", config: map[string]interface{}{"aws.apigatewayv2.sync": true},
+		fetcher: fetch.NewFetcher(awsfetch.BuildApigatewayv2FetchFuncs(awsfetch.NewConfig(&awsfetch.AWSAPI{Apigatewayv2: mock}))),
+	}
+
+	g, err := service.Fetch(context.Background())
+	if err != nil {
+		t.Fatal(err)
+	}
+
+	resources, err := g.Find(cloud.NewQuery("api"))
+	if err != nil {
+		t.Fatal(err)
+	}
+
+	expected := map[string]cloud.Resource{
+		"api_1": resourcetest.Api("api_1").Prop(p.Name, "chat").Prop(p.Protocol, "WEBSOCKET").Build(),
+		"api_2": resourcetest.Api("api_2").Prop(p.Name, "orders").Prop(p.Protocol, "HTTP").
+			Prop(p.Endpoint, "https://api_2.execute-api.eu-west-1.amazonaws.com").Prop(p.Description, "orders backend").
+			Prop(p.Created, created).Prop(p.Tags, []string{"env=prod", "team=payments"}).Build(),
+	}
+
+	expectedChildren := map[string][]string{
+		"eu-west-1": {"api_1", "api_2"},
+	}
+	expectedAppliedOn := map[string][]string{}
+
+	compareResources(t, g, resources, expected, expectedChildren, expectedAppliedOn)
+}
+
+// An install made before this service existed has no aws.apigatewayv2.sync key,
+// since config defaults are written on first install only. It must still read as
+// off there, the way it does on a fresh install.
 func TestBuildCdnGraph(t *testing.T) {
 	now := time.Now().UTC()
 	distributions := []cloudfronttypes.DistributionSummary{

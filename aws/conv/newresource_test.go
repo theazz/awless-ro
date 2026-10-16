@@ -40,6 +40,7 @@ import (
 
 	awssdk "github.com/aws/aws-sdk-go-v2/aws"
 	acmtypes "github.com/aws/aws-sdk-go-v2/service/acm/types"
+	apigatewayv2types "github.com/aws/aws-sdk-go-v2/service/apigatewayv2/types"
 	autoscalingtypes "github.com/aws/aws-sdk-go-v2/service/autoscaling/types"
 	cloudformationtypes "github.com/aws/aws-sdk-go-v2/service/cloudformation/types"
 	cloudfronttypes "github.com/aws/aws-sdk-go-v2/service/cloudfront/types"
@@ -216,6 +217,11 @@ var sdkPrototypes = map[string][]func() interface{}{
 	// CloudTrail
 	cloud.Trail: {func() interface{} {
 		return cloudtrailtypes.Trail{TrailARN: awssdk.String("arn:aws:cloudtrail:trail/1")}
+	}},
+
+	// API Gateway v2
+	cloud.Api: {func() interface{} {
+		return apigatewayv2types.Api{ApiId: awssdk.String("a1b2c3")}
 	}},
 }
 

@@ -74,6 +74,7 @@ var ColumnsInListing = map[string][]string{
 	cloud.Distribution:        {properties.ID, properties.PublicDNS, properties.Enabled, properties.State, properties.Modified, properties.Aliases, properties.SSLSupportMethod, properties.Origins},
 	cloud.Stack:               {properties.ID, properties.Name, properties.State, properties.Created, properties.Modified},
 	cloud.Trail:               {properties.Name, properties.Bucket, properties.MultiRegion, properties.OrganizationTrail, properties.LogFileValidation},
+	cloud.Api:                 {properties.ID, properties.Name, properties.Protocol, properties.Endpoint, properties.Created},
 }
 
 var DefaultsColumnDefinitions = map[string][]ColumnDefinition{
@@ -510,5 +511,13 @@ var DefaultsColumnDefinitions = map[string][]ColumnDefinition{
 		StringColumnDefinition{Prop: properties.MultiRegion, Friendly: "Multi-region"},
 		StringColumnDefinition{Prop: properties.OrganizationTrail, Friendly: "Organization"},
 		StringColumnDefinition{Prop: properties.LogFileValidation, Friendly: "Log file validation"},
+	},
+	//API Gateway v2
+	cloud.Api: {
+		StringColumnDefinition{Prop: properties.ID},
+		StringColumnDefinition{Prop: properties.Name},
+		StringColumnDefinition{Prop: properties.Protocol},
+		StringColumnDefinition{Prop: properties.Endpoint},
+		TimeColumnDefinition{StringColumnDefinition: StringColumnDefinition{Prop: properties.Created}},
 	},
 }

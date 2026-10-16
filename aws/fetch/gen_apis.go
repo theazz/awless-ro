@@ -34,6 +34,7 @@ package awsfetch
 import (
 	"context"
 	"github.com/aws/aws-sdk-go-v2/service/acm"
+	"github.com/aws/aws-sdk-go-v2/service/apigatewayv2"
 	"github.com/aws/aws-sdk-go-v2/service/autoscaling"
 	"github.com/aws/aws-sdk-go-v2/service/cloudformation"
 	"github.com/aws/aws-sdk-go-v2/service/cloudfront"
@@ -63,6 +64,16 @@ type AcmAPI interface {
 
 type generatedAcmAPI interface {
 	ListCertificates(context.Context, *acm.ListCertificatesInput, ...func(*acm.Options)) (*acm.ListCertificatesOutput, error)
+}
+
+// Apigatewayv2API is every apigatewayv2 operation awless-ro calls.
+type Apigatewayv2API interface {
+	generatedApigatewayv2API
+	manualApigatewayv2API
+}
+
+type generatedApigatewayv2API interface {
+	// no generated fetcher calls apigatewayv2 directly
 }
 
 // AutoscalingAPI is every autoscaling operation awless-ro calls.
@@ -278,6 +289,7 @@ type generatedStsAPI interface {
 
 var (
 	_ AcmAPI            = (*acm.Client)(nil)
+	_ Apigatewayv2API   = (*apigatewayv2.Client)(nil)
 	_ AutoscalingAPI    = (*autoscaling.Client)(nil)
 	_ CloudformationAPI = (*cloudformation.Client)(nil)
 	_ CloudfrontAPI     = (*cloudfront.Client)(nil)

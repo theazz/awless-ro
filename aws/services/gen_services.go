@@ -28,6 +28,8 @@ import (
 	awssdk "github.com/aws/aws-sdk-go-v2/aws"
 	"github.com/aws/aws-sdk-go-v2/service/acm"
 	acmtypes "github.com/aws/aws-sdk-go-v2/service/acm/types"
+	"github.com/aws/aws-sdk-go-v2/service/apigatewayv2"
+	apigatewayv2types "github.com/aws/aws-sdk-go-v2/service/apigatewayv2/types"
 	"github.com/aws/aws-sdk-go-v2/service/autoscaling"
 	autoscalingtypes "github.com/aws/aws-sdk-go-v2/service/autoscaling/types"
 	"github.com/aws/aws-sdk-go-v2/service/cloudformation"
@@ -84,6 +86,7 @@ var ServiceNames = []string{
 	"cdn",
 	"cloudformation",
 	"cloudtrail",
+	"apigatewayv2",
 }
 
 var ResourceTypes = []string{
@@ -138,6 +141,7 @@ var ResourceTypes = []string{
 	"distribution",
 	"stack",
 	"trail",
+	"api",
 }
 
 var ServicePerAPI = map[string]string{
@@ -161,6 +165,7 @@ var ServicePerAPI = map[string]string{
 	"cloudfront":     "cdn",
 	"cloudformation": "cloudformation",
 	"cloudtrail":     "cloudtrail",
+	"apigatewayv2":   "apigatewayv2",
 }
 
 var ServicePerResourceType = map[string]string{
@@ -215,6 +220,7 @@ var ServicePerResourceType = map[string]string{
 	"distribution":        "cdn",
 	"stack":               "cloudformation",
 	"trail":               "cloudtrail",
+	"api":                 "apigatewayv2",
 }
 
 var APIPerResourceType = map[string]string{
@@ -269,6 +275,7 @@ var APIPerResourceType = map[string]string{
 	"distribution":        "cloudfront",
 	"stack":               "cloudformation",
 	"trail":               "cloudtrail",
+	"api":                 "apigatewayv2",
 }
 
 type Infra struct {
@@ -2451,4 +2458,128 @@ func (s *Cloudtrail) FetchByType(ctx context.Context, t string) (cloud.GraphAPI,
 
 func (s *Cloudtrail) IsSyncDisabled() bool {
 	return !getBool(s.config, "aws.cloudtrail.sync", true)
+}
+
+type Apigatewayv2 struct {
+	fetcher         fetch.Fetcher
+	region, profile string
+	config          map[string]interface{}
+	log             *logger.Logger
+	awsfetch.Apigatewayv2API
+}
+
+func NewApigatewayv2(cfg awssdk.Config, profile string, extraConf map[string]interface{}, log *logger.Logger) cloud.Service {
+	region := cfg.Region
+	apigatewayv2API := apigatewayv2.NewFromConfig(cfg)
+
+	fetchConfig := awsfetch.NewConfig(&awsfetch.AWSAPI{
+		Apigatewayv2: apigatewayv2API,
+	})
+	fetchConfig.Extra = extraConf
+	fetchConfig.Log = log
+
+	return &Apigatewayv2{
+		Apigatewayv2API: apigatewayv2API,
+		fetcher:         fetch.NewFetcher(awsfetch.BuildApigatewayv2FetchFuncs(fetchConfig)),
+		config:          extraConf,
+		region:          region,
+		profile:         profile,
+		log:             log,
+	}
+}
+
+func (s *Apigatewayv2) Name() string {
+	return "apigatewayv2"
+}
+
+func (s *Apigatewayv2) Region() string {
+	return s.region
+}
+
+func (s *Apigatewayv2) Profile() string {
+	return s.profile
+}
+
+func (s *Apigatewayv2) ResourceTypes() []string {
+	return []string{
+		"api",
+	}
+}
+
+func (s *Apigatewayv2) Fetch(ctx context.Context) (cloud.GraphAPI, error) {
+	if s.IsSyncDisabled() {
+		return graph.NewGraph(), nil
+	}
+
+	allErrors := new(fetch.Error)
+
+	gph, err := s.fetcher.Fetch(context.WithValue(ctx, "region", s.region))
+	defer s.fetcher.Reset()
+
+	for _, e := range *fetch.WrapError(err) {
+		switch {
+		case e == nil:
+			continue
+		case awsfetch.IsAccessDenied(e):
+			allErrors.Add(cloud.ErrFetchAccessDenied)
+		default:
+			allErrors.Add(e)
+		}
+	}
+
+	if err := gph.AddResource(graph.InitResource(cloud.Region, s.region)); err != nil {
+		return gph, err
+	}
+
+	snap := gph.AsRDFGraphSnaphot()
+
+	errc := make(chan error)
+	var wg sync.WaitGroup
+	if getBool(s.config, "aws.apigatewayv2.api.sync", true) {
+		list, err := s.fetcher.Get("api_objects")
+		if err != nil {
+			return gph, err
+		}
+		objects, ok := list.([]apigatewayv2types.Api)
+		if !ok {
+			return gph, errors.New("cannot cast to '[]apigatewayv2types.Api' type from fetch context")
+		}
+		for _, r := range objects {
+			for _, fn := range addParentsFns["api"] {
+				wg.Add(1)
+				go func(f addParentFn, snap triplestore.RDFGraph, region string, res apigatewayv2types.Api) {
+					defer wg.Done()
+					if err := f(gph, snap, region, res); err != nil {
+						errc <- err
+					}
+				}(fn, snap, s.region, r)
+			}
+		}
+	}
+
+	go func() {
+		wg.Wait()
+		close(errc)
+	}()
+
+	for err := range errc {
+		if err != nil {
+			allErrors.Add(err)
+		}
+	}
+
+	if allErrors.Any() {
+		return gph, allErrors
+	}
+
+	return gph, nil
+}
+
+func (s *Apigatewayv2) FetchByType(ctx context.Context, t string) (cloud.GraphAPI, error) {
+	defer s.fetcher.Reset()
+	return s.fetcher.FetchByType(context.WithValue(ctx, "region", s.region), t)
+}
+
+func (s *Apigatewayv2) IsSyncDisabled() bool {
+	return !getBool(s.config, "aws.apigatewayv2.sync", true)
 }

@@ -10,6 +10,8 @@ import (
 	"time"
 
 	awssdk "github.com/aws/aws-sdk-go-v2/aws"
+	"github.com/aws/aws-sdk-go-v2/service/apigatewayv2"
+	apigatewayv2types "github.com/aws/aws-sdk-go-v2/service/apigatewayv2/types"
 	"github.com/aws/aws-sdk-go-v2/service/ecs"
 	ecstypes "github.com/aws/aws-sdk-go-v2/service/ecs/types"
 	"github.com/aws/aws-sdk-go-v2/service/elasticloadbalancingv2"
@@ -856,4 +858,43 @@ func addManualCdnFetchFuncs(conf *Config, funcs map[string]fetch.Func) {
 func addManualCloudformationFetchFuncs(conf *Config, funcs map[string]fetch.Func) {
 }
 func addManualCloudtrailFetchFuncs(conf *Config, funcs map[string]fetch.Func) {
+}
+
+func addManualApigatewayv2FetchFuncs(conf *Config, funcs map[string]fetch.Func) {
+	funcs["api"] = func(ctx context.Context, cache fetch.Cache) ([]*graph.Resource, interface{}, error) {
+		var objects []apigatewayv2types.Api
+		var resources []*graph.Resource
+
+		if !conf.getBoolDefaultTrue("aws.apigatewayv2.api.sync") && !getBoolFromContext(ctx, "force") {
+			conf.Log.Verbose("sync: *disabled* for resource apigatewayv2[api]")
+			return resources, objects, nil
+		}
+
+		// GetApis pages with NextToken but the SDK has no paginator for it, so the
+		// loop stops on a repeated token the way generated paginators do.
+		input := &apigatewayv2.GetApisInput{}
+		for {
+			out, err := conf.APIs.Apigatewayv2.GetApis(ctx, input)
+			if err != nil {
+				return resources, objects, err
+			}
+
+			for _, api := range out.Items {
+				objects = append(objects, api)
+				res, err := awsconv.NewResource(api)
+				if err != nil {
+					return resources, objects, err
+				}
+				resources = append(resources, res)
+			}
+
+			next := awssdk.ToString(out.NextToken)
+			if next == "" || next == awssdk.ToString(input.NextToken) {
+				break
+			}
+			input.NextToken = out.NextToken
+		}
+
+		return resources, objects, nil
+	}
 }

@@ -6,6 +6,8 @@
 
 - `list trails`: CloudTrail trails, each in its home region only, in a new `cloudtrail`
   service synced by default (`aws.cloudtrail.sync`). (#65)
+- `list apis`: API Gateway v2 HTTP and WebSocket APIs, in a new `apigatewayv2` service
+  that `sync` skips by default (`aws.apigatewayv2.sync`). (#76)
 
 ## v0.5.0
 

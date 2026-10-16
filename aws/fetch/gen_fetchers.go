@@ -1268,3 +1268,10 @@ func BuildCloudtrailFetchFuncs(conf *Config) fetch.Funcs {
 	}
 	return funcs
 }
+
+func BuildApigatewayv2FetchFuncs(conf *Config) fetch.Funcs {
+	funcs := make(map[string]fetch.Func)
+
+	addManualApigatewayv2FetchFuncs(conf, funcs)
+	return funcs
+}

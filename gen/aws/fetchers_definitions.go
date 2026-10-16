@@ -327,4 +327,11 @@ var FetchersDefs = []FetchersDef{
 			{Api: "cloudtrail", ResourceType: cloud.Trail, AWSType: "cloudtrailtypes.Trail", ApiMethod: "DescribeTrails", InputFields: `IncludeShadowTrails: new(false)`, OutputsExtractor: "TrailList"},
 		},
 	},
+	{
+		Name: "apigatewayv2",
+		Api:  []string{"apigatewayv2"},
+		Fetchers: []Fetcher{
+			{Api: "apigatewayv2", ResourceType: cloud.Api, AWSType: "apigatewayv2types.Api", ManualFetcher: true},
+		},
+	},
 }

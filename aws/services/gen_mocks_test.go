@@ -100,6 +100,28 @@ func (m *mockAcm) ListCertificates(_ context.Context, _ *acm.ListCertificatesInp
 	return &acm.ListCertificatesOutput{CertificateSummaryList: m.certificatesummarys}, nil
 }
 
+type mockApigatewayv2 struct {
+	awsfetch.Apigatewayv2API
+	manualApigatewayv2Mock
+}
+
+// cloud.Service, so that a mock can stand in for a whole service in the
+// registry. The graph-building tests drive the fetchers directly, so these are
+// inert on purpose.
+func (m *mockApigatewayv2) Name() string            { return "" }
+func (m *mockApigatewayv2) Region() string          { return "" }
+func (m *mockApigatewayv2) Profile() string         { return "" }
+func (m *mockApigatewayv2) ResourceTypes() []string { return []string{} }
+func (m *mockApigatewayv2) IsSyncDisabled() bool    { return false }
+
+func (m *mockApigatewayv2) Fetch(context.Context) (cloud.GraphAPI, error) {
+	return nil, nil
+}
+
+func (m *mockApigatewayv2) FetchByType(context.Context, string) (cloud.GraphAPI, error) {
+	return nil, nil
+}
+
 type mockAutoscaling struct {
 	awsfetch.AutoscalingAPI
 	manualAutoscalingMock

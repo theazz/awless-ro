@@ -43,6 +43,7 @@ import (
 	"net"
 	"net/url"
 	"reflect"
+	"sort"
 	"strconv"
 	"strings"
 	"sync"
@@ -51,6 +52,7 @@ import (
 
 	awssdk "github.com/aws/aws-sdk-go-v2/aws"
 	acmtypes "github.com/aws/aws-sdk-go-v2/service/acm/types"
+	apigatewayv2types "github.com/aws/aws-sdk-go-v2/service/apigatewayv2/types"
 	autoscalingtypes "github.com/aws/aws-sdk-go-v2/service/autoscaling/types"
 	cloudformationtypes "github.com/aws/aws-sdk-go-v2/service/cloudformation/types"
 	cloudfronttypes "github.com/aws/aws-sdk-go-v2/service/cloudfront/types"
@@ -246,6 +248,9 @@ func InitResource(source interface{}) (*graph.Resource, error) {
 	// CloudTrail
 	case cloudtrailtypes.Trail:
 		res = graph.InitResource(cloud.Trail, awssdk.ToString(ss.TrailARN))
+	// API Gateway v2
+	case apigatewayv2types.Api:
+		res = graph.InitResource(cloud.Api, awssdk.ToString(ss.ApiId))
 	default:
 		return nil, fmt.Errorf("unknown type of resource %T", source)
 	}
@@ -718,6 +723,11 @@ var extractTagsFn = func(i interface{}) (interface{}, error) {
 		for _, t := range tags {
 			out = append(out, fmt.Sprintf("%s=%s", awssdk.ToString(t.Key), awssdk.ToString(t.Value)))
 		}
+	case map[string]string:
+		for k, v := range tags {
+			out = append(out, fmt.Sprintf("%s=%s", k, v))
+		}
+		sort.Strings(out)
 	default:
 		return nil, fmt.Errorf("extract tags: not a tag slice, but a %T", i)
 	}
