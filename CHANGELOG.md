@@ -7,6 +7,12 @@
 - `list trails`: CloudTrail trails, each in its home region only, in a new `cloudtrail`
   service synced by default (`aws.cloudtrail.sync`). (#65)
 
+### Fixed
+
+- A sync key missing from an older config now reads as its default. Defaults were
+  only written on first install, so on an install older than a key, a service that
+  is off by default (such as `aws.monitoring.sync`) synced anyway. (#79)
+
 ## v0.5.0
 
 **Breaking:** `switch` with `-p` or `-r` now exits 1 without saving anything. Pass the

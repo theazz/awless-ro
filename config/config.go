@@ -96,8 +96,28 @@ func LoadConfig() error {
 		}
 		return
 	})
+	if err != nil {
+		return err
+	}
 
-	return err
+	fillMissingSyncDefaults()
+	return nil
+}
+
+// fillMissingSyncDefaults gives every sync key the stored config lacks its
+// declared default, in memory only. Defaults are written to the database on first
+// install, so a sync key added in a later release is missing from every older
+// install, and a missing sync key reads as on: a service that is off by default
+// would sync there anyway.
+func fillMissingSyncDefaults() {
+	for key, def := range configDefinitions {
+		if _, ok := Config[key]; ok || !strings.HasSuffix(key, ".sync") || def.parseParamFn == nil {
+			continue
+		}
+		if v, err := def.parseParamFn(def.defaultValue); err == nil {
+			Config[key] = v
+		}
+	}
 }
 
 func DisplayConfig() string {

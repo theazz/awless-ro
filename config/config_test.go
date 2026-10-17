@@ -170,3 +170,44 @@ func TestDefaults(t *testing.T) {
 		}
 	})
 }
+
+// A sync key added in a later release is missing from a config written by an
+// older one. It must read as its declared default, not as on.
+func TestMissingSyncKeyReadsAsItsDefault(t *testing.T) {
+	f, e := os.MkdirTemp(".", "test")
+	if e != nil {
+		t.Fatal(e)
+	}
+	defer os.RemoveAll(f)
+	os.Setenv("__AWLESS_HOME", f)
+
+	saved := configDefinitions
+	defer func() { configDefinitions = saved }()
+
+	configDefinitions = map[string]*Definition{
+		"aws.old.sync": {defaultValue: "true", parseParamFn: parseBool},
+	}
+	if err := InitConfig(map[string]string{}); err != nil {
+		t.Fatal(err)
+	}
+
+	configDefinitions["aws.offbydefault.sync"] = &Definition{defaultValue: "false", parseParamFn: parseBool}
+	configDefinitions["aws.onbydefault.sync"] = &Definition{defaultValue: "true", parseParamFn: parseBool}
+	if err := LoadConfig(); err != nil {
+		t.Fatal(err)
+	}
+	expect := map[string]interface{}{"aws.old.sync": true, "aws.offbydefault.sync": false, "aws.onbydefault.sync": true}
+	if got, want := Config, expect; !reflect.DeepEqual(got, want) {
+		t.Fatalf("got %#v, want %#v", got, want)
+	}
+
+	if err := Set("aws.offbydefault.sync", "true"); err != nil {
+		t.Fatal(err)
+	}
+	if err := LoadConfig(); err != nil {
+		t.Fatal(err)
+	}
+	if got, want := Config["aws.offbydefault.sync"], true; got != want {
+		t.Fatalf("set value: got %#v, want %#v", got, want)
+	}
+}
