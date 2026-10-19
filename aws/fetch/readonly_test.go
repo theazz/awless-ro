@@ -117,15 +117,31 @@ func TestSecretReadsCatchesDeniedOperations(t *testing.T) {
 		DescribeParameters()
 		GetParametersByPath()
 	}
+	type kmsAPI interface {
+		ListKeys()
+		GetPublicKey()
+	}
+	type dynamodbAPI interface {
+		DescribeTable()
+		GetItem()
+	}
 	type fakeAPIs struct {
 		Secretsmanager secretsAPI
 		Ssm            ssmAPI
+		Kms            kmsAPI
+		Dynamodb       dynamodbAPI
 	}
 	found := secretReads(reflect.TypeOf(fakeAPIs{}))
-	if len(found) != 2 {
-		t.Fatalf("want GetSecretValue and GetParametersByPath reported, got %d: %q", len(found), found)
+	reports := []string{
+		"AWSAPI.Secretsmanager can call GetSecretValue",
+		"AWSAPI.Ssm can call GetParametersByPath",
+		"AWSAPI.Kms can call GetPublicKey",
+		"AWSAPI.Dynamodb can call GetItem",
 	}
-	for i, want := range []string{"AWSAPI.Secretsmanager can call GetSecretValue", "AWSAPI.Ssm can call GetParametersByPath"} {
+	if len(found) != len(reports) {
+		t.Fatalf("want %d denied operations reported, got %d: %q", len(reports), len(found), found)
+	}
+	for i, want := range reports {
 		if !strings.HasPrefix(found[i], want) {
 			t.Errorf("report %d = %q, want it to start with %q", i, found[i], want)
 		}
@@ -148,6 +164,27 @@ func secretReads(apis reflect.Type) []string {
 		"GetFederationToken":        "STS: issues temporary credentials",
 		"GetRoleCredentials":        "SSO: issues role credentials",
 		"GetCredentialsForIdentity": "Cognito: issues credentials",
+
+		// Listed whether or not the name is read-prefixed: TestEveryAWSOperationIsARead
+		// rejects Decrypt or Scan by name alone, and its message invites adding a prefix.
+		"Decrypt":                             "KMS: returns plaintext; use ListKeys / DescribeKey",
+		"ReEncrypt":                           "KMS: decrypts and re-encrypts data",
+		"GenerateDataKey":                     "KMS: returns a plaintext data key",
+		"GenerateDataKeyWithoutPlaintext":     "KMS: returns an encrypted data key",
+		"GenerateDataKeyPair":                 "KMS: returns a plaintext private key",
+		"GenerateDataKeyPairWithoutPlaintext": "KMS: returns an encrypted private key",
+		"GenerateRandom":                      "KMS: returns random key material",
+		"DeriveSharedSecret":                  "KMS: returns a shared secret",
+		"GetPublicKey":                        "KMS: returns the public key material",
+		"GetParametersForImport":              "KMS: returns a wrapping key and import token",
+		"GetItem":                             "DynamoDB: returns item data; use DescribeTable",
+		"BatchGetItem":                        "DynamoDB: returns item data",
+		"TransactGetItems":                    "DynamoDB: returns item data",
+		"Query":                               "DynamoDB: returns item data",
+		"Scan":                                "DynamoDB: returns item data",
+		"ExecuteStatement":                    "DynamoDB: runs PartiQL, returns item data",
+		"BatchExecuteStatement":               "DynamoDB: runs PartiQL, returns item data",
+		"ExecuteTransaction":                  "DynamoDB: runs PartiQL, returns item data",
 	}
 
 	var found []string
