@@ -1,35 +1,31 @@
 # Changelog
 
-## Unreleased
+## v0.6.0
 
 ### Added
 
-- `list trails`: CloudTrail trails, each in its home region only, in a new `cloudtrail`
-  service synced by default (`aws.cloudtrail.sync`). (#65)
-- `list filesystems`: EFS file systems, in a new `efs` service synced by default
-  (`aws.efs.sync`). (#70)
-- `list secrets`: Secrets Manager secrets, metadata only (never their values), in a new
-  `secretsmanager` service that is not synced by default (`aws.secretsmanager.sync`). (#74)
-- `list parameters`: SSM Parameter Store parameters, metadata only (never values), in a
-  new `ssm` service off by default in `sync` (`aws.ssm.sync`). (#75)
-- `list tables`: DynamoDB tables, in a new `dynamodb` service synced by default
-  (`aws.dynamodb.sync`). (#71)
-- `list eksclusters`: EKS clusters, in a new `eks` service synced by default
-  (`aws.eks.sync`). (#72)
-- `list apis`: API Gateway v2 HTTP and WebSocket APIs, in a new `apigatewayv2` service
-  synced by default (`aws.apigatewayv2.sync`). (#76)
-- `list kmskeys`: KMS keys with alias, state, manager, usage, spec and creation time, off by default in `sync` (`aws.kms.sync`). (#73)
-- `list filesystems` shows each file system's mount target count; `--columns zone` shows
-  the zone of a One Zone file system. (#84)
+- `list apis`: API Gateway v2 HTTP and WebSocket APIs. (#76, thanks @babyhuey)
+- `list trails`: CloudTrail trails, each in its home region only. (#65, thanks @babyhuey)
+- `list tables`: DynamoDB tables. (#71, thanks @babyhuey)
+- `list filesystems`: EFS file systems. (#70, thanks @babyhuey)
+- `list filesystems` shows the mount target count; `--columns zone` shows the zone of a
+  One Zone file system. (#84, thanks @babyhuey)
+- `list eksclusters`: EKS clusters. (#72, thanks @babyhuey)
+- `list kmskeys`: KMS keys, off by default in `sync` (`aws.kms.sync`). (#73, thanks @babyhuey)
+- `list secrets`: Secrets Manager secrets, metadata only, off by default in `sync`
+  (`aws.secretsmanager.sync`). (#74, thanks @babyhuey)
+- `list parameters`: SSM Parameter Store parameters, metadata only, off by default in
+  `sync` (`aws.ssm.sync`). (#75, thanks @babyhuey)
 
 ### Changed
 
-- `list loggroups` shows `never` for a group with no retention set, as the console does. (#83)
+- `list loggroups` shows retention `never` instead of an empty cell for a group that keeps
+  its events forever; JSON is unchanged. (#83, thanks @babyhuey)
 
 ### Fixed
 
-- A `*.sync` setting missing from the config (e.g. after `config unset`) now uses its
-  documented default instead of on: off for monitoring, S3 objects and DNS records. (#79)
+- A `*.sync` setting missing from the config (e.g. after `config unset`) takes its
+  documented default instead of on. (#79, thanks @babyhuey)
 
 ## v0.5.0
 
