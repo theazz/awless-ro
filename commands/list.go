@@ -67,7 +67,7 @@ func init() {
 
 	listCmd.PersistentFlags().StringVar(&listingFormat, "format", "table", "Output format: table, csv, tsv, json, porcelain")
 	listCmd.RegisterFlagCompletionFunc("format", fixedCompletion("table", "csv", "tsv", "json", "porcelain"))
-	listCmd.PersistentFlags().StringSliceVar(&listingFiltersFlag, "filter", []string{}, "Filter resources by column, case insensitive: key=value matches a substring, key==value matches the whole value. Ex: --filter type=t2.micro --filter state==running")
+	listCmd.PersistentFlags().StringSliceVar(&listingFiltersFlag, "filter", []string{}, "Filter resources by any property, displayed or not, case insensitive: key=value matches a substring, key==value matches the whole value. Ex: --filter type=t2.micro --filter state==running")
 	listCmd.PersistentFlags().StringSliceVar(&listingTagFiltersFlag, "tag", []string{}, "Filter EC2 resources given tags (case sensitive!). Ex: --tag Env=Production")
 	listCmd.PersistentFlags().StringSliceVar(&listingTagKeyFiltersFlag, "tag-key", []string{}, "Filter EC2 resources given a tag key only (case sensitive!). Ex: --tag-key Env")
 	listCmd.PersistentFlags().StringSliceVar(&listingTagValueFiltersFlag, "tag-value", []string{}, "Filter EC2 resources given a tag value only (case sensitive!). Ex: --tag-value Staging")

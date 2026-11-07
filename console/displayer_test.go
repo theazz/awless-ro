@@ -1010,3 +1010,94 @@ func TestNoHeadersDisplay(t *testing.T) {
 		t.Fatalf("got \n%s\n\nwant\n\n%s\n", got, want)
 	}
 }
+
+// --filter takes the same property names as --columns, whether or not the
+// property is one of the columns being printed.
+func TestFilterOnPropertyThatIsNotAColumn(t *testing.T) {
+	g := graph.NewGraph()
+	g.AddResource(
+		resourcetest.Instance("inst_1").Prop(p.Lifecycle, "spot").Prop(p.Architecture, "x86_64").
+			Prop(p.AvailabilityZone, "eu-west-1a").Prop(p.Launched, time.Date(2017, 1, 10, 16, 47, 18, 0, time.UTC)).Build(),
+		resourcetest.Instance("inst_2").Prop(p.Lifecycle, "scheduled").Prop(p.Architecture, "x86_64_mac").
+			Prop(p.AvailabilityZone, "eu-west-1b").Prop(p.Launched, time.Date(2020, 3, 1, 9, 0, 0, 0, time.UTC)).Build(),
+		resourcetest.Instance("inst_3").Prop(p.Name, "on-demand").Prop(p.Architecture, "arm64").Build(),
+	)
+
+	ids := func(t *testing.T, columns []string, filter string) ([]string, error) {
+		t.Helper()
+		opts := []optsFn{WithRdfType("instance"), WithFormat("tsv"), WithNoHeaders(true), WithFilters([]string{filter})}
+		if columns != nil {
+			opts = append(opts, WithColumns(columns))
+		}
+		displayer, err := BuildOptions(opts...).SetSource(g).Build()
+		if err != nil {
+			return nil, err
+		}
+		var w bytes.Buffer
+		if err := displayer.Print(&w); err != nil {
+			t.Fatal(err)
+		}
+		var got []string
+		for _, line := range strings.Split(w.String(), "\n") {
+			if line != "" {
+				got = append(got, strings.Split(line, "\t")[0])
+			}
+		}
+		sort.Strings(got)
+		return got, nil
+	}
+
+	tcases := []struct {
+		name    string
+		columns []string
+		filter  string
+		want    []string
+	}{
+		{name: "hidden property, substring", filter: "lifecycle=spot", want: []string{"inst_1"}},
+		{name: "hidden property ignores case", filter: "LifeCycle=SPOT", want: []string{"inst_1"}},
+		{name: "hidden property, exact", filter: "architecture==x86_64", want: []string{"inst_1"}},
+		{name: "hidden property, substring still matches the longer value", filter: "architecture=x86_64", want: []string{"inst_1", "inst_2"}},
+		{name: "hidden property with only the id printed", columns: []string{"id"}, filter: "lifecycle=spot", want: []string{"inst_1"}},
+		{name: "displayed column is unchanged", filter: "name=on-demand", want: []string{"inst_3"}},
+		{name: "displayed column, exact", filter: "name==on-demand", want: []string{"inst_3"}},
+		{name: "property requested with --columns gives the same result", columns: []string{"id", "lifecycle"}, filter: "lifecycle=spot", want: []string{"inst_1"}},
+		{name: "property requested with --columns, exact", columns: []string{"id", "architecture"}, filter: "architecture==x86_64", want: []string{"inst_1"}},
+		// A column title names the type's property whether or not the column is
+		// printed: zone is AvailabilityZone, not the global Zone property.
+		{name: "column title, default columns", filter: "zone=eu-west-1a", want: []string{"inst_1"}},
+		{name: "column title with only the id printed", columns: []string{"id"}, filter: "zone=eu-west-1a", want: []string{"inst_1"}},
+		{name: "column title of a time column, default columns", filter: "uptime=2017", want: []string{"inst_1"}},
+		{name: "column title of a time column with only the id printed", columns: []string{"id"}, filter: "uptime=2017", want: []string{"inst_1"}},
+	}
+	for _, tcase := range tcases {
+		t.Run(tcase.name, func(t *testing.T) {
+			got, err := ids(t, tcase.columns, tcase.filter)
+			if err != nil {
+				t.Fatalf("--filter %s: got error %q, want %v", tcase.filter, err, tcase.want)
+			}
+			if !reflect.DeepEqual(got, tcase.want) {
+				t.Errorf("--filter %s: got %v, want %v", tcase.filter, got, tcase.want)
+			}
+		})
+	}
+
+	// A name that is neither a displayed column nor a property of any resource is
+	// still refused, and the message says how far the accepted names reach.
+	t.Run("unknown key is refused", func(t *testing.T) {
+		for _, f := range []string{"nosuchkey=x", "nosuchkey==x"} {
+			_, err := ids(t, nil, f)
+			if err == nil {
+				t.Fatalf("%s: expected an error", f)
+			}
+			for _, want := range []string{
+				"Invalid filter key 'Nosuchkey'",
+				"Expecting any of: ID, AvailabilityZone, Name, State, Type, PublicIP, PrivateIP, Launched, KeyPair, or any other known property name",
+				"case insensitive",
+			} {
+				if !strings.Contains(err.Error(), want) {
+					t.Errorf("%s: %q does not contain %q", f, err.Error(), want)
+				}
+			}
+		}
+	})
+}

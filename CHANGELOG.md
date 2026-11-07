@@ -2,6 +2,10 @@
 
 ## Unreleased
 
+### Added
+
+- `list --filter` accepts any property a resource carries, not only the printed columns. (#90)
+
 ### Changed
 
 - `list kmskeys` warns once, naming the keys whose `DescribeKey` was denied. (#92)

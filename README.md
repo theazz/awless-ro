@@ -304,12 +304,13 @@ awless-ro list volumes --tag-key Dept --format tsv
 awless-ro list users --format json
 ```
 
-`--filter` matches any column, case-insensitively, in one of two forms:
+`--filter` matches any property of the resource, displayed or not, case-insensitively, in
+one of two forms:
 
 | Form | Matches | Example |
 |---|---|---|
-| `key=value` | any column containing the value | `--filter type=t3` finds `t3.micro` and `t3.large` |
-| `key==value` | the whole column value | `--filter state==Active` finds `Active` and not `Inactive` |
+| `key=value` | any property containing the value | `--filter type=t3` finds `t3.micro` and `t3.large` |
+| `key==value` | the whole property value | `--filter state==Active` finds `Active` and not `Inactive` |
 
 The substring form cannot exclude a longer value that contains the one you asked
 for, which is what the exact form is for:
