@@ -442,7 +442,9 @@ otherwise `ec2-user`, `ubuntu` and the other usual users are tried in turn, each
 announced on stderr (`trying user ubuntu...`), and a hint to give the user with
 `USER@` is printed if none is accepted. Each wrong user is a failed login in the host's
 auth log, so once you know the user, pass it as `USER@`, especially on hosts behind
-fail2ban. `--print-cli` / `--print-config` say which user they guessed and never open
+fail2ban. `--no-guess-user` turns the fallback off: only a `USER@` or an image-derived
+user is tried, and without one the command fails before opening a connection.
+`--print-cli` / `--print-config` say which user they guessed and never open
 a connection.
 
 **Aliases.** Reference a resource by its `Name` tag anywhere an id is accepted.

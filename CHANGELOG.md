@@ -5,6 +5,8 @@
 ### Added
 
 - `list --filter` accepts any property a resource carries, not only the printed columns. (#90)
+- `ssh --no-guess-user` tries only the user given as `USER@` or derived from the image,
+  instead of falling back to the default login users. (#51)
 
 ### Changed
 

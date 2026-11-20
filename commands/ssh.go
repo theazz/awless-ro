@@ -46,6 +46,7 @@ var printSSHConfigFlag bool
 var printSSHCLIFlag bool
 var privateIPFlag bool
 var disableStrictHostKeyCheckingFlag bool
+var noGuessUserFlag bool
 
 func init() {
 	RootCmd.AddCommand(sshCmd)
@@ -57,6 +58,7 @@ func init() {
 	sshCmd.Flags().BoolVar(&printSSHCLIFlag, "print-cli", false, "Print the CLI one-liner to connect with SSH. (/usr/bin/ssh user@ip -i ...)")
 	sshCmd.Flags().BoolVar(&privateIPFlag, "private", false, "Use private ip to connect to host")
 	sshCmd.Flags().BoolVar(&disableStrictHostKeyCheckingFlag, "disable-strict-host-keychecking", false, "Disable the remote host key check from ~/.ssh/known_hosts or ~/.awless/known_hosts file")
+	sshCmd.Flags().BoolVar(&noGuessUserFlag, "no-guess-user", false, "Do not try the default login users one after another; use only USER@ or the user the image implies, and fail otherwise")
 }
 
 var defaultAMIUsers = []string{"ec2-user", "ubuntu", "centos", "core", "bitnami", "admin", "root"}
@@ -82,6 +84,7 @@ var sshCmd = &cobra.Command{
   awless-ro ssh db-private --through my-bastion --private  # reach the bastion over its private IP too
   awless-ro ssh db-private --through my-bastion --local    # same, from the synced graph, no AWS call
   awless-ro -v ssh web-1                         # show which key was found and why
+  awless-ro ssh web-1 --no-guess-user             # do not try the default login users in turn
 
   awless-ro ssh web-1 --print-cli                # print out the full terminal command to connect to instance
   awless-ro ssh web-1 --print-config             # print out the full SSH config (i.e: ~/.ssh/config) to connect to instance
@@ -102,6 +105,9 @@ type sshOptions struct {
 	identity, through                                      string
 	port, throughPort                                      int
 	private, noStrictHostKey, printCLI, printConfig, local bool
+	// noGuessUser refuses the default-user attempts: only a user given as USER@
+	// or derived from the image may be tried.
+	noGuessUser bool
 }
 
 func sshOptionsFromFlags() sshOptions {
@@ -115,6 +121,7 @@ func sshOptionsFromFlags() sshOptions {
 		printCLI:        printSSHCLIFlag,
 		printConfig:     printSSHConfigFlag,
 		local:           localGlobalFlag,
+		noGuessUser:     noGuessUserFlag,
 	}
 }
 
@@ -455,15 +462,45 @@ func sshKeyFolders() []string {
 func resolveTargets(opts sshOptions, g cloud.GraphAPI, arg string) (first, dest *sshTarget, err error) {
 	if opts.through == "" {
 		first, err = resolveTarget(g, arg, opts.identity)
-		return first, nil, err
+	} else if first, err = resolveTarget(g, opts.through, opts.identity); err == nil {
+		dest, err = resolveTarget(g, arg, opts.identity)
 	}
-	if first, err = resolveTarget(g, opts.through, opts.identity); err != nil {
+	if err != nil || !opts.noGuessUser {
+		return first, dest, err
+	}
+	if err := restrictToKnownUser(first, noGuessHint(opts, arg, true)); err != nil {
 		return nil, nil, err
 	}
-	if dest, err = resolveTarget(g, arg, opts.identity); err != nil {
-		return nil, nil, err
+	if dest != nil {
+		if err := restrictToKnownUser(dest, noGuessHint(opts, arg, false)); err != nil {
+			return nil, nil, err
+		}
 	}
 	return first, dest, nil
+}
+
+// restrictToKnownUser enforces --no-guess-user on a resolved hop: only the explicit or
+// image-derived user may be tried. Without one there is nothing safe to try, so it
+// fails before a connection is opened and names the users that were skipped.
+func restrictToKnownUser(t *sshTarget, hint string) error {
+	if !t.userKnown {
+		return fmt.Errorf("cannot tell the login user of %s from its image and guessing is disabled (--no-guess-user); give the user explicitly: %s (candidates: %s)", t.name, hint, strings.Join(t.users, ", "))
+	}
+	t.users = t.users[:1]
+	return nil
+}
+
+// noGuessHint is the command that names a hop's user explicitly. through says
+// whether the hop being named is the one passed to --through.
+func noGuessHint(opts sshOptions, arg string, through bool) string {
+	switch {
+	case opts.through == "":
+		return "awless-ro ssh USER@" + arg
+	case through:
+		return fmt.Sprintf("awless-ro ssh %s --through USER@%s", arg, opts.through)
+	default:
+		return fmt.Sprintf("awless-ro ssh USER@%s --through %s", arg, opts.through)
+	}
 }
 
 // plannedKeyPath finds the target's key file without reading it, warning when it is

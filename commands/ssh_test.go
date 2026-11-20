@@ -80,6 +80,9 @@ func TestSSHCommandIsEnabled(t *testing.T) {
 	if sshCmd.RunE == nil {
 		t.Error("ssh has no RunE")
 	}
+	if f := sshCmd.Flags().Lookup("no-guess-user"); f == nil || f.DefValue != "false" {
+		t.Errorf("--no-guess-user flag = %v, want a boolean defaulting to false", f)
+	}
 }
 
 func TestParseUserHost(t *testing.T) {
@@ -240,6 +243,50 @@ func TestLoginUsers(t *testing.T) {
 	users[0] = "changed"
 	if defaultAMIUsers[0] != "ec2-user" {
 		t.Fatal("loginUsers returned the defaultAMIUsers slice itself")
+	}
+}
+
+// --no-guess-user: only the explicit or image-derived user may be tried, and
+// without one the command fails before it opens a connection.
+func TestOnlyKnownUser(t *testing.T) {
+	guessed := &sshTarget{name: "web", users: append([]string(nil), defaultAMIUsers...)}
+	err := restrictToKnownUser(guessed, "awless-ro ssh USER@web")
+	want := "cannot tell the login user of web from its image and guessing is disabled (--no-guess-user); give the user explicitly: awless-ro ssh USER@web (candidates: ec2-user, ubuntu, centos, core, bitnami, admin, root)"
+	if err == nil || err.Error() != want {
+		t.Fatalf("got %v, want %q", err, want)
+	}
+
+	known := &sshTarget{name: "web", users: []string{"ubuntu", "ec2-user"}, userKnown: true}
+	if err := restrictToKnownUser(known, "unused"); err != nil {
+		t.Fatal(err)
+	}
+	if !reflect.DeepEqual(known.users, []string{"ubuntu"}) {
+		t.Errorf("users %v, want only the known one", known.users)
+	}
+}
+
+func TestNoGuessUserHintNamesTheThroughHop(t *testing.T) {
+	g := sshGraph(t,
+		resource(cloud.Instance, "i-bastion", p.Name, "bastion", p.PublicIP, "198.51.100.10", p.State, "running"),
+		resource(cloud.Instance, "i-db", p.Name, "db", p.PrivateIP, "192.0.2.20", p.State, "running"),
+	)
+	_, _, err := resolveTargets(sshOptions{through: "bastion", noGuessUser: true}, g, "db")
+	want := "cannot tell the login user of bastion from its image and guessing is disabled (--no-guess-user); give the user explicitly: awless-ro ssh db --through USER@bastion (candidates: ec2-user, ubuntu, centos, core, bitnami, admin, root)"
+	if err == nil || err.Error() != want {
+		t.Fatalf("got %v, want %q", err, want)
+	}
+}
+
+// Printing must not turn a refused guess into a printed one.
+func TestPrintNoGuessUserDoesNotPrintAGuess(t *testing.T) {
+	g := sshGraph(t, resource(cloud.Instance, "i-web", p.Name, "web", p.PublicIP, "198.51.100.10", p.State, "running", p.Image, "ami-absent"))
+	var out bytes.Buffer
+	err := printSSH(&out, sshOptions{printCLI: true, noGuessUser: true}, g, "web")
+	if err == nil || !strings.Contains(err.Error(), "guessing is disabled (--no-guess-user)") {
+		t.Fatalf("got %v, want the no-guess-user error", err)
+	}
+	if out.Len() != 0 {
+		t.Errorf("printed a guessed user: %q", out.String())
 	}
 }
 
@@ -870,6 +917,57 @@ func TestPrintCLIStillNeverDialsWithDiscovery(t *testing.T) {
 	time.Sleep(100 * time.Millisecond)
 	if n := srv.Conns(); n != before {
 		t.Errorf("printing opened %d connections, want 0", n-before)
+	}
+}
+
+// --no-guess-user fails before dialing when the image names no user: a host
+// behind fail2ban sees no failed attempt.
+func TestDialSSHNoGuessUserRefusesUnknownUser(t *testing.T) {
+	captureLog(t)
+	_, sshDir := isolateKeyEnv(t)
+	pub, recorded := writeDiscoverableKey(t, filepath.Join(sshDir, "laptop-key"))
+	srv := sshtest.Start(t, "admin", pub)
+	seedKnownHosts(t, srv)
+	g := sshGraph(t,
+		resource(cloud.Instance, "i-web", p.Name, "web", p.PublicIP, "127.0.0.1", p.State, "running", p.KeyPair, "aws-pair"),
+		resource(cloud.Keypair, "aws-pair", p.Fingerprint, recorded),
+	)
+	defer setSynced(func() (cloud.GraphAPI, error) { return sshGraph(t), nil })()
+
+	_, err := dialSSH(sshOptions{local: true, port: srv.Port, throughPort: 22, noGuessUser: true}, g, "web", failingIP(t))
+	if err == nil || !strings.Contains(err.Error(), "guessing is disabled (--no-guess-user)") {
+		t.Fatalf("got %v, want the no-guess-user error", err)
+	}
+	if n := srv.Conns(); n != 0 {
+		t.Errorf("%d connections, want 0", n)
+	}
+}
+
+// With --no-guess-user the image-derived user is the only one tried: a default
+// user the host would accept is never attempted.
+func TestDialSSHNoGuessUserUsesOnlyTheImageUser(t *testing.T) {
+	captureLog(t)
+	_, sshDir := isolateKeyEnv(t)
+	pub, recorded := writeDiscoverableKey(t, filepath.Join(sshDir, "laptop-key"))
+	srv := sshtest.Start(t, "ec2-user", pub)
+	seedKnownHosts(t, srv)
+	g := sshGraph(t,
+		resource(cloud.Instance, "i-web", p.Name, "web", p.PublicIP, "127.0.0.1", p.State, "running", p.KeyPair, "aws-pair", p.Image, "ami-ubuntu"),
+		resource(cloud.Image, "ami-ubuntu", p.Name, "ubuntu/images/hvm-ssd-gp3/ubuntu-noble-24.04-amd64-server-20240101"),
+		resource(cloud.Keypair, "aws-pair", p.Fingerprint, recorded),
+	)
+	defer setSynced(func() (cloud.GraphAPI, error) { return sshGraph(t), nil })()
+
+	_, err := dialSSH(sshOptions{local: true, port: srv.Port, throughPort: 22, noGuessUser: true}, g, "web", failingIP(t))
+	var authErr *ssh.AuthError
+	if !errors.As(err, &authErr) {
+		t.Fatalf("got %v, want an authentication failure for the image user alone", err)
+	}
+	if !reflect.DeepEqual(authErr.Users, []string{"ubuntu"}) {
+		t.Errorf("tried %v, want only [ubuntu]", authErr.Users)
+	}
+	if n := srv.Conns(); n != 1 {
+		t.Errorf("%d connections, want 1", n)
 	}
 }
 

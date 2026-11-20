@@ -644,6 +644,24 @@ func TestSSHDiscoversKeyAndReportsUserAttempts(t *testing.T) {
 	if n := srv.Conns(); n != before {
 		t.Errorf("--print-cli opened %d connections, want 0", n-before)
 	}
+
+	// --no-guess-user does not fall back to the defaults: with no image to name
+	// the user it exits non-zero without opening a connection.
+	before = srv.Conns()
+	stdout, stderr, exit = runLocal(t, bin, home, "ssh", "web", "--local", "--no-guess-user", "--port", port)
+	if exit != 1 {
+		t.Errorf("--no-guess-user exit = %d, want 1. stderr:\n%s", exit, stderr)
+	}
+	if stdout != "" {
+		t.Errorf("--no-guess-user stdout should be empty, got:\n%s", stdout)
+	}
+	if !strings.Contains(stderr, "guessing is disabled (--no-guess-user)") || !strings.Contains(stderr, "awless-ro ssh USER@web") {
+		t.Errorf("--no-guess-user hint is missing from stderr:\n%s", stderr)
+	}
+	time.Sleep(100 * time.Millisecond)
+	if n := srv.Conns(); n != before {
+		t.Errorf("--no-guess-user opened %d connections, want 0", n-before)
+	}
 }
 
 // assertStderrOrder fails unless each line appears in stderr after the one before.
