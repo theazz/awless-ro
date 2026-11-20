@@ -165,6 +165,9 @@ func TestTransformFunctions(t *testing.T) {
 					{GroupId: awssdk.String("group_1")},
 					{GroupId: awssdk.String("group_2")},
 				},
+				PrefixListIds: []ec2types.PrefixListId{
+					{PrefixListId: awssdk.String("pl-1")},
+				},
 			},
 		}
 
@@ -200,7 +203,7 @@ func TestTransformFunctions(t *testing.T) {
 				PortRange: graph.PortRange{FromPort: int64(0), ToPort: int64(65535), Any: false},
 				Protocol:  "tcp",
 				Sources: []string{
-					"group_1", "group_2",
+					"group_1", "group_2", "pl-1",
 				},
 			},
 		}

@@ -88,8 +88,9 @@ awless-ro list accesskeys --sort created
 awless-ro list elasticips
 ```
 
-**"What is exposed?"** Every security group with the ports it opens and what it is
-attached to; buckets readable by anyone, or by anyone with an AWS account.
+**"What is exposed?"** Every security group with the ports it opens, who can reach
+them, and what it is attached to; buckets readable by anyone, or by anyone with an
+AWS account.
 
 ```sh
 awless-ro inspect -i port_scanner
@@ -373,7 +374,7 @@ awless-ro search images --owner 123456789012 --name 'my-base-*'
 **`inspect` and `tail`.**
 
 ```sh
-awless-ro inspect -i port_scanner     # security groups opening ports, and to what
+awless-ro inspect -i port_scanner     # security groups, their open ports and who can reach them
 awless-ro inspect -i open_buckets
 awless-ro inspect -i bucket_sizer
 awless-ro tail stack-events my-stack --follow

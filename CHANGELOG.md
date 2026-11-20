@@ -9,6 +9,9 @@
 ### Changed
 
 - `list kmskeys` warns once, naming the keys whose `DescribeKey` was denied. (#92)
+- `inspect -i port_scanner` names each security group, prints every rule's sources
+  (IPv4/IPv6 CIDRs, security groups, prefix lists), marks the rules open to the
+  internet, and orders the output the same way on every run. (#15)
 
 ### Fixed
 
