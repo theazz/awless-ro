@@ -66,6 +66,7 @@ import (
 	ssmtypes "github.com/aws/aws-sdk-go-v2/service/ssm/types"
 
 	"github.com/theazz/awless-ro/cloud"
+	"github.com/theazz/awless-ro/cloud/properties"
 )
 
 // sdkPrototypes maps each cloud resource type to the AWS SDK shapes the fetchers
@@ -578,6 +579,21 @@ func TestMappedPropertiesWithoutTransform(t *testing.T) {
 		if !found[key] {
 			t.Errorf("%s is listed as inert but now has a transform; remove it from the expected list", key)
 		}
+	}
+}
+
+// TestInstancePlatformComesFromPlatformDetails pins the OS column's source: the
+// value is on the DescribeInstances response, not guessed from the AMI name.
+func TestInstancePlatformComesFromPlatformDetails(t *testing.T) {
+	res, err := NewResource(ec2types.Instance{
+		InstanceId:      awssdk.String("i-1234"),
+		PlatformDetails: awssdk.String("Linux/UNIX"),
+	})
+	if err != nil {
+		t.Fatal(err)
+	}
+	if got := res.Properties()[properties.Platform]; got != "Linux/UNIX" {
+		t.Errorf("Platform = %v, want Linux/UNIX", got)
 	}
 }
 

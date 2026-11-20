@@ -173,6 +173,7 @@ const (
 	PendingTasksCount                 = "PendingTasksCount"
 	PerformanceMode                   = "PerformanceMode"
 	PlacementGroup                    = "PlacementGroup"
+	Platform                          = "Platform"
 	PlatformVersion                   = "PlatformVersion"
 	Port                              = "Port"
 	Ports                             = "Ports"

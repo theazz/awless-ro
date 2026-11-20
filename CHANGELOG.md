@@ -5,6 +5,8 @@
 ### Added
 
 - `list --filter` accepts any property a resource carries, not only the printed columns. (#90)
+- `list instances` shows the platform AWS reports for the instance (`Linux/UNIX`,
+  `Windows`, ...) in an `OS` column. (#45)
 
 ### Changed
 

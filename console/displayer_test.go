@@ -259,6 +259,30 @@ apache`
 	}
 }
 
+// PlatformDetails is already in DescribeInstances, so the OS column costs no
+// extra call. It shows the value AWS reports, not a guess derived from the AMI.
+func TestInstancePlatformShowsAsOS(t *testing.T) {
+	g := graph.NewGraph()
+	if err := g.AddResource(resourcetest.Instance("inst_1").Prop(p.Name, "web").Prop(p.Platform, "Linux/UNIX").Build()); err != nil {
+		t.Fatal(err)
+	}
+	displayer, err := BuildOptions(WithRdfType("instance")).SetSource(g).Build()
+	if err != nil {
+		t.Fatal(err)
+	}
+
+	var w bytes.Buffer
+	if err := displayer.Print(&w); err != nil {
+		t.Fatal(err)
+	}
+	got := w.String()
+	for _, want := range []string{"OS", "Linux/UNIX"} {
+		if !strings.Contains(got, want) {
+			t.Errorf("output is missing %q:\n%s", want, got)
+		}
+	}
+}
+
 func TestMultiResourcesDisplays(t *testing.T) {
 	g := createInfraGraph()
 
@@ -1091,7 +1115,7 @@ func TestFilterOnPropertyThatIsNotAColumn(t *testing.T) {
 			}
 			for _, want := range []string{
 				"Invalid filter key 'Nosuchkey'",
-				"Expecting any of: ID, AvailabilityZone, Name, State, Type, PublicIP, PrivateIP, Launched, KeyPair, or any other known property name",
+				"Expecting any of: ID, AvailabilityZone, Name, State, Type, Platform, PublicIP, PrivateIP, Launched, KeyPair, or any other known property name",
 				"case insensitive",
 			} {
 				if !strings.Contains(err.Error(), want) {

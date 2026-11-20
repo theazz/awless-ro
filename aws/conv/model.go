@@ -39,6 +39,7 @@ var awsResourcesDef = map[string]map[string]*propertyTransform{
 		properties.PlacementGroup:    {name: "Placement", transform: extractFieldFn("GroupName")},
 		properties.Host:              {name: "Placement", transform: extractFieldFn("HostId")},
 		properties.Architecture:      {name: "Architecture", transform: extractValueFn},
+		properties.Platform:          {name: "PlatformDetails", transform: extractValueFn},
 		properties.Hypervisor:        {name: "Hypervisor", transform: extractValueFn},
 		properties.Profile:           {name: "IamInstanceProfile", transform: extractFieldFn("Arn")},
 		properties.Lifecycle:         {name: "InstanceLifecycle", transform: extractValueFn},

@@ -23,7 +23,7 @@ import (
 )
 
 var ColumnsInListing = map[string][]string{
-	cloud.Instance:            {properties.ID, properties.AvailabilityZone, properties.Name, properties.State, properties.Type, properties.PublicIP, properties.PrivateIP, properties.Launched, properties.KeyPair},
+	cloud.Instance:            {properties.ID, properties.AvailabilityZone, properties.Name, properties.State, properties.Type, properties.Platform, properties.PublicIP, properties.PrivateIP, properties.Launched, properties.KeyPair},
 	cloud.Vpc:                 {properties.ID, properties.Name, properties.Default, properties.State, properties.CIDR},
 	cloud.Subnet:              {properties.ID, properties.Name, properties.CIDR, properties.AvailabilityZone, properties.Default, properties.Vpc, properties.Public, properties.State},
 	cloud.SecurityGroup:       {properties.ID, properties.Vpc, properties.InboundRules, properties.OutboundRules, properties.Name, properties.Description},
@@ -94,6 +94,7 @@ var DefaultsColumnDefinitions = map[string][]ColumnDefinition{
 			ColoredValues:          map[string]color.Attribute{"running": color.FgGreen, "stopped": color.FgRed},
 		},
 		StringColumnDefinition{Prop: properties.Type},
+		StringColumnDefinition{Prop: properties.Platform, Friendly: "OS"},
 		StringColumnDefinition{Prop: properties.PublicIP, Friendly: "Public IP"},
 		StringColumnDefinition{Prop: properties.PrivateIP, Friendly: "Private IP"},
 		TimeColumnDefinition{StringColumnDefinition: StringColumnDefinition{Prop: properties.Launched, Friendly: "Uptime"}},
